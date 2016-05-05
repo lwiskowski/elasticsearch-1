@@ -137,12 +137,4 @@ public class NodesStatsRequestBuilder extends NodesOperationRequestBuilder<Nodes
         request.discovery(discovery);
         return this;
     }
-
-    /**
-     * Should ingest statistics be returned.
-     */
-    public NodesStatsRequestBuilder ingest(boolean ingest) {
-        request.ingest(ingest);
-        return this;
-    }
 }

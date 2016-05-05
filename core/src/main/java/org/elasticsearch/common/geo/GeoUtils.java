@@ -21,14 +21,13 @@ package org.elasticsearch.common.geo;
 
 import org.apache.lucene.spatial.prefix.tree.GeohashPrefixTree;
 import org.apache.lucene.spatial.prefix.tree.QuadPrefixTree;
+import org.apache.lucene.util.GeoDistanceUtils;
 import org.apache.lucene.util.SloppyMath;
 import org.elasticsearch.ElasticsearchParseException;
 import org.elasticsearch.common.unit.DistanceUnit;
 import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.common.xcontent.XContentParser.Token;
 import org.elasticsearch.index.mapper.geo.GeoPointFieldMapper;
-
-import static org.apache.lucene.spatial.util.GeoDistanceUtils.maxRadialDistanceMeters;
 
 import java.io.IOException;
 
@@ -71,7 +70,7 @@ public class GeoUtils {
      * maximum distance/radius from the point 'center' before overlapping
      **/
     public static double maxRadialDistance(GeoPoint center, double initialRadius) {
-        final double maxRadius = maxRadialDistanceMeters(center.lat(), center.lon());
+        final double maxRadius = GeoDistanceUtils.maxRadialDistanceMeters(center.lon(), center.lat());
         return Math.min(initialRadius, maxRadius);
     }
 
@@ -89,6 +88,14 @@ public class GeoUtils {
             return false;
         }
         return true;
+    }
+
+    /**
+     * Return an approximate value of the diameter of the earth (in meters) at the given latitude (in radians).
+     */
+    public static double earthDiameter(double latitude) {
+        // SloppyMath impl returns a result in kilometers
+        return SloppyMath.earthDiameter(latitude) * 1000;
     }
 
     /**
@@ -172,7 +179,7 @@ public class GeoUtils {
             final double width = Math.sqrt((meters*meters)/(ratio*ratio)); // convert to cell width
             final long part = Math.round(Math.ceil(EARTH_EQUATOR / width));
             final int level = Long.SIZE - Long.numberOfLeadingZeros(part)-1; // (log_2)
-            return (part<=(1L<<level)) ?level :(level+1); // adjust level
+            return (part<=(1l<<level)) ?level :(level+1); // adjust level
         }
     }
 
@@ -366,7 +373,6 @@ public class GeoUtils {
         double lat = Double.NaN;
         double lon = Double.NaN;
         String geohash = null;
-        NumberFormatException numberFormatException = null;
 
         if(parser.currentToken() == Token.START_OBJECT) {
             while(parser.nextToken() != Token.END_OBJECT) {
@@ -377,11 +383,7 @@ public class GeoUtils {
                         switch (parser.currentToken()) {
                             case VALUE_NUMBER:
                             case VALUE_STRING:
-                                try {
-                                    lat = parser.doubleValue(true);
-                                } catch (NumberFormatException e) {
-                                    numberFormatException = e;
-                                }
+                                lat = parser.doubleValue(true);
                                 break;
                             default:
                                 throw new ElasticsearchParseException("latitude must be a number");
@@ -391,11 +393,7 @@ public class GeoUtils {
                         switch (parser.currentToken()) {
                             case VALUE_NUMBER:
                             case VALUE_STRING:
-                                try {
-                                    lon = parser.doubleValue(true);
-                                } catch (NumberFormatException e) {
-                                    numberFormatException = e;
-                                }
+                                lon = parser.doubleValue(true);
                                 break;
                             default:
                                 throw new ElasticsearchParseException("longitude must be a number");
@@ -420,9 +418,6 @@ public class GeoUtils {
                 } else {
                     return point.resetFromGeoHash(geohash);
                 }
-            } else if (numberFormatException != null) {
-                throw new ElasticsearchParseException("[{}] and [{}] must be valid double values", numberFormatException, LATITUDE,
-                    LONGITUDE);
             } else if (Double.isNaN(lat)) {
                 throw new ElasticsearchParseException("field [{}] missing", LATITUDE);
             } else if (Double.isNaN(lon)) {

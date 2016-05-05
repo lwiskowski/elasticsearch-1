@@ -43,6 +43,11 @@ public class NoOrdinalsStringFieldDataTests extends PagedBytesStringFieldDataTes
             }
 
             @Override
+            public FieldDataType getFieldDataType() {
+                return in.getFieldDataType();
+            }
+
+            @Override
             public AtomicFieldData load(LeafReaderContext context) {
                 return in.load(context);
             }

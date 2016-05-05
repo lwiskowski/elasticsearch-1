@@ -18,19 +18,21 @@
  */
 package org.elasticsearch.http.netty;
 
-import org.elasticsearch.common.network.NetworkModule;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.transport.InetSocketTransportAddress;
-import org.elasticsearch.common.transport.TransportAddress;
 import org.elasticsearch.http.HttpServerTransport;
+import org.elasticsearch.node.Node;
 import org.elasticsearch.test.ESIntegTestCase;
 import org.elasticsearch.test.ESIntegTestCase.ClusterScope;
 import org.elasticsearch.test.ESIntegTestCase.Scope;
 import org.jboss.netty.handler.codec.http.HttpResponse;
 
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.List;
 import java.util.Locale;
 
+import static org.elasticsearch.common.settings.Settings.settingsBuilder;
 import static org.elasticsearch.http.netty.NettyHttpClient.returnOpaqueIds;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
@@ -40,22 +42,17 @@ import static org.hamcrest.Matchers.is;
 public class NettyPipeliningEnabledIT extends ESIntegTestCase {
     @Override
     protected Settings nodeSettings(int nodeOrdinal) {
-        return Settings.builder()
-            .put(super.nodeSettings(nodeOrdinal))
-            .put(NetworkModule.HTTP_ENABLED.getKey(), true)
-            .put("http.pipelining", true)
-            .build();
+        return settingsBuilder().put(super.nodeSettings(nodeOrdinal)).put(Node.HTTP_ENABLED, true).put("http.pipelining", true).build();
     }
 
     public void testThatNettyHttpServerSupportsPipelining() throws Exception {
-        String[] requests = new String[]{"/", "/_nodes/stats", "/", "/_cluster/state", "/"};
+        List<String> requests = Arrays.asList("/", "/_nodes/stats", "/", "/_cluster/state", "/");
 
         HttpServerTransport httpServerTransport = internalCluster().getInstance(HttpServerTransport.class);
-        TransportAddress[] boundAddresses = httpServerTransport.boundAddress().boundAddresses();
-        InetSocketTransportAddress inetSocketTransportAddress = (InetSocketTransportAddress) randomFrom(boundAddresses);
+        InetSocketTransportAddress inetSocketTransportAddress = (InetSocketTransportAddress) randomFrom(httpServerTransport.boundAddress().boundAddresses());
 
         try (NettyHttpClient nettyHttpClient = new NettyHttpClient()) {
-            Collection<HttpResponse> responses = nettyHttpClient.get(inetSocketTransportAddress.address(), requests);
+            Collection<HttpResponse> responses = nettyHttpClient.sendRequests(inetSocketTransportAddress.address(), requests.toArray(new String[]{}));
             assertThat(responses, hasSize(5));
 
             Collection<String> opaqueIds = returnOpaqueIds(responses);
@@ -66,7 +63,7 @@ public class NettyPipeliningEnabledIT extends ESIntegTestCase {
     private void assertOpaqueIdsInOrder(Collection<String> opaqueIds) {
         // check if opaque ids are monotonically increasing
         int i = 0;
-        String msg = String.format(Locale.ROOT, "Expected list of opaque ids to be monotonically increasing, got [%s]", opaqueIds);
+        String msg = String.format(Locale.ROOT, "Expected list of opaque ids to be monotonically increasing, got [" + opaqueIds + "]");
         for (String opaqueId : opaqueIds) {
             assertThat(msg, opaqueId, is(String.valueOf(i++)));
         }

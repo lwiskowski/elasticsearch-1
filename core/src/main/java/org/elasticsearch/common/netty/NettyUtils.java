@@ -18,6 +18,8 @@
  */
 package org.elasticsearch.common.netty;
 
+import org.elasticsearch.common.Booleans;
+import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.transport.netty.NettyInternalESLoggerFactory;
 import org.jboss.netty.logging.InternalLogger;
 import org.jboss.netty.logging.InternalLoggerFactory;
@@ -72,7 +74,7 @@ public class NettyUtils {
      * sized pages, and if its a single one, makes sure that it gets sliced and wrapped in a composite
      * buffer.
      */
-    public static final boolean DEFAULT_GATHERING = true;
+    public static final boolean DEFAULT_GATHERING;
 
     private static EsThreadNameDeterminer ES_THREAD_NAME_DETERMINER = new EsThreadNameDeterminer();
 
@@ -93,6 +95,13 @@ public class NettyUtils {
         });
 
         ThreadRenamingRunnable.setThreadNameDeterminer(ES_THREAD_NAME_DETERMINER);
+
+        /**
+         * This is here just to give us an option to rollback the change, if its stable, we should remove
+         * the option to even set it.
+         */
+        DEFAULT_GATHERING = Booleans.parseBoolean(System.getProperty("es.netty.gathering"), true);
+        Loggers.getLogger(NettyUtils.class).debug("using gathering [{}]", DEFAULT_GATHERING);
     }
 
     public static void setup() {

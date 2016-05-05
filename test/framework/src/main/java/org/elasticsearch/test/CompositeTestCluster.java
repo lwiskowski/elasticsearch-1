@@ -34,6 +34,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.Random;
 import java.util.stream.Collectors;
 
@@ -71,7 +72,7 @@ public class CompositeTestCluster extends TestCluster {
         super.beforeTest(random, transportClientRatio);
         cluster.beforeTest(random, transportClientRatio);
         Settings defaultSettings = cluster.getDefaultSettings();
-        final Client client = cluster.size() > 0 ? cluster.client() : cluster.coordOnlyNodeClient();
+        final Client client = cluster.size() > 0 ? cluster.client() : cluster.clientNodeClient();
         for (int i = 0; i < externalNodes.length; i++) {
             if (!externalNodes[i].running()) {
                 externalNodes[i] = externalNodes[i].start(client, defaultSettings, NODE_PREFIX + i, cluster.getClusterName(), i);
@@ -240,8 +241,8 @@ public class CompositeTestCluster extends TestCluster {
     }
 
     @Override
-    public synchronized Iterable<Client> getClients() {
-        return Collections.singleton(client());
+    public synchronized Iterator<Client> iterator() {
+        return Collections.singleton(client()).iterator();
     }
 
     /**

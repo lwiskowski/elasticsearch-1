@@ -26,7 +26,6 @@ import org.elasticsearch.common.network.NetworkService;
 import org.elasticsearch.common.settings.ClusterSettings;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.transport.InetSocketTransportAddress;
-import org.elasticsearch.common.transport.TransportAddress;
 import org.elasticsearch.common.util.BigArrays;
 import org.elasticsearch.common.util.MockBigArrays;
 import org.elasticsearch.indices.breaker.NoneCircuitBreakerService;
@@ -42,6 +41,7 @@ import java.net.InetAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 
+import static org.elasticsearch.common.settings.Settings.settingsBuilder;
 import static org.hamcrest.Matchers.is;
 
 /**
@@ -50,11 +50,11 @@ import static org.hamcrest.Matchers.is;
  */
 public class NettySizeHeaderFrameDecoderTests extends ESTestCase {
 
-    private final Settings settings = Settings.builder()
-            .put("node.name", "NettySizeHeaderFrameDecoderTests")
-            .put(TransportSettings.BIND_HOST.getKey(), "127.0.0.1")
-            .put(TransportSettings.PORT.getKey(), "0")
-            .build();
+    private final Settings settings = settingsBuilder()
+                                        .put("name", "foo")
+                                        .put("transport.host", "127.0.0.1")
+                                        .put("transport.tcp.port", "0")
+                                        .build();
 
     private ThreadPool threadPool;
     private NettyTransport nettyTransport;
@@ -67,14 +67,12 @@ public class NettySizeHeaderFrameDecoderTests extends ESTestCase {
         threadPool.setClusterSettings(new ClusterSettings(settings, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS));
         NetworkService networkService = new NetworkService(settings);
         BigArrays bigArrays = new MockBigArrays(new MockPageCacheRecycler(settings, threadPool), new NoneCircuitBreakerService());
-        nettyTransport = new NettyTransport(settings, threadPool, networkService, bigArrays, Version.CURRENT, new NamedWriteableRegistry(),
-            new NoneCircuitBreakerService());
+        nettyTransport = new NettyTransport(settings, threadPool, networkService, bigArrays, Version.CURRENT, new NamedWriteableRegistry());
         nettyTransport.start();
         TransportService transportService = new TransportService(nettyTransport, threadPool);
         nettyTransport.transportServiceAdapter(transportService.createAdapter());
 
-        TransportAddress[] boundAddresses = nettyTransport.boundAddress().boundAddresses();
-        InetSocketTransportAddress transportAddress = (InetSocketTransportAddress) randomFrom(boundAddresses);
+        InetSocketTransportAddress transportAddress = (InetSocketTransportAddress) randomFrom(nettyTransport.boundAddress().boundAddresses());
         port = transportAddress.address().getPort();
         host = transportAddress.address().getAddress();
 

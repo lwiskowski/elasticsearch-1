@@ -37,6 +37,11 @@ public class BroadcastRequest<Request extends BroadcastRequest<Request>> extends
     private IndicesOptions indicesOptions = IndicesOptions.strictExpandOpenAndForbidClosed();
 
     public BroadcastRequest() {
+
+    }
+
+    protected BroadcastRequest(ActionRequest<?> originalRequest) {
+        super(originalRequest);
     }
 
     protected BroadcastRequest(String[] indices) {

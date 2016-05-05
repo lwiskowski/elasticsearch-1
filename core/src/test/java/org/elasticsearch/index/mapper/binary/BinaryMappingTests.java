@@ -63,7 +63,7 @@ public class BinaryMappingTests extends ESSingleNodeTestCase {
                 .startObject("properties")
                 .startObject("field")
                 .field("type", "binary")
-                .field("store", true)
+                .field("store", "yes")
                 .endObject()
                 .endObject()
                 .endObject().endObject().string();

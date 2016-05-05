@@ -22,6 +22,7 @@ package org.elasticsearch.repositories;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.cluster.AckedClusterStateUpdateTask;
 import org.elasticsearch.cluster.ClusterChangedEvent;
+import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateListener;
 import org.elasticsearch.cluster.ack.ClusterStateUpdateRequest;
@@ -30,7 +31,6 @@ import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.cluster.metadata.RepositoriesMetaData;
 import org.elasticsearch.cluster.metadata.RepositoryMetaData;
 import org.elasticsearch.cluster.node.DiscoveryNode;
-import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.inject.Injector;
@@ -77,7 +77,7 @@ public class RepositoriesService extends AbstractComponent implements ClusterSta
         this.clusterService = clusterService;
         // Doesn't make sense to maintain repositories on non-master and non-data nodes
         // Nothing happens there anyway
-        if (DiscoveryNode.isDataNode(settings) || DiscoveryNode.isMasterNode(settings)) {
+        if (DiscoveryNode.dataNode(settings) || DiscoveryNode.masterNode(settings)) {
             clusterService.add(this);
         }
         this.verifyAction = new VerifyNodeRepositoryAction(settings, transportService, clusterService, this);
@@ -154,7 +154,7 @@ public class RepositoriesService extends AbstractComponent implements ClusterSta
 
             @Override
             public boolean mustAck(DiscoveryNode discoveryNode) {
-                return discoveryNode.isMasterNode();
+                return discoveryNode.masterNode();
             }
         });
     }
@@ -205,7 +205,7 @@ public class RepositoriesService extends AbstractComponent implements ClusterSta
             @Override
             public boolean mustAck(DiscoveryNode discoveryNode) {
                 // Since operation occurs only on masters, it's enough that only master-eligible nodes acked
-                return discoveryNode.isMasterNode();
+                return discoveryNode.masterNode();
             }
         });
     }

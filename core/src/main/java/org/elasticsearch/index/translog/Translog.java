@@ -26,7 +26,7 @@ import org.apache.lucene.util.Accountable;
 import org.apache.lucene.util.IOUtils;
 import org.apache.lucene.util.RamUsageEstimator;
 import org.elasticsearch.ElasticsearchException;
-import org.elasticsearch.common.UUIDs;
+import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.bytes.BytesArray;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.bytes.ReleasablePagedBytesReference;
@@ -83,7 +83,7 @@ import java.util.stream.Stream;
  * </p>
  * <p>
  * When a translog is opened the checkpoint is use to retrieve the latest translog file generation and subsequently to open the last written file to recovery operations.
- * The {@link org.elasticsearch.index.translog.Translog.TranslogGeneration}, given when the translog is opened / constructed is compared against
+ * The {@link org.elasticsearch.index.translog.Translog.TranslogGeneration} on {@link TranslogConfig#getTranslogGeneration()} given when the translog is opened is compared against
  * the latest generation and all consecutive translog files singe the given generation and the last generation in the checkpoint will be recovered and preserved until the next
  * generation is committed using {@link Translog#commit()}. In the common case the translog file generation in the checkpoint and the generation passed to the translog on creation are
  * the same. The only situation when they can be different is when an actual translog commit fails in between {@link Translog#prepareCommit()} and {@link Translog#commit()}. In such a case
@@ -97,7 +97,7 @@ public class Translog extends AbstractIndexShardComponent implements IndexShardC
     /*
      * TODO
      *  - we might need something like a deletion policy to hold on to more than one translog eventually (I think sequence IDs needs this) but we can refactor as we go
-     *  - use a simple BufferedOutputStream to write stuff and fold BufferedTranslogWriter into it's super class... the tricky bit is we need to be able to do random access reads even from the buffer
+     *  - use a simple BufferedOuputStream to write stuff and fold BufferedTranslogWriter into it's super class... the tricky bit is we need to be able to do random access reads even from the buffer
      *  - we need random exception on the FileSystem API tests for all this.
      *  - we need to page align the last write before we sync, we can take advantage of ensureSynced for this since we might have already fsynced far enough
      */
@@ -130,25 +130,21 @@ public class Translog extends AbstractIndexShardComponent implements IndexShardC
     private final TranslogConfig config;
     private final String translogUUID;
 
+
     /**
      * Creates a new Translog instance. This method will create a new transaction log unless the given {@link TranslogConfig} has
      * a non-null {@link org.elasticsearch.index.translog.Translog.TranslogGeneration}. If the generation is null this method
      * us destructive and will delete all files in the translog path given.
      *
-     * @param config the configuration of this translog
-     * @param translogGeneration the translog generation to open. If this is <code>null</code> a new translog is created. If non-null
-     * the translog tries to open the given translog generation. The generation is treated as the last generation referenced
-     * form already committed data. This means all operations that have not yet been committed should be in the translog
-     * file referenced by this generation. The translog creation will fail if this generation can't be opened.
-     *
      * @see TranslogConfig#getTranslogPath()
-     *
      */
-    public Translog(TranslogConfig config, TranslogGeneration translogGeneration) throws IOException {
+    public Translog(TranslogConfig config) throws IOException {
         super(config.getShardId(), config.getIndexSettings());
         this.config = config;
+        TranslogGeneration translogGeneration = config.getTranslogGeneration();
+
         if (translogGeneration == null || translogGeneration.translogUUID == null) { // legacy case
-            translogUUID = UUIDs.randomBase64UUID();
+            translogUUID = Strings.randomBase64UUID();
         } else {
             translogUUID = translogGeneration.translogUUID;
         }
@@ -422,10 +418,10 @@ public class Translog extends AbstractIndexShardComponent implements IndexShardC
         try {
             final BufferedChecksumStreamOutput checksumStreamOutput = new BufferedChecksumStreamOutput(out);
             final long start = out.position();
-            out.skip(Integer.BYTES);
+            out.skip(RamUsageEstimator.NUM_BYTES_INT);
             writeOperationNoSize(checksumStreamOutput, operation);
             final long end = out.position();
-            final int operationSize = (int) (end - Integer.BYTES - start);
+            final int operationSize = (int) (end - RamUsageEstimator.NUM_BYTES_INT - start);
             out.seek(start);
             out.writeInt(operationSize);
             out.seek(end);
@@ -433,6 +429,9 @@ public class Translog extends AbstractIndexShardComponent implements IndexShardC
             try (ReleasableLock lock = readLock.acquire()) {
                 ensureOpen();
                 Location location = current.add(bytes);
+                if (config.isSyncOnEachOperation()) {
+                    current.sync();
+                }
                 assert assertBytesAtLocation(location, bytes);
                 return location;
             }
@@ -640,7 +639,7 @@ public class Translog extends AbstractIndexShardComponent implements IndexShardC
 
         @Override
         public long ramBytesUsed() {
-            return RamUsageEstimator.NUM_BYTES_OBJECT_HEADER + 2 * Long.BYTES + Integer.BYTES;
+            return RamUsageEstimator.NUM_BYTES_OBJECT_HEADER + 2 * RamUsageEstimator.NUM_BYTES_LONG + RamUsageEstimator.NUM_BYTES_INT;
         }
 
         @Override
@@ -1148,10 +1147,10 @@ public class Translog extends AbstractIndexShardComponent implements IndexShardC
             for (Operation op : toWrite) {
                 out.reset();
                 final long start = out.position();
-                out.skip(Integer.BYTES);
+                out.skip(RamUsageEstimator.NUM_BYTES_INT);
                 writeOperationNoSize(checksumStreamOutput, op);
                 long end = out.position();
-                int operationSize = (int) (out.position() - Integer.BYTES - start);
+                int operationSize = (int) (out.position() - RamUsageEstimator.NUM_BYTES_INT - start);
                 out.seek(start);
                 out.writeInt(operationSize);
                 out.seek(end);
@@ -1345,13 +1344,6 @@ public class Translog extends AbstractIndexShardComponent implements IndexShardC
     /** Reads and returns the current checkpoint */
     final Checkpoint readCheckpoint() throws IOException {
         return Checkpoint.read(location.resolve(CHECKPOINT_FILE_NAME));
-    }
-
-    /**
-     * Returns the translog uuid used to associate a lucene index with a translog.
-     */
-    public String getTranslogUUID() {
-        return translogUUID;
     }
 
 }

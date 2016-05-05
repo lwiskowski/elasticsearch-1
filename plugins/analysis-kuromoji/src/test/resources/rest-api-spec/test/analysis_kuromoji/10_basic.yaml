@@ -31,7 +31,7 @@
         indices.analyze:
           text:         飲み
           tokenizer:    kuromoji_tokenizer
-          filter:      kuromoji_baseform
+          filters:      kuromoji_baseform
     - length: { tokens: 1 }
     - match:  { tokens.0.token: 飲む }
 ---
@@ -40,7 +40,7 @@
         indices.analyze:
           text:         寿司
           tokenizer:    kuromoji_tokenizer
-          filter:      kuromoji_readingform
+          filters:      kuromoji_readingform
     - length: { tokens: 1 }
     - match:  { tokens.0.token: スシ }
 ---
@@ -49,6 +49,6 @@
         indices.analyze:
           text:         サーバー
           tokenizer:    kuromoji_tokenizer
-          filter:      kuromoji_stemmer
+          filters:      kuromoji_stemmer
     - length: { tokens: 1 }
     - match:  { tokens.0.token: サーバ }

@@ -41,7 +41,7 @@ public class RestSnapshotsStatusAction extends BaseRestHandler {
 
     @Inject
     public RestSnapshotsStatusAction(Settings settings, RestController controller, Client client) {
-        super(settings, client);
+        super(settings, controller, client);
         controller.registerHandler(GET, "/_snapshot/{repository}/{snapshot}/_status", this);
         controller.registerHandler(GET, "/_snapshot/{repository}/_status", this);
         controller.registerHandler(GET, "/_snapshot/_status", this);

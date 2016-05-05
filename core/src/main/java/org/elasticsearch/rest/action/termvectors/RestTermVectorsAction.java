@@ -49,7 +49,7 @@ public class RestTermVectorsAction extends BaseRestHandler {
 
     @Inject
     public RestTermVectorsAction(Settings settings, RestController controller, Client client) {
-        super(settings, client);
+        super(settings, controller, client);
         controller.registerHandler(GET, "/{index}/{type}/_termvectors", this);
         controller.registerHandler(POST, "/{index}/{type}/_termvectors", this);
         controller.registerHandler(GET, "/{index}/{type}/{id}/_termvectors", this);
@@ -82,7 +82,7 @@ public class RestTermVectorsAction extends BaseRestHandler {
         termVectorsRequest.positions(request.paramAsBoolean("positions", termVectorsRequest.positions()));
         termVectorsRequest.payloads(request.paramAsBoolean("payloads", termVectorsRequest.payloads()));
         termVectorsRequest.routing(request.param("routing"));
-        termVectorsRequest.realtime(request.paramAsBoolean("realtime", termVectorsRequest.realtime()));
+        termVectorsRequest.realtime(request.paramAsBoolean("realtime", null));
         termVectorsRequest.version(RestActions.parseVersion(request, termVectorsRequest.version()));
         termVectorsRequest.versionType(VersionType.fromString(request.param("version_type"), termVectorsRequest.versionType()));
         termVectorsRequest.parent(request.param("parent"));
@@ -91,6 +91,7 @@ public class RestTermVectorsAction extends BaseRestHandler {
         termVectorsRequest.termStatistics(request.paramAsBoolean("term_statistics", termVectorsRequest.termStatistics()));
         termVectorsRequest.fieldStatistics(request.paramAsBoolean("fieldStatistics", termVectorsRequest.fieldStatistics()));
         termVectorsRequest.fieldStatistics(request.paramAsBoolean("field_statistics", termVectorsRequest.fieldStatistics()));
+        termVectorsRequest.dfs(request.paramAsBoolean("dfs", termVectorsRequest.dfs()));
     }
 
     static public void addFieldStringsFromParameter(TermVectorsRequest termVectorsRequest, String fields) {

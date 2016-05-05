@@ -26,6 +26,7 @@ import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.lucene.Lucene;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.index.fielddata.FieldDataType;
 import org.elasticsearch.index.mapper.MappedFieldType;
 import org.elasticsearch.index.mapper.Mapper;
 import org.elasticsearch.index.mapper.MapperParsingException;
@@ -37,7 +38,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
-import static org.elasticsearch.common.xcontent.support.XContentMapValues.lenientNodeBooleanValue;
+import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeBooleanValue;
 
 /**
  *
@@ -91,10 +92,10 @@ public class RoutingFieldMapper extends MetadataFieldMapper {
             Builder builder = new Builder(parserContext.mapperService().fullName(NAME));
             for (Iterator<Map.Entry<String, Object>> iterator = node.entrySet().iterator(); iterator.hasNext();) {
                 Map.Entry<String, Object> entry = iterator.next();
-                String fieldName = entry.getKey();
+                String fieldName = Strings.toUnderscoreCase(entry.getKey());
                 Object fieldNode = entry.getValue();
                 if (fieldName.equals("required")) {
-                    builder.required(lenientNodeBooleanValue(fieldNode));
+                    builder.required(nodeBooleanValue(fieldNode));
                     iterator.remove();
                 }
             }
@@ -110,6 +111,7 @@ public class RoutingFieldMapper extends MetadataFieldMapper {
     static final class RoutingFieldType extends MappedFieldType {
 
         public RoutingFieldType() {
+            setFieldDataType(new FieldDataType("string"));
         }
 
         protected RoutingFieldType(RoutingFieldType ref) {
@@ -124,6 +126,14 @@ public class RoutingFieldMapper extends MetadataFieldMapper {
         @Override
         public String typeName() {
             return CONTENT_TYPE;
+        }
+
+        @Override
+        public String value(Object value) {
+            if (value == null) {
+                return null;
+            }
+            return value.toString();
         }
     }
 
@@ -144,6 +154,11 @@ public class RoutingFieldMapper extends MetadataFieldMapper {
 
     public boolean required() {
         return this.required;
+    }
+
+    public String value(Document document) {
+        Field field = (Field) document.getField(fieldType().name());
+        return field == null ? null : (String)fieldType().value(field);
     }
 
     @Override

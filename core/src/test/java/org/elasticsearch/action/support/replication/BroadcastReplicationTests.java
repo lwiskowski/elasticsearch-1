@@ -31,24 +31,21 @@ import org.elasticsearch.action.support.ActionFilter;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.broadcast.BroadcastRequest;
 import org.elasticsearch.action.support.broadcast.BroadcastResponse;
+import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.routing.ShardRoutingState;
-import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.ConcurrentCollections;
 import org.elasticsearch.index.shard.ShardId;
-import org.elasticsearch.indices.breaker.CircuitBreakerService;
-import org.elasticsearch.indices.breaker.NoneCircuitBreakerService;
 import org.elasticsearch.rest.RestStatus;
-import org.elasticsearch.tasks.Task;
 import org.elasticsearch.test.ESTestCase;
+import org.elasticsearch.test.cluster.TestClusterService;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
 import org.elasticsearch.transport.local.LocalTransport;
-import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -65,8 +62,6 @@ import java.util.concurrent.TimeUnit;
 import static org.elasticsearch.action.support.replication.ClusterStateCreationUtils.state;
 import static org.elasticsearch.action.support.replication.ClusterStateCreationUtils.stateWithAssignedPrimariesAndOneReplica;
 import static org.elasticsearch.action.support.replication.ClusterStateCreationUtils.stateWithNoShard;
-import static org.elasticsearch.cluster.service.ClusterServiceUtils.createClusterService;
-import static org.elasticsearch.cluster.service.ClusterServiceUtils.setState;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.lessThanOrEqualTo;
@@ -74,34 +69,25 @@ import static org.hamcrest.Matchers.lessThanOrEqualTo;
 public class BroadcastReplicationTests extends ESTestCase {
 
     private static ThreadPool threadPool;
-    private static CircuitBreakerService circuitBreakerService;
-    private ClusterService clusterService;
+    private TestClusterService clusterService;
     private TransportService transportService;
+    private LocalTransport transport;
     private TestBroadcastReplicationAction broadcastReplicationAction;
 
     @BeforeClass
     public static void beforeClass() {
         threadPool = new ThreadPool("BroadcastReplicationTests");
-        circuitBreakerService = new NoneCircuitBreakerService();
     }
 
     @Override
     @Before
     public void setUp() throws Exception {
         super.setUp();
-        LocalTransport transport = new LocalTransport(Settings.EMPTY, threadPool, Version.CURRENT, new NamedWriteableRegistry(), circuitBreakerService);
-        clusterService = createClusterService(threadPool);
+        transport = new LocalTransport(Settings.EMPTY, threadPool, Version.CURRENT, new NamedWriteableRegistry());
+        clusterService = new TestClusterService(threadPool);
         transportService = new TransportService(transport, threadPool);
         transportService.start();
-        transportService.acceptIncomingRequests();
         broadcastReplicationAction = new TestBroadcastReplicationAction(Settings.EMPTY, threadPool, clusterService, transportService, new ActionFilters(new HashSet<ActionFilter>()), new IndexNameExpressionResolver(Settings.EMPTY), null);
-    }
-
-    @After
-    public void tearDown() throws Exception {
-        super.tearDown();
-        clusterService.close();
-        transportService.close();
     }
 
     @AfterClass
@@ -112,7 +98,7 @@ public class BroadcastReplicationTests extends ESTestCase {
 
     public void testNotStartedPrimary() throws InterruptedException, ExecutionException, IOException {
         final String index = "test";
-        setState(clusterService, state(index, randomBoolean(),
+        clusterService.setState(state(index, randomBoolean(),
                 randomBoolean() ? ShardRoutingState.INITIALIZING : ShardRoutingState.UNASSIGNED, ShardRoutingState.UNASSIGNED));
         logger.debug("--> using initial state:\n{}", clusterService.state().prettyPrint());
         Future<BroadcastResponse> response = (broadcastReplicationAction.execute(new DummyBroadcastRequest().indices(index)));
@@ -131,7 +117,7 @@ public class BroadcastReplicationTests extends ESTestCase {
 
     public void testStartedPrimary() throws InterruptedException, ExecutionException, IOException {
         final String index = "test";
-        setState(clusterService, state(index, randomBoolean(),
+        clusterService.setState(state(index, randomBoolean(),
                 ShardRoutingState.STARTED));
         logger.debug("--> using initial state:\n{}", clusterService.state().prettyPrint());
         Future<BroadcastResponse> response = (broadcastReplicationAction.execute(new DummyBroadcastRequest().indices(index)));
@@ -146,8 +132,8 @@ public class BroadcastReplicationTests extends ESTestCase {
 
     public void testResultCombine() throws InterruptedException, ExecutionException, IOException {
         final String index = "test";
-        int numShards = 1 + randomInt(3);
-        setState(clusterService, stateWithAssignedPrimariesAndOneReplica(index, numShards));
+        int numShards = randomInt(3);
+        clusterService.setState(stateWithAssignedPrimariesAndOneReplica(index, numShards));
         logger.debug("--> using initial state:\n{}", clusterService.state().prettyPrint());
         Future<BroadcastResponse> response = (broadcastReplicationAction.execute(new DummyBroadcastRequest().indices(index)));
         int succeeded = 0;
@@ -161,7 +147,7 @@ public class BroadcastReplicationTests extends ESTestCase {
                 if (shardsSucceeded == 1 && randomBoolean()) {
                     //sometimes add failure (no failure means shard unavailable)
                     failures = new ReplicationResponse.ShardInfo.Failure[1];
-                    failures[0] = new ReplicationResponse.ShardInfo.Failure(shardRequests.v1(), null, new Exception("pretend shard failed"), RestStatus.GATEWAY_TIMEOUT, false);
+                    failures[0] = new ReplicationResponse.ShardInfo.Failure(index, shardRequests.v1().id(), null, new Exception("pretend shard failed"), RestStatus.GATEWAY_TIMEOUT, false);
                     failed++;
                 }
                 replicationResponse.setShardInfo(new ReplicationResponse.ShardInfo(2, shardsSucceeded, failures));
@@ -177,7 +163,7 @@ public class BroadcastReplicationTests extends ESTestCase {
     }
 
     public void testNoShards() throws InterruptedException, ExecutionException, IOException {
-        setState(clusterService, stateWithNoShard());
+        clusterService.setState(stateWithNoShard());
         logger.debug("--> using initial state:\n{}", clusterService.state().prettyPrint());
         BroadcastResponse response = executeAndAssertImmediateResponse(broadcastReplicationAction, new DummyBroadcastRequest());
         assertBroadcastResponse(0, 0, 0, response, null);
@@ -185,11 +171,11 @@ public class BroadcastReplicationTests extends ESTestCase {
 
     public void testShardsList() throws InterruptedException, ExecutionException {
         final String index = "test";
-        final ShardId shardId = new ShardId(index, "_na_", 0);
+        final ShardId shardId = new ShardId(index, 0);
         ClusterState clusterState = state(index, randomBoolean(),
                 randomBoolean() ? ShardRoutingState.INITIALIZING : ShardRoutingState.UNASSIGNED, ShardRoutingState.UNASSIGNED);
         logger.debug("--> using initial state:\n{}", clusterService.state().prettyPrint());
-        List<ShardId> shards = broadcastReplicationAction.shards(new DummyBroadcastRequest().indices(shardId.getIndexName()), clusterState);
+        List<ShardId> shards = broadcastReplicationAction.shards(new DummyBroadcastRequest().indices(shardId.index().name()), clusterState);
         assertThat(shards.size(), equalTo(1));
         assertThat(shards.get(0), equalTo(shardId));
     }
@@ -198,8 +184,8 @@ public class BroadcastReplicationTests extends ESTestCase {
         protected final Set<Tuple<ShardId, ActionListener<ReplicationResponse>>> capturedShardRequests = ConcurrentCollections.newConcurrentSet();
 
         public TestBroadcastReplicationAction(Settings settings, ThreadPool threadPool, ClusterService clusterService,
-                                              TransportService transportService, ActionFilters actionFilters, IndexNameExpressionResolver indexNameExpressionResolver,
-                                              TransportReplicationAction replicatedBroadcastShardAction) {
+                TransportService transportService, ActionFilters actionFilters, IndexNameExpressionResolver indexNameExpressionResolver,
+                TransportReplicationAction replicatedBroadcastShardAction) {
             super("test-broadcast-replication-action", DummyBroadcastRequest::new, settings, threadPool, clusterService, transportService,
                     actionFilters, indexNameExpressionResolver, replicatedBroadcastShardAction);
         }
@@ -216,12 +202,12 @@ public class BroadcastReplicationTests extends ESTestCase {
 
         @Override
         protected BroadcastResponse newResponse(int successfulShards, int failedShards, int totalNumCopies,
-                                                List<ShardOperationFailedException> shardFailures) {
+                List<ShardOperationFailedException> shardFailures) {
             return new BroadcastResponse(totalNumCopies, successfulShards, failedShards, shardFailures);
         }
 
         @Override
-        protected void shardExecute(Task task, DummyBroadcastRequest request, ShardId shardId, ActionListener<ReplicationResponse> shardActionListener) {
+        protected void shardExecute(DummyBroadcastRequest request, ShardId shardId, ActionListener<ReplicationResponse> shardActionListener) {
             capturedShardRequests.add(new Tuple<>(shardId, shardActionListener));
         }
     }

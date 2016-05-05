@@ -81,7 +81,7 @@ public abstract class BaseNodesResponse<TNodeResponse extends BaseNodeResponse> 
         if (nodesMap == null) {
             nodesMap = new HashMap<>();
             for (TNodeResponse nodeResponse : nodes) {
-                nodesMap.put(nodeResponse.getNode().getId(), nodeResponse);
+                nodesMap.put(nodeResponse.getNode().id(), nodeResponse);
             }
         }
         return nodesMap;

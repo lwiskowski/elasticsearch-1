@@ -35,6 +35,7 @@ import org.junit.Before;
 import java.io.IOException;
 import java.util.Map;
 
+import static org.elasticsearch.common.settings.Settings.settingsBuilder;
 import static org.elasticsearch.common.xcontent.XContentFactory.jsonBuilder;
 import static org.hamcrest.Matchers.hasKey;
 import static org.hamcrest.Matchers.is;
@@ -62,7 +63,7 @@ public class ThreadPoolSerializationTests extends ESTestCase {
         ThreadPool.Info newInfo = new ThreadPool.Info();
         newInfo.readFrom(input);
 
-        assertThat(newInfo.getQueueSize().singles(), is(10000L));
+        assertThat(newInfo.getQueueSize().singles(), is(10000l));
     }
 
     public void testThatNegativeQueueSizesCanBeSerialized() throws Exception {
@@ -96,7 +97,7 @@ public class ThreadPoolSerializationTests extends ESTestCase {
     }
 
     public void testThatNegativeSettingAllowsToStart() throws InterruptedException {
-        Settings settings = Settings.builder().put("node.name", "index").put("threadpool.index.queue_size", "-1").build();
+        Settings settings = settingsBuilder().put("name", "index").put("threadpool.index.queue_size", "-1").build();
         ThreadPool threadPool = new ThreadPool(settings);
         assertThat(threadPool.info("index").getQueueSize(), is(nullValue()));
         terminate(threadPool);

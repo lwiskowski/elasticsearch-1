@@ -215,7 +215,7 @@
 
   - do:
       cat.allocation:
-        bytes: gb
+        bytes: g
 
   - match:
       $body: |

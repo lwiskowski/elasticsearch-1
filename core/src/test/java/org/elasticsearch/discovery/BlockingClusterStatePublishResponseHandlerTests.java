@@ -31,8 +31,6 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.CyclicBarrier;
 
-import static java.util.Collections.emptyMap;
-import static java.util.Collections.emptySet;
 import static org.hamcrest.Matchers.arrayWithSize;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.equalTo;
@@ -77,7 +75,7 @@ public class BlockingClusterStatePublishResponseHandlerTests extends ESTestCase 
         int nodeCount = scaledRandomIntBetween(10, 20);
         DiscoveryNode[] allNodes = new DiscoveryNode[nodeCount];
         for (int i = 0; i < nodeCount; i++) {
-            DiscoveryNode node = new DiscoveryNode("node_" + i, DummyTransportAddress.INSTANCE, emptyMap(), emptySet(), Version.CURRENT);
+            DiscoveryNode node = new DiscoveryNode("node_" + i, DummyTransportAddress.INSTANCE, Version.CURRENT);
             allNodes[i] = node;
         }
 

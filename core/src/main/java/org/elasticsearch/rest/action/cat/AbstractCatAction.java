@@ -39,7 +39,7 @@ import static org.elasticsearch.rest.action.support.RestTable.pad;
 public abstract class AbstractCatAction extends BaseRestHandler {
 
     public AbstractCatAction(Settings settings, RestController controller, Client client) {
-        super(settings, client);
+        super(settings, controller, client);
     }
 
     protected abstract void doRequest(final RestRequest request, final RestChannel channel, final Client client);

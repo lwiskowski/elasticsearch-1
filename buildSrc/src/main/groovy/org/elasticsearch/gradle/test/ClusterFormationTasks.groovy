@@ -53,59 +53,13 @@ class ClusterFormationTasks {
             // no need to add cluster formation tasks if the task won't run!
             return
         }
-        File sharedDir = new File(project.buildDir, "cluster/shared")
-        // first we remove everything in the shared cluster directory to ensure there are no leftovers in repos or anything
-        // in theory this should not be necessary but repositories are only deleted in the cluster-state and not on-disk
-        // such that snapshots survive failures / test runs and there is no simple way today to fix that.
-        Task cleanup = project.tasks.create(name: "${task.name}#prepareCluster.cleanShared", type: Delete, dependsOn: task.dependsOn.collect()) {
-            delete sharedDir
-            doLast {
-                sharedDir.mkdirs()
-            }
-        }
-        List<Task> startTasks = [cleanup]
+        configureDistributionDependency(project, config.distribution)
+        List<Task> startTasks = []
         List<NodeInfo> nodes = []
-        if (config.numNodes < config.numBwcNodes) {
-            throw new GradleException("numNodes must be >= numBwcNodes [${config.numNodes} < ${config.numBwcNodes}]")
-        }
-        if (config.numBwcNodes > 0 && config.bwcVersion == null) {
-            throw new GradleException("bwcVersion must not be null if numBwcNodes is > 0")
-        }
-        // this is our current version distribution configuration we use for all kinds of REST tests etc.
-        project.configurations {
-            elasticsearchDistro
-        }
-        configureDistributionDependency(project, config.distribution, project.configurations.elasticsearchDistro, VersionProperties.elasticsearch)
-        if (config.bwcVersion != null && config.numBwcNodes > 0) {
-            // if we have a cluster that has a BWC cluster we also need to configure a dependency on the BWC version
-            // this version uses the same distribution etc. and only differs in the version we depend on.
-            // from here on everything else works the same as if it's the current version, we fetch the BWC version
-            // from mirrors using gradles built-in mechanism etc.
-            project.configurations {
-                elasticsearchBwcDistro
-            }
-            configureDistributionDependency(project, config.distribution, project.configurations.elasticsearchBwcDistro, config.bwcVersion)
-        }
-
         for (int i = 0; i < config.numNodes; ++i) {
-            // we start N nodes and out of these N nodes there might be M bwc nodes.
-            // for each of those nodes we might have a different configuratioon
-            String elasticsearchVersion = VersionProperties.elasticsearch
-            Configuration configuration = project.configurations.elasticsearchDistro
-            if (i < config.numBwcNodes) {
-                elasticsearchVersion = config.bwcVersion
-                configuration = project.configurations.elasticsearchBwcDistro
-            }
-            NodeInfo node = new NodeInfo(config, i, project, task, elasticsearchVersion, sharedDir)
-            if (i == 0) {
-                if (config.seedNodePortsFile != null) {
-                    // we might allow this in the future to be set but for now we are the only authority to set this!
-                    throw new GradleException("seedNodePortsFile has a non-null value but first node has not been intialized")
-                }
-                config.seedNodePortsFile = node.transportPortsFile;
-            }
+            NodeInfo node = new NodeInfo(config, i, project, task)
             nodes.add(node)
-            startTasks.add(configureNode(project, task, cleanup, node, configuration))
+            startTasks.add(configureNode(project, task, node))
         }
 
         Task wait = configureWaitTask("${task.name}#wait", project, nodes, startTasks)
@@ -116,14 +70,20 @@ class ClusterFormationTasks {
     }
 
     /** Adds a dependency on the given distribution */
-    static void configureDistributionDependency(Project project, String distro, Configuration configuration, String elasticsearchVersion) {
+    static void configureDistributionDependency(Project project, String distro) {
+        String elasticsearchVersion = VersionProperties.elasticsearch
         String packaging = distro
         if (distro == 'tar') {
             packaging = 'tar.gz'
         } else if (distro == 'integ-test-zip') {
             packaging = 'zip'
         }
-        project.dependencies.add(configuration.name, "org.elasticsearch.distribution.${distro}:elasticsearch:${elasticsearchVersion}@${packaging}")
+        project.configurations {
+            elasticsearchDistro
+        }
+        project.dependencies {
+            elasticsearchDistro "org.elasticsearch.distribution.${distro}:elasticsearch:${elasticsearchVersion}@${packaging}"
+        }
     }
 
     /**
@@ -143,10 +103,10 @@ class ClusterFormationTasks {
      *
      * @return a task which starts the node.
      */
-    static Task configureNode(Project project, Task task, Object dependsOn, NodeInfo node, Configuration configuration) {
+    static Task configureNode(Project project, Task task, NodeInfo node) {
 
         // tasks are chained so their execution order is maintained
-        Task setup = project.tasks.create(name: taskName(task, node, 'clean'), type: Delete, dependsOn: dependsOn) {
+        Task setup = project.tasks.create(name: taskName(task, node, 'clean'), type: Delete, dependsOn: task.dependsOn.collect()) {
             delete node.homeDir
             delete node.cwd
             doLast {
@@ -155,7 +115,7 @@ class ClusterFormationTasks {
         }
         setup = configureCheckPreviousTask(taskName(task, node, 'checkPrevious'), project, setup, node)
         setup = configureStopTask(taskName(task, node, 'stopPrevious'), project, setup, node)
-        setup = configureExtractTask(taskName(task, node, 'extract'), project, setup, node, configuration)
+        setup = configureExtractTask(taskName(task, node, 'extract'), project, setup, node)
         setup = configureWriteConfigTask(taskName(task, node, 'configure'), project, setup, node)
         setup = configureExtraConfigFilesTask(taskName(task, node, 'extraConfig'), project, setup, node)
         setup = configureCopyPluginsTask(taskName(task, node, 'copyPlugins'), project, setup, node)
@@ -191,28 +151,27 @@ class ClusterFormationTasks {
     }
 
     /** Adds a task to extract the elasticsearch distribution */
-    static Task configureExtractTask(String name, Project project, Task setup, NodeInfo node, Configuration configuration) {
-        List extractDependsOn = [configuration, setup]
-        /* configuration.singleFile will be an external artifact if this is being run by a plugin not living in the
-          elasticsearch source tree. If this is a plugin built in the elasticsearch source tree or this is a distro in
-          the elasticsearch source tree then this should be the version of elasticsearch built by the source tree.
-          If it isn't then Bad Things(TM) will happen. */
+    static Task configureExtractTask(String name, Project project, Task setup, NodeInfo node) {
+        List extractDependsOn = [project.configurations.elasticsearchDistro, setup]
+        /* project.configurations.elasticsearchDistro.singleFile will be an
+          external artifact if this is being run by a plugin not living in the
+          elasticsearch source tree. If this is a plugin built in the
+          elasticsearch source tree or this is a distro in the elasticsearch
+          source tree then this should be the version of elasticsearch built
+          by the source tree. If it isn't then Bad Things(TM) will happen. */
         Task extract
-
         switch (node.config.distribution) {
             case 'integ-test-zip':
             case 'zip':
                 extract = project.tasks.create(name: name, type: Copy, dependsOn: extractDependsOn) {
-                    from {
-                        project.zipTree(configuration.singleFile)
-                    }
+                    from { project.zipTree(project.configurations.elasticsearchDistro.singleFile) }
                     into node.baseDir
                 }
                 break;
             case 'tar':
                 extract = project.tasks.create(name: name, type: Copy, dependsOn: extractDependsOn) {
                     from {
-                        project.tarTree(project.resources.gzip(configuration.singleFile))
+                        project.tarTree(project.resources.gzip(project.configurations.elasticsearchDistro.singleFile))
                     }
                     into node.baseDir
                 }
@@ -221,7 +180,7 @@ class ClusterFormationTasks {
                 File rpmDatabase = new File(node.baseDir, 'rpm-database')
                 File rpmExtracted = new File(node.baseDir, 'rpm-extracted')
                 /* Delay reading the location of the rpm file until task execution */
-                Object rpm = "${ -> configuration.singleFile}"
+                Object rpm = "${ -> project.configurations.elasticsearchDistro.singleFile}"
                 extract = project.tasks.create(name: name, type: LoggedExec, dependsOn: extractDependsOn) {
                     commandLine 'rpm', '--badreloc', '--nodeps', '--noscripts', '--notriggers',
                         '--dbpath', rpmDatabase,
@@ -236,7 +195,7 @@ class ClusterFormationTasks {
             case 'deb':
                 /* Delay reading the location of the deb file until task execution */
                 File debExtracted = new File(node.baseDir, 'deb-extracted')
-                Object deb = "${ -> configuration.singleFile}"
+                Object deb = "${ -> project.configurations.elasticsearchDistro.singleFile}"
                 extract = project.tasks.create(name: name, type: LoggedExec, dependsOn: extractDependsOn) {
                     commandLine 'dpkg-deb', '-x', deb, debExtracted
                     doFirst {
@@ -255,28 +214,26 @@ class ClusterFormationTasks {
         Map esConfig = [
                 'cluster.name'                 : node.clusterName,
                 'pidfile'                      : node.pidFile,
-                'path.repo'                    : "${node.sharedDir}/repo",
-                'path.shared_data'             : "${node.sharedDir}/",
+                'path.repo'                    : "${node.homeDir}/repo",
+                'path.shared_data'             : "${node.homeDir}/../",
                 // Define a node attribute so we can test that it exists
-                'node.attr.testattr'                : 'test',
+                'node.testattr'                : 'test',
                 'repositories.url.allowed_urls': 'http://snapshot.test*'
         ]
-        esConfig['http.port'] = node.config.httpPort
-        esConfig['transport.tcp.port'] =  node.config.transportPort
+        if (node.config.numNodes == 1) {
+            esConfig['http.port'] = node.config.httpPort
+            esConfig['transport.tcp.port'] =  node.config.transportPort
+        } else {
+            // TODO: fix multi node so it doesn't use hardcoded prots
+            esConfig['http.port'] = 9400 + node.nodeNum
+            esConfig['transport.tcp.port'] =  9500 + node.nodeNum
+            esConfig['discovery.zen.ping.unicast.hosts'] = (0..<node.config.numNodes).collect{"localhost:${9500 + it}"}.join(',')
+
+        }
         esConfig.putAll(node.config.settings)
 
         Task writeConfig = project.tasks.create(name: name, type: DefaultTask, dependsOn: setup)
         writeConfig.doFirst {
-            if (node.nodeNum > 0) { // multi-node cluster case, we have to wait for the seed node to startup
-                ant.waitfor(maxwait: '20', maxwaitunit: 'second', checkevery: '500', checkeveryunit: 'millisecond') {
-                    resourceexists {
-                        file(file: node.config.seedNodePortsFile.toString())
-                    }
-                }
-                // the seed node is enough to form the cluster - all subsequent nodes will get the seed node as a unicast
-                // host and join the cluster via that.
-                esConfig['discovery.zen.ping.unicast.hosts'] = "\"${node.config.seedNodeTransportUri()}\""
-            }
             File configFile = new File(node.confDir, 'elasticsearch.yml')
             logger.info("Configuring ${configFile}")
             configFile.setText(esConfig.collect { key, value -> "${key}: ${value}" }.join('\n'), 'UTF-8')
@@ -288,8 +245,7 @@ class ClusterFormationTasks {
             return setup
         }
         Copy copyConfig = project.tasks.create(name: name, type: Copy, dependsOn: setup)
-        File configDir = new File(node.homeDir, 'config')
-        copyConfig.into(configDir) // copy must always have a general dest dir, even though we don't use it
+        copyConfig.into(new File(node.homeDir, 'config')) // copy must always have a general dest dir, even though we don't use it
         for (Map.Entry<String,Object> extraConfigFile : node.config.extraConfigFiles.entrySet()) {
             copyConfig.doFirst {
                 // make sure the copy won't be a no-op or act on a directory
@@ -302,12 +258,9 @@ class ClusterFormationTasks {
                 }
             }
             File destConfigFile = new File(node.homeDir, 'config/' + extraConfigFile.getKey())
-            // wrap source file in closure to delay resolution to execution time
-            copyConfig.from({ extraConfigFile.getValue() }) {
-                // this must be in a closure so it is only applied to the single file specified in from above
-                into(configDir.toPath().relativize(destConfigFile.canonicalFile.parentFile.toPath()).toFile())
-                rename { destConfigFile.name }
-            }
+            copyConfig.into(destConfigFile.canonicalFile.parentFile)
+                      .from({ extraConfigFile.getValue() }) // wrap in closure to delay resolution to execution time
+                      .rename { destConfigFile.name }
         }
         return copyConfig
     }
@@ -387,24 +340,8 @@ class ClusterFormationTasks {
         }
         // delay reading the file location until execution time by wrapping in a closure within a GString
         String file = "${-> new File(node.pluginsTmpDir, pluginZip.singleFile.getName()).toURI().toURL().toString()}"
-        Object[] args = [new File(node.homeDir, 'bin/elasticsearch-plugin'), 'install', file]
+        Object[] args = [new File(node.homeDir, 'bin/plugin'), 'install', file]
         return configureExecTask(name, project, setup, node, args)
-    }
-
-    /** Wrapper for command line argument: surrounds comma with double quotes **/
-    private static class EscapeCommaWrapper {
-
-        Object arg
-
-        public String toString() {
-            String s = arg.toString()
-
-            /// Surround strings that contains a comma with double quotes
-            if (s.indexOf(',') != -1) {
-                return "\"${s}\""
-            }
-            return s
-        }
     }
 
     /** Adds a task to execute a command to help setup the cluster */
@@ -414,13 +351,10 @@ class ClusterFormationTasks {
             if (Os.isFamily(Os.FAMILY_WINDOWS)) {
                 executable 'cmd'
                 args '/C', 'call'
-                // On Windows the comma character is considered a parameter separator:
-                // argument are wrapped in an ExecArgWrapper that escapes commas
-                args execArgs.collect { a -> new EscapeCommaWrapper(arg: a) }
             } else {
                 executable 'sh'
-                args execArgs
             }
+            args execArgs
         }
     }
 
@@ -451,7 +385,7 @@ class ClusterFormationTasks {
             // gradle task options are not processed until the end of the configuration phase
             if (node.config.debug) {
                 println 'Running elasticsearch in debug mode, suspending until connected on port 8000'
-                node.env['ES_JAVA_OPTS'] = '-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=8000'
+                node.env['JAVA_OPTS'] = '-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=8000'
             }
 
             node.getCommandString().eachLine { line -> logger.info(line) }

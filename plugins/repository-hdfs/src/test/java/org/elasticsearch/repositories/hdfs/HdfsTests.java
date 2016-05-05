@@ -47,7 +47,7 @@ public class HdfsTests extends ESSingleNodeTestCase {
 
         PutRepositoryResponse putRepositoryResponse = client.admin().cluster().preparePutRepository("test-repo")
                 .setType("hdfs")
-                .setSettings(Settings.builder()
+                .setSettings(Settings.settingsBuilder()
                         .put("uri", "hdfs:///")
                         .put("conf.fs.AbstractFileSystem.hdfs.impl", TestingFs.class.getName())
                         .put("path", "foo")

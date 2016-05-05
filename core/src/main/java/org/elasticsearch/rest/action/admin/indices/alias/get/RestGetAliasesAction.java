@@ -30,6 +30,7 @@ import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.common.xcontent.XContentBuilderString;
 import org.elasticsearch.rest.BaseRestHandler;
 import org.elasticsearch.rest.BytesRestResponse;
 import org.elasticsearch.rest.RestChannel;
@@ -51,7 +52,7 @@ public class RestGetAliasesAction extends BaseRestHandler {
 
     @Inject
     public RestGetAliasesAction(Settings settings, RestController controller, Client client) {
-        super(settings, client);
+        super(settings, controller, client);
         controller.registerHandler(GET, "/_alias/{name}", this);
         controller.registerHandler(GET, "/{index}/_alias/{name}", this);
     }
@@ -82,7 +83,7 @@ public class RestGetAliasesAction extends BaseRestHandler {
 
                 builder.startObject();
                 for (ObjectObjectCursor<String, List<AliasMetaData>> entry : response.getAliases()) {
-                    builder.startObject(entry.key);
+                    builder.startObject(entry.key, XContentBuilder.FieldCaseConversion.NONE);
                     builder.startObject(Fields.ALIASES);
                     for (AliasMetaData alias : entry.value) {
                         AliasMetaData.Builder.toXContent(alias, builder, ToXContent.EMPTY_PARAMS);
@@ -112,7 +113,7 @@ public class RestGetAliasesAction extends BaseRestHandler {
 
     static class Fields {
 
-        static final String ALIASES = "aliases";
+        static final XContentBuilderString ALIASES = new XContentBuilderString("aliases");
 
     }
 }

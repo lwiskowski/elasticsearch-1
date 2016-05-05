@@ -21,10 +21,8 @@ package org.elasticsearch.action.support.master;
 
 import org.elasticsearch.action.ActionResponse;
 import org.elasticsearch.action.support.ActionFilters;
+import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
-import org.elasticsearch.cluster.service.ClusterService;
-import org.elasticsearch.common.settings.Setting;
-import org.elasticsearch.common.settings.Setting.Property;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
@@ -38,20 +36,22 @@ import java.util.function.Supplier;
 public abstract class TransportMasterNodeReadAction<Request extends MasterNodeReadRequest<Request>, Response extends ActionResponse>
         extends TransportMasterNodeAction<Request, Response> {
 
-    public static final Setting<Boolean> FORCE_LOCAL_SETTING =
-        Setting.boolSetting("action.master.force_local", false, Property.NodeScope);
+    public static final String FORCE_LOCAL_SETTING = "action.master.force_local";
 
-    private final boolean forceLocal;
+    private Boolean forceLocal;
 
     protected TransportMasterNodeReadAction(Settings settings, String actionName, TransportService transportService,
                                             ClusterService clusterService, ThreadPool threadPool, ActionFilters actionFilters,
                                             IndexNameExpressionResolver indexNameExpressionResolver, Supplier<Request> request) {
         super(settings, actionName, transportService, clusterService, threadPool, actionFilters, indexNameExpressionResolver,request);
-        this.forceLocal = FORCE_LOCAL_SETTING.get(settings);
+        this.forceLocal = settings.getAsBoolean(FORCE_LOCAL_SETTING, null);
     }
 
     @Override
     protected final boolean localExecute(Request request) {
-        return forceLocal || request.local();
+        if (forceLocal != null) {
+            return forceLocal;
+        }
+        return request.local();
     }
 }

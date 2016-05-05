@@ -42,6 +42,7 @@ public abstract class BroadcastShardRequest extends TransportRequest implements 
     }
 
     protected BroadcastShardRequest(ShardId shardId, BroadcastRequest request) {
+        super(request);
         this.shardId = shardId;
         this.originalIndices = new OriginalIndices(request);
     }

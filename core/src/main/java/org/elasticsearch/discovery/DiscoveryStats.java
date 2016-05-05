@@ -25,6 +25,7 @@ import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Streamable;
 import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.common.xcontent.XContentBuilderString;
 import org.elasticsearch.discovery.zen.publish.PendingClusterStateStats;
 
 import java.io.IOException;
@@ -68,7 +69,7 @@ public class DiscoveryStats implements Streamable, ToXContent {
     }
 
     static final class Fields {
-        static final String DISCOVERY = "discovery";
+        static final XContentBuilderString DISCOVERY = new XContentBuilderString("discovery");
     }
 
     public PendingClusterStateStats getQueueStats() {

@@ -27,23 +27,30 @@ import org.elasticsearch.common.io.stream.Writeable;
 import java.io.IOException;
 
 /** Specifies how a geo query should be run. */
-public enum GeoExecType implements Writeable {
+public enum GeoExecType implements Writeable<GeoExecType> {
     
     MEMORY(0), INDEXED(1);
 
     private final int ordinal;
 
+    private static final GeoExecType PROTOTYPE = MEMORY;
+
     GeoExecType(int ordinal) {
         this.ordinal = ordinal;
     }
 
-    public static GeoExecType readFromStream(StreamInput in) throws IOException {
+    @Override
+    public GeoExecType readFrom(StreamInput in) throws IOException {
         int ord = in.readVInt();
         switch(ord) {
             case(0): return MEMORY;
             case(1): return INDEXED;
         }
         throw new ElasticsearchException("unknown serialized type [" + ord + "]");
+    }
+
+    public static GeoExecType readTypeFrom(StreamInput in) throws IOException {
+        return PROTOTYPE.readFrom(in);
     }
 
     @Override

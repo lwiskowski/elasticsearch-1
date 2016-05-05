@@ -26,7 +26,6 @@ import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Setting;
-import org.elasticsearch.common.settings.Setting.Property;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.CollectionUtils;
 
@@ -41,8 +40,7 @@ import java.util.List;
  */
 public class ElectMasterService extends AbstractComponent {
 
-    public static final Setting<Integer> DISCOVERY_ZEN_MINIMUM_MASTER_NODES_SETTING =
-        Setting.intSetting("discovery.zen.minimum_master_nodes", -1, Property.Dynamic, Property.NodeScope);
+    public static final Setting<Integer> DISCOVERY_ZEN_MINIMUM_MASTER_NODES_SETTING = Setting.intSetting("discovery.zen.minimum_master_nodes", -1, true, Setting.Scope.CLUSTER);
 
     // This is the minimum version a master needs to be on, otherwise it gets ignored
     // This is based on the minimum compatible version of the current version this node is on
@@ -73,7 +71,7 @@ public class ElectMasterService extends AbstractComponent {
         }
         int count = 0;
         for (DiscoveryNode node : nodes) {
-            if (node.isMasterNode()) {
+            if (node.masterNode()) {
                 count++;
             }
         }
@@ -81,7 +79,7 @@ public class ElectMasterService extends AbstractComponent {
     }
 
     /**
-     * Returns the given nodes sorted by likelihood of being elected as master, most likely first.
+     * Returns the given nodes sorted by likelyhood of being elected as master, most likely first.
      * Non-master nodes are not removed but are rather put in the end
      */
     public List<DiscoveryNode> sortByMasterLikelihood(Iterable<DiscoveryNode> nodes) {
@@ -136,7 +134,7 @@ public class ElectMasterService extends AbstractComponent {
         // clean non master nodes
         for (Iterator<DiscoveryNode> it = possibleNodes.iterator(); it.hasNext(); ) {
             DiscoveryNode node = it.next();
-            if (!node.isMasterNode()) {
+            if (!node.masterNode()) {
                 it.remove();
             }
         }
@@ -148,13 +146,13 @@ public class ElectMasterService extends AbstractComponent {
 
         @Override
         public int compare(DiscoveryNode o1, DiscoveryNode o2) {
-            if (o1.isMasterNode() && !o2.isMasterNode()) {
+            if (o1.masterNode() && !o2.masterNode()) {
                 return -1;
             }
-            if (!o1.isMasterNode() && o2.isMasterNode()) {
+            if (!o1.masterNode() && o2.masterNode()) {
                 return 1;
             }
-            return o1.getId().compareTo(o2.getId());
+            return o1.id().compareTo(o2.id());
         }
     }
 }

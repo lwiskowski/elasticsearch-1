@@ -21,6 +21,7 @@ package org.elasticsearch.index.fielddata.ordinals;
 import org.apache.lucene.index.RandomAccessOrds;
 import org.apache.lucene.index.SortedDocValues;
 import org.apache.lucene.util.packed.PackedInts;
+import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.index.fielddata.FieldData;
 import org.elasticsearch.search.MultiValueMode;
 import org.elasticsearch.test.ESTestCase;
@@ -40,12 +41,17 @@ import static org.hamcrest.Matchers.equalTo;
  */
 public class MultiOrdinalsTests extends ESTestCase {
 
-    protected Ordinals creationMultiOrdinals(OrdinalsBuilder builder) {
-        return builder.build();
+    protected final Ordinals creationMultiOrdinals(OrdinalsBuilder builder) {
+        return this.creationMultiOrdinals(builder, Settings.builder());
+    }
+
+
+    protected Ordinals creationMultiOrdinals(OrdinalsBuilder builder, Settings.Builder settings) {
+        return builder.build(settings.build());
     }
 
     public void testRandomValues() throws IOException {
-        Random random = random();
+        Random random = getRandom();
         int numDocs = 100 + random.nextInt(1000);
         int numOrdinals = 1 + random.nextInt(200);
         int numValues = 100 + random.nextInt(100000);

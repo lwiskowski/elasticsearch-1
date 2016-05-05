@@ -25,11 +25,8 @@ import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Writeable;
 import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.XContentBuilder;
-import org.elasticsearch.tasks.Task;
-import org.elasticsearch.tasks.TaskId;
 
 import java.io.IOException;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Information about a currently running task.
@@ -39,11 +36,11 @@ import java.util.concurrent.TimeUnit;
  * and use in APIs. Instead, immutable and streamable TaskInfo objects are used to represent
  * snapshot information about currently running tasks.
  */
-public class TaskInfo implements Writeable, ToXContent {
+public class TaskInfo implements Writeable<TaskInfo>, ToXContent {
 
     private final DiscoveryNode node;
 
-    private final TaskId taskId;
+    private final long id;
 
     private final String type;
 
@@ -51,62 +48,32 @@ public class TaskInfo implements Writeable, ToXContent {
 
     private final String description;
 
-    private final long startTime;
+    private final String parentNode;
 
-    private final long runningTimeNanos;
+    private final long parentId;
 
-    private final Task.Status status;
+    public TaskInfo(DiscoveryNode node, long id, String type, String action, String description) {
+        this(node, id, type, action, description, null, -1L);
+    }
 
-    private final boolean cancellable;
-
-    private final TaskId parentTaskId;
-
-    public TaskInfo(DiscoveryNode node, long id, String type, String action, String description, Task.Status status, long startTime,
-                    long runningTimeNanos, boolean cancellable, TaskId parentTaskId) {
+    public TaskInfo(DiscoveryNode node, long id, String type, String action, String description, String parentNode, long parentId) {
         this.node = node;
-        this.taskId = new TaskId(node.getId(), id);
+        this.id = id;
         this.type = type;
         this.action = action;
         this.description = description;
-        this.status = status;
-        this.startTime = startTime;
-        this.runningTimeNanos = runningTimeNanos;
-        this.cancellable = cancellable;
-        this.parentTaskId = parentTaskId;
+        this.parentNode = parentNode;
+        this.parentId = parentId;
     }
 
-    /**
-     * Read from a stream.
-     */
     public TaskInfo(StreamInput in) throws IOException {
-        node = new DiscoveryNode(in);
-        taskId = new TaskId(node.getId(), in.readLong());
+        node = DiscoveryNode.readNode(in);
+        id = in.readLong();
         type = in.readString();
         action = in.readString();
         description = in.readOptionalString();
-        status = in.readOptionalNamedWriteable(Task.Status.class);
-        startTime = in.readLong();
-        runningTimeNanos = in.readLong();
-        cancellable = in.readBoolean();
-        parentTaskId = TaskId.readFromStream(in);
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        node.writeTo(out);
-        out.writeLong(taskId.getId());
-        out.writeString(type);
-        out.writeString(action);
-        out.writeOptionalString(description);
-        out.writeOptionalNamedWriteable(status);
-        out.writeLong(startTime);
-        out.writeLong(runningTimeNanos);
-        out.writeBoolean(cancellable);
-        parentTaskId.writeTo(out);
-    }
-
-    public TaskId getTaskId() {
-        return taskId;
+        parentNode = in.readOptionalString();
+        parentId = in.readLong();
     }
 
     public DiscoveryNode getNode() {
@@ -114,7 +81,7 @@ public class TaskInfo implements Writeable, ToXContent {
     }
 
     public long getId() {
-        return taskId.getId();
+        return id;
     }
 
     public String getType() {
@@ -129,60 +96,45 @@ public class TaskInfo implements Writeable, ToXContent {
         return description;
     }
 
-    /**
-     * The status of the running task. Only available if TaskInfos were build
-     * with the detailed flag.
-     */
-    public Task.Status getStatus() {
-        return status;
+    public String getParentNode() {
+        return parentNode;
     }
 
-    /**
-     * Returns the task start time
-     */
-    public long getStartTime() {
-        return startTime;
+    public long getParentId() {
+        return parentId;
     }
 
-    /**
-     * Returns the task running time
-     */
-    public long getRunningTimeNanos() {
-        return runningTimeNanos;
+    @Override
+    public TaskInfo readFrom(StreamInput in) throws IOException {
+        return new TaskInfo(in);
     }
 
-    /**
-     * Returns true if the task supports cancellation
-     */
-    public boolean isCancellable() {
-        return cancellable;
-    }
-
-    /**
-     * Returns the parent task id
-     */
-    public TaskId getParentTaskId() {
-        return parentTaskId;
+    @Override
+    public void writeTo(StreamOutput out) throws IOException {
+        node.writeTo(out);
+        out.writeLong(id);
+        out.writeString(type);
+        out.writeString(action);
+        out.writeOptionalString(description);
+        out.writeOptionalString(parentNode);
+        out.writeLong(parentId);
     }
 
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+        builder.startObject();
         builder.field("node", node.getId());
-        builder.field("id", taskId.getId());
+        builder.field("id", id);
         builder.field("type", type);
         builder.field("action", action);
-        if (status != null) {
-            builder.field("status", status, params);
-        }
         if (description != null) {
             builder.field("description", description);
         }
-        builder.dateValueField("start_time_in_millis", "start_time", startTime);
-        builder.timeValueField("running_time_in_nanos", "running_time", runningTimeNanos, TimeUnit.NANOSECONDS);
-        builder.field("cancellable", cancellable);
-        if (parentTaskId.isSet()) {
-            builder.field("parent_task_id", parentTaskId.toString());
+        if (parentNode != null) {
+            builder.field("parent_node", parentNode);
+            builder.field("parent_id", parentId);
         }
+        builder.endObject();
         return builder;
     }
 }

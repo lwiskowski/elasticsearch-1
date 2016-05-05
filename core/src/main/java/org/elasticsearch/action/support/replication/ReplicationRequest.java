@@ -29,8 +29,6 @@ import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.index.shard.ShardId;
-import org.elasticsearch.tasks.Task;
-import org.elasticsearch.tasks.TaskId;
 
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
@@ -40,8 +38,7 @@ import static org.elasticsearch.action.ValidateActions.addValidationError;
 /**
  *
  */
-public abstract class ReplicationRequest<Request extends ReplicationRequest<Request>> extends ActionRequest<Request>
-        implements IndicesRequest {
+public abstract class ReplicationRequest<Request extends ReplicationRequest<Request>> extends ActionRequest<Request> implements IndicesRequest {
 
     public static final TimeValue DEFAULT_TIMEOUT = new TimeValue(1, TimeUnit.MINUTES);
 
@@ -52,26 +49,47 @@ public abstract class ReplicationRequest<Request extends ReplicationRequest<Requ
      */
     protected ShardId shardId;
 
-    long primaryTerm;
-
     protected TimeValue timeout = DEFAULT_TIMEOUT;
     protected String index;
 
     private WriteConsistencyLevel consistencyLevel = WriteConsistencyLevel.DEFAULT;
 
-    private long routedBasedOnClusterVersion = 0;
-
     public ReplicationRequest() {
 
     }
 
+    /**
+     * Creates a new request that inherits headers and context from the request provided as argument.
+     */
+    public ReplicationRequest(ActionRequest<?> request) {
+        super(request);
+    }
 
     /**
      * Creates a new request with resolved shard id
      */
-    public ReplicationRequest(ShardId shardId) {
-        this.index = shardId.getIndexName();
+    public ReplicationRequest(ActionRequest<?> request, ShardId shardId) {
+        super(request);
+        this.index = shardId.getIndex();
         this.shardId = shardId;
+    }
+
+    /**
+     * Copy constructor that creates a new request that is a copy of the one provided as an argument.
+     */
+    protected ReplicationRequest(Request request) {
+        this(request, request);
+    }
+
+    /**
+     * Copy constructor that creates a new request that is a copy of the one provided as an argument.
+     * The new request will inherit though headers and context from the original request that caused it.
+     */
+    protected ReplicationRequest(Request request, ActionRequest<?> originalRequest) {
+        super(originalRequest);
+        this.timeout = request.timeout();
+        this.index = request.index();
+        this.consistencyLevel = request.consistencyLevel();
     }
 
     /**
@@ -137,30 +155,6 @@ public abstract class ReplicationRequest<Request extends ReplicationRequest<Requ
         return (Request) this;
     }
 
-    /**
-     * Sets the minimum version of the cluster state that is required on the next node before we redirect to another primary.
-     * Used to prevent redirect loops, see also {@link TransportReplicationAction.ReroutePhase#doRun()}
-     */
-    @SuppressWarnings("unchecked")
-    Request routedBasedOnClusterVersion(long routedBasedOnClusterVersion) {
-        this.routedBasedOnClusterVersion = routedBasedOnClusterVersion;
-        return (Request) this;
-    }
-
-    long routedBasedOnClusterVersion() {
-        return routedBasedOnClusterVersion;
-    }
-
-    /** returns the primary term active at the time the operation was performed on the primary shard */
-    public long primaryTerm() {
-        return primaryTerm;
-    }
-
-    /** marks the primary term in which the operation was performed */
-    public void primaryTerm(long term) {
-        primaryTerm = term;
-    }
-
     @Override
     public ActionRequestValidationException validate() {
         ActionRequestValidationException validationException = null;
@@ -181,8 +175,6 @@ public abstract class ReplicationRequest<Request extends ReplicationRequest<Requ
         consistencyLevel = WriteConsistencyLevel.fromId(in.readByte());
         timeout = TimeValue.readTimeValue(in);
         index = in.readString();
-        routedBasedOnClusterVersion = in.readVLong();
-        primaryTerm = in.readVLong();
     }
 
     @Override
@@ -197,13 +189,6 @@ public abstract class ReplicationRequest<Request extends ReplicationRequest<Requ
         out.writeByte(consistencyLevel.id());
         timeout.writeTo(out);
         out.writeString(index);
-        out.writeVLong(routedBasedOnClusterVersion);
-        out.writeVLong(primaryTerm);
-    }
-
-    @Override
-    public Task createTask(long id, String type, String action, TaskId parentTaskId) {
-        return new ReplicationTask(id, type, action, getDescription(), parentTaskId);
     }
 
     /**
@@ -223,10 +208,5 @@ public abstract class ReplicationRequest<Request extends ReplicationRequest<Requ
         } else {
             return index;
         }
-    }
-
-    @Override
-    public String getDescription() {
-        return toString();
     }
 }

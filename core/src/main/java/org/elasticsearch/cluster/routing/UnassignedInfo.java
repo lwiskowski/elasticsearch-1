@@ -29,7 +29,6 @@ import org.elasticsearch.common.io.stream.Writeable;
 import org.elasticsearch.common.joda.FormatDateTimeFormatter;
 import org.elasticsearch.common.joda.Joda;
 import org.elasticsearch.common.settings.Setting;
-import org.elasticsearch.common.settings.Setting.Property;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.xcontent.ToXContent;
@@ -40,14 +39,12 @@ import java.io.IOException;
 /**
  * Holds additional information as to why the shard is in unassigned state.
  */
-public class UnassignedInfo implements ToXContent, Writeable {
+public class UnassignedInfo implements ToXContent, Writeable<UnassignedInfo> {
 
     public static final FormatDateTimeFormatter DATE_TIME_FORMATTER = Joda.forPattern("dateOptionalTime");
     private static final TimeValue DEFAULT_DELAYED_NODE_LEFT_TIMEOUT = TimeValue.timeValueMinutes(1);
 
-    public static final Setting<TimeValue> INDEX_DELAYED_NODE_LEFT_TIMEOUT_SETTING =
-        Setting.timeSetting("index.unassigned.node_left.delayed_timeout", DEFAULT_DELAYED_NODE_LEFT_TIMEOUT, Property.Dynamic,
-            Property.IndexScope);
+    public static final Setting<TimeValue> INDEX_DELAYED_NODE_LEFT_TIMEOUT_SETTING = Setting.timeSetting("index.unassigned.node_left.delayed_timeout", DEFAULT_DELAYED_NODE_LEFT_TIMEOUT, true, Setting.Scope.INDEX);
 
     /**
      * Reason why the shard is in unassigned state.
@@ -109,7 +106,7 @@ public class UnassignedInfo implements ToXContent, Writeable {
     private final Reason reason;
     private final long unassignedTimeMillis; // used for display and log messages, in milliseconds
     private final long unassignedTimeNanos; // in nanoseconds, used to calculate delay for delayed shard allocation
-    private volatile long lastComputedLeftDelayNanos = 0L; // how long to delay shard allocation, not serialized (always positive, 0 means no delay)
+    private volatile long lastComputedLeftDelayNanos = 0l; // how long to delay shard allocation, not serialized (always positive, 0 means no delay)
     private final String message;
     private final Throwable failure;
 
@@ -139,7 +136,7 @@ public class UnassignedInfo implements ToXContent, Writeable {
         assert !(message == null && failure != null) : "provide a message if a failure exception is provided";
     }
 
-    public UnassignedInfo(StreamInput in) throws IOException {
+    UnassignedInfo(StreamInput in) throws IOException {
         this.reason = Reason.values()[(int) in.readByte()];
         this.unassignedTimeMillis = in.readLong();
         // As System.nanoTime() cannot be compared across different JVMs, reset it to now.
@@ -220,7 +217,7 @@ public class UnassignedInfo implements ToXContent, Writeable {
             return 0;
         }
         TimeValue delayTimeout = INDEX_DELAYED_NODE_LEFT_TIMEOUT_SETTING.get(indexSettings, settings);
-        return Math.max(0L, delayTimeout.nanos());
+        return Math.max(0l, delayTimeout.nanos());
     }
 
     /**
@@ -232,27 +229,19 @@ public class UnassignedInfo implements ToXContent, Writeable {
     }
 
     /**
-     * Calculates the delay left based on current time (in nanoseconds) and index/node settings.
-     *
-     * @return calculated delay in nanoseconds
-     */
-    public long getRemainingDelay(final long nanoTimeNow, final Settings settings, final Settings indexSettings) {
-        final long delayTimeoutNanos = getAllocationDelayTimeoutSettingNanos(settings, indexSettings);
-        if (delayTimeoutNanos == 0L) {
-            return 0L;
-        } else {
-            assert nanoTimeNow >= unassignedTimeNanos;
-            return Math.max(0L, delayTimeoutNanos - (nanoTimeNow - unassignedTimeNanos));
-        }
-    }
-
-    /**
      * Updates delay left based on current time (in nanoseconds) and index/node settings.
      *
      * @return updated delay in nanoseconds
      */
-    public long updateDelay(final long nanoTimeNow, final Settings settings, final Settings indexSettings) {
-        final long newComputedLeftDelayNanos = getRemainingDelay(nanoTimeNow, settings, indexSettings);
+    public long updateDelay(long nanoTimeNow, Settings settings, Settings indexSettings) {
+        long delayTimeoutNanos = getAllocationDelayTimeoutSettingNanos(settings, indexSettings);
+        final long newComputedLeftDelayNanos;
+        if (delayTimeoutNanos == 0l) {
+            newComputedLeftDelayNanos = 0l;
+        } else {
+            assert nanoTimeNow >= unassignedTimeNanos;
+            newComputedLeftDelayNanos = Math.max(0L, delayTimeoutNanos - (nanoTimeNow - unassignedTimeNanos));
+        }
         lastComputedLeftDelayNanos = newComputedLeftDelayNanos;
         return newComputedLeftDelayNanos;
     }
@@ -280,7 +269,7 @@ public class UnassignedInfo implements ToXContent, Writeable {
         long minDelaySetting = Long.MAX_VALUE;
         for (ShardRouting shard : state.routingTable().shardsWithState(ShardRoutingState.UNASSIGNED)) {
             if (shard.primary() == false) {
-                IndexMetaData indexMetaData = state.metaData().index(shard.getIndexName());
+                IndexMetaData indexMetaData = state.metaData().index(shard.getIndex());
                 boolean delayed = shard.unassignedInfo().getLastComputedLeftDelayNanos() > 0;
                 long delayTimeoutSetting = shard.unassignedInfo().getAllocationDelayTimeoutSettingNanos(settings, indexMetaData.getSettings());
                 if (delayed && delayTimeoutSetting > 0 && delayTimeoutSetting < minDelaySetting) {
@@ -288,7 +277,7 @@ public class UnassignedInfo implements ToXContent, Writeable {
                 }
             }
         }
-        return minDelaySetting == Long.MAX_VALUE ? 0L : minDelaySetting;
+        return minDelaySetting == Long.MAX_VALUE ? 0l : minDelaySetting;
     }
 
 
@@ -305,7 +294,7 @@ public class UnassignedInfo implements ToXContent, Writeable {
                 }
             }
         }
-        return nextDelay == Long.MAX_VALUE ? 0L : nextDelay;
+        return nextDelay == Long.MAX_VALUE ? 0l : nextDelay;
     }
 
     public String shortSummary() {

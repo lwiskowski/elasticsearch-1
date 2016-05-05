@@ -44,7 +44,7 @@ public class RestMultiPercolateAction extends BaseRestHandler {
 
     @Inject
     public RestMultiPercolateAction(Settings settings, RestController controller, Client client) {
-        super(settings, client);
+        super(settings, controller, client);
         controller.registerHandler(POST, "/_mpercolate", this);
         controller.registerHandler(POST, "/{index}/_mpercolate", this);
         controller.registerHandler(POST, "/{index}/{type}/_mpercolate", this);
@@ -53,7 +53,7 @@ public class RestMultiPercolateAction extends BaseRestHandler {
         controller.registerHandler(GET, "/{index}/_mpercolate", this);
         controller.registerHandler(GET, "/{index}/{type}/_mpercolate", this);
 
-        this.allowExplicitIndex = MULTI_ALLOW_EXPLICIT_INDEX.get(settings);
+        this.allowExplicitIndex = settings.getAsBoolean("rest.action.multi.allow_explicit_index", true);
     }
 
     @Override

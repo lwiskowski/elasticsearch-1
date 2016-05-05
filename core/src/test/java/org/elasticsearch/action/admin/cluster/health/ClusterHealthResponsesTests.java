@@ -70,6 +70,7 @@ public class ClusterHealthResponsesTests extends ESTestCase {
     private void assertClusterHealth(ClusterHealthResponse clusterHealth) {
         ClusterStateHealth clusterStateHealth = clusterHealth.getClusterStateHealth();
 
+        assertThat(clusterHealth.getValidationFailures(), Matchers.equalTo(clusterStateHealth.getValidationFailures()));
         assertThat(clusterHealth.getActiveShards(), Matchers.equalTo(clusterStateHealth.getActiveShards()));
         assertThat(clusterHealth.getRelocatingShards(), Matchers.equalTo(clusterStateHealth.getRelocatingShards()));
         assertThat(clusterHealth.getActivePrimaryShards(), Matchers.equalTo(clusterStateHealth.getActivePrimaryShards()));

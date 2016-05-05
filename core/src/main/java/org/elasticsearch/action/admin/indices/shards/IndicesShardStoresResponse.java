@@ -33,7 +33,7 @@ import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Streamable;
 import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.XContentBuilder;
-import org.elasticsearch.index.shard.ShardStateMetaData;
+import org.elasticsearch.common.xcontent.XContentBuilderString;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -55,7 +55,7 @@ public class IndicesShardStoresResponse extends ActionResponse implements ToXCon
      */
     public static class StoreStatus implements Streamable, ToXContent, Comparable<StoreStatus> {
         private DiscoveryNode node;
-        private long legacyVersion;
+        private long version;
         private String allocationId;
         private Throwable storeException;
         private AllocationStatus allocationStatus;
@@ -116,9 +116,9 @@ public class IndicesShardStoresResponse extends ActionResponse implements ToXCon
         private StoreStatus() {
         }
 
-        public StoreStatus(DiscoveryNode node, long legacyVersion, String allocationId, AllocationStatus allocationStatus, Throwable storeException) {
+        public StoreStatus(DiscoveryNode node, long version, String allocationId, AllocationStatus allocationStatus, Throwable storeException) {
             this.node = node;
-            this.legacyVersion = legacyVersion;
+            this.version = version;
             this.allocationId = allocationId;
             this.allocationStatus = allocationStatus;
             this.storeException = storeException;
@@ -132,10 +132,10 @@ public class IndicesShardStoresResponse extends ActionResponse implements ToXCon
         }
 
         /**
-         * Version of the store for pre-3.0 shards that have not yet been active
+         * Version of the store
          */
-        public long getLegacyVersion() {
-            return legacyVersion;
+        public long getVersion() {
+            return version;
         }
 
         /**
@@ -164,7 +164,7 @@ public class IndicesShardStoresResponse extends ActionResponse implements ToXCon
             return allocationStatus;
         }
 
-        public static StoreStatus readStoreStatus(StreamInput in) throws IOException {
+        static StoreStatus readStoreStatus(StreamInput in) throws IOException {
             StoreStatus storeStatus = new StoreStatus();
             storeStatus.readFrom(in);
             return storeStatus;
@@ -172,8 +172,8 @@ public class IndicesShardStoresResponse extends ActionResponse implements ToXCon
 
         @Override
         public void readFrom(StreamInput in) throws IOException {
-            node = new DiscoveryNode(in);
-            legacyVersion = in.readLong();
+            node = DiscoveryNode.readNode(in);
+            version = in.readLong();
             allocationId = in.readOptionalString();
             allocationStatus = AllocationStatus.readFrom(in);
             if (in.readBoolean()) {
@@ -184,7 +184,7 @@ public class IndicesShardStoresResponse extends ActionResponse implements ToXCon
         @Override
         public void writeTo(StreamOutput out) throws IOException {
             node.writeTo(out);
-            out.writeLong(legacyVersion);
+            out.writeLong(version);
             out.writeOptionalString(allocationId);
             allocationStatus.writeTo(out);
             if (storeException != null) {
@@ -198,12 +198,8 @@ public class IndicesShardStoresResponse extends ActionResponse implements ToXCon
         @Override
         public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
             node.toXContent(builder, params);
-            if (legacyVersion != ShardStateMetaData.NO_VERSION) {
-                builder.field(Fields.LEGACY_VERSION, legacyVersion);
-            }
-            if (allocationId != null) {
-                builder.field(Fields.ALLOCATION_ID, allocationId);
-            }
+            builder.field(Fields.VERSION, version);
+            builder.field(Fields.ALLOCATION_ID, allocationId);
             builder.field(Fields.ALLOCATED, allocationStatus.value());
             if (storeException != null) {
                 builder.startObject(Fields.STORE_EXCEPTION);
@@ -219,21 +215,10 @@ public class IndicesShardStoresResponse extends ActionResponse implements ToXCon
                 return 1;
             } else if (other.storeException != null && storeException == null) {
                 return -1;
-            }
-            if (allocationId != null && other.allocationId == null) {
-                return -1;
-            } else if (allocationId == null && other.allocationId != null) {
-                return 1;
-            } else if (allocationId == null && other.allocationId == null) {
-                int compare = Long.compare(other.legacyVersion, legacyVersion);
+            } else {
+                int compare = Long.compare(other.version, version);
                 if (compare == 0) {
                     return Integer.compare(allocationStatus.id, other.allocationStatus.id);
-                }
-                return compare;
-            } else {
-                int compare = Integer.compare(allocationStatus.id, other.allocationStatus.id);
-                if (compare == 0) {
-                    return allocationId.compareTo(other.allocationId);
                 }
                 return compare;
             }
@@ -400,14 +385,14 @@ public class IndicesShardStoresResponse extends ActionResponse implements ToXCon
     }
 
     static final class Fields {
-        static final String INDICES = "indices";
-        static final String SHARDS = "shards";
-        static final String FAILURES = "failures";
-        static final String STORES = "stores";
+        static final XContentBuilderString INDICES = new XContentBuilderString("indices");
+        static final XContentBuilderString SHARDS = new XContentBuilderString("shards");
+        static final XContentBuilderString FAILURES = new XContentBuilderString("failures");
+        static final XContentBuilderString STORES = new XContentBuilderString("stores");
         // StoreStatus fields
-        static final String LEGACY_VERSION = "legacy_version";
-        static final String ALLOCATION_ID = "allocation_id";
-        static final String STORE_EXCEPTION = "store_exception";
-        static final String ALLOCATED = "allocation";
+        static final XContentBuilderString VERSION = new XContentBuilderString("version");
+        static final XContentBuilderString ALLOCATION_ID = new XContentBuilderString("allocation_id");
+        static final XContentBuilderString STORE_EXCEPTION = new XContentBuilderString("store_exception");
+        static final XContentBuilderString ALLOCATED = new XContentBuilderString("allocation");
     }
 }

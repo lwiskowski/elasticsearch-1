@@ -29,13 +29,13 @@ import org.elasticsearch.action.support.DefaultShardOperationFailedException;
 import org.elasticsearch.action.support.broadcast.BroadcastShardOperationFailedException;
 import org.elasticsearch.action.support.broadcast.TransportBroadcastAction;
 import org.elasticsearch.cache.recycler.PageCacheRecycler;
+import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.routing.GroupShardsIterator;
 import org.elasticsearch.cluster.routing.ShardRouting;
-import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.ParsingException;
 import org.elasticsearch.common.Randomness;
 import org.elasticsearch.common.inject.Inject;
@@ -49,11 +49,9 @@ import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.indices.IndicesService;
 import org.elasticsearch.script.ScriptService;
 import org.elasticsearch.search.SearchService;
-import org.elasticsearch.search.fetch.FetchPhase;
 import org.elasticsearch.search.internal.DefaultSearchContext;
 import org.elasticsearch.search.internal.SearchContext;
 import org.elasticsearch.search.internal.ShardSearchLocalRequest;
-import org.elasticsearch.tasks.Task;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
 
@@ -77,31 +75,28 @@ public class TransportValidateQueryAction extends TransportBroadcastAction<Valid
 
     private final BigArrays bigArrays;
 
-    private final FetchPhase fetchPhase;
-
     @Inject
     public TransportValidateQueryAction(Settings settings, ThreadPool threadPool, ClusterService clusterService,
-            TransportService transportService, IndicesService indicesService, ScriptService scriptService,
-            PageCacheRecycler pageCacheRecycler, BigArrays bigArrays, ActionFilters actionFilters,
-            IndexNameExpressionResolver indexNameExpressionResolver, FetchPhase fetchPhase) {
+                                        TransportService transportService, IndicesService indicesService,
+                                        ScriptService scriptService, PageCacheRecycler pageCacheRecycler,
+                                        BigArrays bigArrays, ActionFilters actionFilters, IndexNameExpressionResolver indexNameExpressionResolver) {
         super(settings, ValidateQueryAction.NAME, threadPool, clusterService, transportService, actionFilters,
                 indexNameExpressionResolver, ValidateQueryRequest::new, ShardValidateQueryRequest::new, ThreadPool.Names.SEARCH);
         this.indicesService = indicesService;
         this.scriptService = scriptService;
         this.pageCacheRecycler = pageCacheRecycler;
         this.bigArrays = bigArrays;
-        this.fetchPhase = fetchPhase;
     }
 
     @Override
-    protected void doExecute(Task task, ValidateQueryRequest request, ActionListener<ValidateQueryResponse> listener) {
+    protected void doExecute(ValidateQueryRequest request, ActionListener<ValidateQueryResponse> listener) {
         request.nowInMillis = System.currentTimeMillis();
-        super.doExecute(task, request, listener);
+        super.doExecute(request, listener);
     }
 
     @Override
     protected ShardValidateQueryRequest newShardRequest(int numShards, ShardRouting shard, ValidateQueryRequest request) {
-        String[] filteringAliases = indexNameExpressionResolver.filteringAliases(clusterService.state(), shard.getIndexName(), request.indices());
+        String[] filteringAliases = indexNameExpressionResolver.filteringAliases(clusterService.state(), shard.index(), request.indices());
         return new ShardValidateQueryRequest(shard.shardId(), filteringAliases, request);
     }
 
@@ -168,6 +163,7 @@ public class TransportValidateQueryAction extends TransportBroadcastAction<Valid
     protected ShardValidateQueryResponse shardOperation(ShardValidateQueryRequest request) {
         IndexService indexService = indicesService.indexServiceSafe(request.shardId().getIndex());
         IndexShard indexShard = indexService.getShard(request.shardId().id());
+        final QueryShardContext queryShardContext = indexShard.getQueryShardContext();
 
         boolean valid;
         String explanation = null;
@@ -175,12 +171,14 @@ public class TransportValidateQueryAction extends TransportBroadcastAction<Valid
         Engine.Searcher searcher = indexShard.acquireSearcher("validate_query");
 
         DefaultSearchContext searchContext = new DefaultSearchContext(0,
-                new ShardSearchLocalRequest(request.types(), request.nowInMillis(), request.filteringAliases()), null, searcher,
-                indexService, indexShard, scriptService, pageCacheRecycler, bigArrays, threadPool.estimatedTimeInMillisCounter(),
-                parseFieldMatcher, SearchService.NO_TIMEOUT, fetchPhase);
+                new ShardSearchLocalRequest(request.types(), request.nowInMillis(), request.filteringAliases()),
+                null, searcher, indexService, indexShard,
+                scriptService, pageCacheRecycler, bigArrays, threadPool.estimatedTimeInMillisCounter(), parseFieldMatcher,
+                SearchService.NO_TIMEOUT
+        );
         SearchContext.setCurrent(searchContext);
         try {
-            searchContext.parsedQuery(searchContext.getQueryShardContext().toQuery(request.query()));
+            searchContext.parsedQuery(queryShardContext.toQuery(request.query()));
             searchContext.preProcess();
 
             valid = true;

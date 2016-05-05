@@ -20,8 +20,8 @@ package org.elasticsearch.index.shard;
 
 import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.common.Nullable;
-import org.elasticsearch.common.util.BigArrays;
 import org.elasticsearch.index.IndexSettings;
+import org.elasticsearch.index.NodeServicesProvider;
 import org.elasticsearch.index.cache.IndexCache;
 import org.elasticsearch.index.engine.Engine;
 import org.elasticsearch.index.engine.EngineConfig;
@@ -29,14 +29,12 @@ import org.elasticsearch.index.engine.EngineFactory;
 import org.elasticsearch.index.fielddata.IndexFieldDataService;
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.index.merge.MergeStats;
+import org.elasticsearch.index.SearchSlowLog;
 import org.elasticsearch.index.similarity.SimilarityService;
 import org.elasticsearch.index.store.Store;
 import org.elasticsearch.index.translog.TranslogStats;
-import org.elasticsearch.threadpool.ThreadPool;
 
 import java.io.IOException;
-import java.util.Collections;
-import java.util.List;
 
 /**
  * ShadowIndexShard extends {@link IndexShard} to add file synchronization
@@ -46,23 +44,19 @@ import java.util.List;
  */
 public final class ShadowIndexShard extends IndexShard {
 
-    public ShadowIndexShard(ShardId shardId, IndexSettings indexSettings, ShardPath path, Store store, IndexCache indexCache,
-                            MapperService mapperService, SimilarityService similarityService, IndexFieldDataService indexFieldDataService,
-                            @Nullable EngineFactory engineFactory, IndexEventListener indexEventListener, IndexSearcherWrapper wrapper,
-                            ThreadPool threadPool, BigArrays bigArrays, Engine.Warmer engineWarmer,
-                            List<SearchOperationListener> searchOperationListeners) throws IOException {
-        super(shardId, indexSettings, path, store, indexCache, mapperService, similarityService, indexFieldDataService, engineFactory,
-            indexEventListener, wrapper, threadPool, bigArrays, engineWarmer, searchOperationListeners, Collections.emptyList());
+    public ShadowIndexShard(ShardId shardId, IndexSettings indexSettings, ShardPath path, Store store, IndexCache indexCache, MapperService mapperService, SimilarityService similarityService, IndexFieldDataService indexFieldDataService, @Nullable EngineFactory engineFactory,
+                            IndexEventListener indexEventListener, IndexSearcherWrapper wrapper, NodeServicesProvider provider, SearchSlowLog searchSlowLog) throws IOException {
+        super(shardId, indexSettings, path, store, indexCache, mapperService, similarityService, indexFieldDataService, engineFactory, indexEventListener, wrapper, provider, searchSlowLog);
     }
 
     /**
      * In addition to the regular accounting done in
-     * {@link IndexShard#updateRoutingEntry(ShardRouting, boolean)},
+     * {@link IndexShard#updateRoutingEntry(org.elasticsearch.cluster.routing.ShardRouting, boolean)},
      * if this shadow replica needs to be promoted to a primary, the shard is
      * failed in order to allow a new primary to be re-allocated.
      */
     @Override
-    public void updateRoutingEntry(ShardRouting newRouting, boolean persistState) throws IOException {
+    public void updateRoutingEntry(ShardRouting newRouting, boolean persistState) {
         if (newRouting.primary() == true) {// becoming a primary
             throw new IllegalStateException("can't promote shard to primary");
         }
@@ -80,9 +74,10 @@ public final class ShadowIndexShard extends IndexShard {
     }
 
     @Override
-    protected Engine newEngine(EngineConfig config) {
+    protected Engine newEngine(boolean skipInitialTranslogRecovery, EngineConfig config) {
         assert this.shardRouting.primary() == false;
-        assert config.getOpenMode() == EngineConfig.OpenMode.OPEN_INDEX_CREATE_TRANSLOG;
+        assert skipInitialTranslogRecovery : "can not recover from gateway";
+        config.setCreate(false); // hardcoded - we always expect an index to be present
         return engineFactory.newReadOnlyEngine(config);
     }
 

@@ -19,8 +19,6 @@
 
 package org.elasticsearch.cloud.aws.blobstore;
 
-import org.elasticsearch.common.unit.ByteSizeUnit;
-import org.elasticsearch.common.unit.ByteSizeValue;
 import org.elasticsearch.test.ESTestCase;
 
 import java.io.ByteArrayOutputStream;
@@ -35,7 +33,7 @@ import static org.hamcrest.Matchers.is;
  * Unit test for {@link S3OutputStream}.
  */
 public class S3OutputStreamTests extends ESTestCase {
-    private static final int BUFFER_SIZE = new ByteSizeValue(5, ByteSizeUnit.MB).bytesAsInt();
+    private static final int BUFFER_SIZE = S3BlobStore.MIN_BUFFER_SIZE.bytesAsInt();
 
     public void testWriteLessDataThanBufferSize() throws IOException {
         MockDefaultS3OutputStream out = newS3OutputStream(BUFFER_SIZE);

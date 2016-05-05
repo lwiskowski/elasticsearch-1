@@ -31,7 +31,6 @@ task buildDeb(type: Deb) {
   }
   into('/usr/share/doc/elasticsearch') {
     from "${project.packagingFiles}/copyright"
-    fileMode 0644
   }
 }
 

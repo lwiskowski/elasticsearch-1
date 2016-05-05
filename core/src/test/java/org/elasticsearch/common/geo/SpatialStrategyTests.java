@@ -55,13 +55,13 @@ public class SpatialStrategyTests extends ESTestCase {
         try (BytesStreamOutput out = new BytesStreamOutput()) {
             out.writeVInt(0);
             try (StreamInput in = StreamInput.wrap(out.bytes())) {
-                assertThat(SpatialStrategy.readFromStream(in), equalTo(SpatialStrategy.TERM));
+                assertThat(SpatialStrategy.TERM.readFrom(in), equalTo(SpatialStrategy.TERM));
             }
         }
         try (BytesStreamOutput out = new BytesStreamOutput()) {
             out.writeVInt(1);
             try (StreamInput in = StreamInput.wrap(out.bytes())) {
-                assertThat(SpatialStrategy.readFromStream(in), equalTo(SpatialStrategy.RECURSIVE));
+                assertThat(SpatialStrategy.TERM.readFrom(in), equalTo(SpatialStrategy.RECURSIVE));
             }
         }
     }
@@ -70,7 +70,7 @@ public class SpatialStrategyTests extends ESTestCase {
         try (BytesStreamOutput out = new BytesStreamOutput()) {
             out.writeVInt(randomIntBetween(2, Integer.MAX_VALUE));
             try (StreamInput in = StreamInput.wrap(out.bytes())) {
-                SpatialStrategy.readFromStream(in);
+                SpatialStrategy.TERM.readFrom(in);
                 fail("Expected IOException");
             } catch(IOException e) {
                 assertThat(e.getMessage(), containsString("Unknown SpatialStrategy ordinal ["));

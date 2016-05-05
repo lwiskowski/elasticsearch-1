@@ -19,8 +19,6 @@
 
 package org.elasticsearch.common.logging;
 
-import org.elasticsearch.common.SuppressLoggerChecks;
-
 /**
  * A logger that logs deprecation notices.
  */
@@ -47,7 +45,6 @@ public class DeprecationLogger {
     /**
      * Logs a deprecated message.
      */
-    @SuppressLoggerChecks(reason = "safely delegates to logger")
     public void deprecated(String msg, Object... params) {
         logger.debug(msg, params);
     }

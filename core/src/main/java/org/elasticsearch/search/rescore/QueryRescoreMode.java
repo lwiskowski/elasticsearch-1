@@ -26,7 +26,7 @@ import org.elasticsearch.common.io.stream.Writeable;
 import java.io.IOException;
 import java.util.Locale;
 
-public enum QueryRescoreMode implements Writeable {
+public enum QueryRescoreMode implements Writeable<QueryRescoreMode> {
     Avg {
         @Override
         public float combine(float primary, float secondary) {
@@ -85,7 +85,10 @@ public enum QueryRescoreMode implements Writeable {
 
     public abstract float combine(float primary, float secondary);
 
-    public static QueryRescoreMode readFromStream(StreamInput in) throws IOException {
+    static QueryRescoreMode PROTOTYPE = Total;
+
+    @Override
+    public QueryRescoreMode readFrom(StreamInput in) throws IOException {
         int ordinal = in.readVInt();
         if (ordinal < 0 || ordinal >= values().length) {
             throw new IOException("Unknown ScoreMode ordinal [" + ordinal + "]");

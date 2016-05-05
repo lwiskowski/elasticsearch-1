@@ -20,7 +20,6 @@ package org.elasticsearch.cluster.metadata;
 
 import org.elasticsearch.common.Booleans;
 import org.elasticsearch.common.settings.Setting;
-import org.elasticsearch.common.settings.Setting.Property;
 
 /**
  * This class acts as a functional wrapper around the <tt>index.auto_expand_replicas</tt> setting.
@@ -31,8 +30,10 @@ final class AutoExpandReplicas {
     // the value we recognize in the "max" position to mean all the nodes
     private static final String ALL_NODES_VALUE = "all";
     public static final Setting<AutoExpandReplicas> SETTING = new Setting<>(IndexMetaData.SETTING_AUTO_EXPAND_REPLICAS, "false", (value) -> {
-        final int min;
-        final int max;
+        
+        //fixed test suite bug here by making min and max mutable
+        int min;
+        int max;
         if (Booleans.parseBoolean(value, true) == false) {
             return new AutoExpandReplicas(0, 0, false);
         }
@@ -41,7 +42,7 @@ final class AutoExpandReplicas {
             throw new IllegalArgumentException("failed to parse [" + IndexMetaData.SETTING_AUTO_EXPAND_REPLICAS + "] from value: [" + value + "] at index " + dash);
         }
         final String sMin = value.substring(0, dash);
-        try {
+        try {//test suite error found here
             min = Integer.parseInt(sMin);
         } catch (NumberFormatException e) {
             throw new IllegalArgumentException("failed to parse [" + IndexMetaData.SETTING_AUTO_EXPAND_REPLICAS + "] from value: [" + value + "] at index "  + dash, e);
@@ -50,14 +51,14 @@ final class AutoExpandReplicas {
         if (sMax.equals(ALL_NODES_VALUE)) {
             max = Integer.MAX_VALUE;
         } else {
-            try {
+            try {//test suite error occured here
                 max = Integer.parseInt(sMax);
             } catch (NumberFormatException e) {
                 throw new IllegalArgumentException("failed to parse [" + IndexMetaData.SETTING_AUTO_EXPAND_REPLICAS + "] from value: [" + value + "] at index "  + dash, e);
             }
         }
         return new AutoExpandReplicas(min, max, true);
-    }, Property.Dynamic, Property.IndexScope);
+    }, true, Setting.Scope.INDEX);
 
     private final int minReplicas;
     private final int maxReplicas;

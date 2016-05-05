@@ -18,7 +18,6 @@
  */
 package org.elasticsearch.script.mustache;
 
-import com.github.mustachejava.DefaultMustacheFactory;
 import com.github.mustachejava.Mustache;
 import org.elasticsearch.SpecialPermission;
 import org.elasticsearch.common.Nullable;
@@ -35,12 +34,10 @@ import org.elasticsearch.script.ScriptException;
 import org.elasticsearch.script.SearchScript;
 import org.elasticsearch.search.lookup.SearchLookup;
 
-import java.io.Reader;
 import java.lang.ref.SoftReference;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.util.Collections;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -51,15 +48,9 @@ import java.util.Map;
  * process: First compile the string representing the template, the resulting
  * {@link Mustache} object can then be re-used for subsequent executions.
  */
-public final class MustacheScriptEngineService extends AbstractComponent implements ScriptEngineService {
+public class MustacheScriptEngineService extends AbstractComponent implements ScriptEngineService {
 
     public static final String NAME = "mustache";
-
-    public static final List<String> TYPES = Collections.singletonList(NAME);
-
-    static final String CONTENT_TYPE_PARAM = "content_type";
-    static final String JSON_CONTENT_TYPE = "application/json";
-    static final String PLAIN_TEXT_CONTENT_TYPE = "text/plain";
 
     /** Thread local UTF8StreamWriter to store template execution results in, thread local to save object creation.*/
     private static ThreadLocal<SoftReference<UTF8StreamWriter>> utf8StreamWriter = new ThreadLocal<>();
@@ -94,35 +85,22 @@ public final class MustacheScriptEngineService extends AbstractComponent impleme
      * */
     @Override
     public Object compile(String template, Map<String, String> params) {
-        String contentType = params.getOrDefault(CONTENT_TYPE_PARAM, JSON_CONTENT_TYPE);
-        final DefaultMustacheFactory mustacheFactory;
-        switch (contentType){
-            case PLAIN_TEXT_CONTENT_TYPE:
-                mustacheFactory = new NoneEscapingMustacheFactory();
-                break;
-            case JSON_CONTENT_TYPE:
-            default:
-                // assume that the default is json encoding:
-                mustacheFactory = new JsonEscapingMustacheFactory();
-                break;
-        }
-        mustacheFactory.setObjectHandler(new CustomReflectionObjectHandler());
-        Reader reader = new FastStringReader(template);
-        return mustacheFactory.compile(reader, "query-template");
+        /** Factory to generate Mustache objects from. */
+        return (new JsonEscapingMustacheFactory()).compile(new FastStringReader(template), "query-template");
     }
 
     @Override
-    public List<String> getTypes() {
-        return TYPES;
+    public String[] types() {
+        return new String[] {NAME};
     }
 
     @Override
-    public List<String> getExtensions() {
-        return TYPES;
+    public String[] extensions() {
+        return new String[] {NAME};
     }
 
     @Override
-    public boolean isSandboxed() {
+    public boolean sandboxed() {
         return true;
     }
 
@@ -191,10 +169,15 @@ public final class MustacheScriptEngineService extends AbstractComponent impleme
                     }
                 });
             } catch (Exception e) {
-                logger.error("Error running {}", e, template);
+                logger.error("Error running " + template, e);
                 throw new ScriptException("Error running " + template, e);
             }
             return result.bytes();
+        }
+
+        @Override
+        public Object unwrap(Object value) {
+            return value;
         }
     }
 }

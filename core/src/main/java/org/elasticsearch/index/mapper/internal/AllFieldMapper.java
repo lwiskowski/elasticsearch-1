@@ -19,18 +19,20 @@
 
 package org.elasticsearch.index.mapper.internal;
 
+import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.Query;
+import org.elasticsearch.Version;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.io.stream.BytesStreamOutput;
-import org.elasticsearch.common.lucene.all.AllEntries;
+import org.elasticsearch.common.lucene.Lucene;
 import org.elasticsearch.common.lucene.all.AllField;
 import org.elasticsearch.common.lucene.all.AllTermQuery;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentBuilder;
-import org.elasticsearch.index.analysis.NamedAnalyzer;
+import org.elasticsearch.index.fielddata.FieldDataType;
 import org.elasticsearch.index.mapper.MappedFieldType;
 import org.elasticsearch.index.mapper.Mapper;
 import org.elasticsearch.index.mapper.MapperParsingException;
@@ -44,7 +46,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
-import static org.elasticsearch.common.xcontent.support.XContentMapValues.lenientNodeBooleanValue;
+import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeBooleanValue;
 import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeMapValue;
 import static org.elasticsearch.index.mapper.core.TypeParsers.parseTextField;
 
@@ -83,7 +85,6 @@ public class AllFieldMapper extends MetadataFieldMapper {
         public static final String NAME = AllFieldMapper.NAME;
         public static final String INDEX_NAME = AllFieldMapper.NAME;
         public static final EnabledAttributeMapper ENABLED = EnabledAttributeMapper.UNSET_ENABLED;
-        public static final int POSITION_INCREMENT_GAP = 100;
 
         public static final MappedFieldType FIELD_TYPE = new AllFieldType();
 
@@ -116,13 +117,6 @@ public class AllFieldMapper extends MetadataFieldMapper {
             // TODO: this should be an exception! it doesnt make sense to not index this field
             if (fieldType.indexOptions() == IndexOptions.NONE) {
                 fieldType.setIndexOptions(Defaults.FIELD_TYPE.indexOptions());
-            } else {
-                fieldType.setIndexAnalyzer(new NamedAnalyzer(fieldType.indexAnalyzer(),
-                    Defaults.POSITION_INCREMENT_GAP));
-                fieldType.setSearchAnalyzer(new NamedAnalyzer(fieldType.searchAnalyzer(),
-                    Defaults.POSITION_INCREMENT_GAP));
-                fieldType.setSearchQuoteAnalyzer(new NamedAnalyzer(fieldType.searchQuoteAnalyzer(),
-                    Defaults.POSITION_INCREMENT_GAP));
             }
             fieldType.setTokenized(true);
 
@@ -132,20 +126,15 @@ public class AllFieldMapper extends MetadataFieldMapper {
 
     public static class TypeParser implements MetadataFieldMapper.TypeParser {
         @Override
-        public MetadataFieldMapper.Builder parse(String name, Map<String, Object> node,
-                                                 ParserContext parserContext) throws MapperParsingException {
+        public MetadataFieldMapper.Builder parse(String name, Map<String, Object> node, ParserContext parserContext) throws MapperParsingException {
             Builder builder = new Builder(parserContext.mapperService().fullName(NAME));
-            builder.fieldType().setIndexAnalyzer(parserContext.analysisService().defaultIndexAnalyzer());
-            builder.fieldType().setSearchAnalyzer(parserContext.analysisService().defaultSearchAnalyzer());
-            builder.fieldType().setSearchQuoteAnalyzer(parserContext.analysisService().defaultSearchQuoteAnalyzer());
-
+            
             // parseField below will happily parse the doc_values setting, but it is then never passed to
             // the AllFieldMapper ctor in the builder since it is not valid. Here we validate
             // the doc values settings (old and new) are rejected
             Object docValues = node.get("doc_values");
-            if (docValues != null && lenientNodeBooleanValue(docValues)) {
-                throw new MapperParsingException("Field [" + name +
-                    "] is always tokenized and cannot have doc values");
+            if (docValues != null && nodeBooleanValue(docValues)) {
+                throw new MapperParsingException("Field [" + name + "] is always tokenized and cannot have doc values");
             }
             // convoluted way of specifying doc values
             Object fielddata = node.get("fielddata");
@@ -153,19 +142,17 @@ public class AllFieldMapper extends MetadataFieldMapper {
                 Map<String, Object> fielddataMap = nodeMapValue(fielddata, "fielddata");
                 Object format = fielddataMap.get("format");
                 if ("doc_values".equals(format)) {
-                    throw new MapperParsingException("Field [" + name +
-                        "] is always tokenized and cannot have doc values");
+                    throw new MapperParsingException("Field [" + name + "] is always tokenized and cannot have doc values");
                 }
             }
-
+            
             parseTextField(builder, builder.name, node, parserContext);
             for (Iterator<Map.Entry<String, Object>> iterator = node.entrySet().iterator(); iterator.hasNext();) {
                 Map.Entry<String, Object> entry = iterator.next();
-                String fieldName = entry.getKey();
+                String fieldName = Strings.toUnderscoreCase(entry.getKey());
                 Object fieldNode = entry.getValue();
                 if (fieldName.equals("enabled")) {
-                    builder.enabled(lenientNodeBooleanValue(fieldNode) ? EnabledAttributeMapper.ENABLED :
-                        EnabledAttributeMapper.DISABLED);
+                    builder.enabled(nodeBooleanValue(fieldNode) ? EnabledAttributeMapper.ENABLED : EnabledAttributeMapper.DISABLED);
                     iterator.remove();
                 }
             }
@@ -181,6 +168,7 @@ public class AllFieldMapper extends MetadataFieldMapper {
     static final class AllFieldType extends MappedFieldType {
 
         public AllFieldType() {
+            setFieldDataType(new FieldDataType("string"));
         }
 
         protected AllFieldType(AllFieldType ref) {
@@ -198,13 +186,21 @@ public class AllFieldMapper extends MetadataFieldMapper {
         }
 
         @Override
+        public String value(Object value) {
+            if (value == null) {
+                return null;
+            }
+            return value.toString();
+        }
+
+        @Override
         public Query queryStringTermQuery(Term term) {
             return new AllTermQuery(term);
         }
 
         @Override
         public Query termQuery(Object value, QueryShardContext context) {
-            return queryStringTermQuery(new Term(name(), indexedValueForSearch(value)));
+            return queryStringTermQuery(createTerm(value));
         }
     }
 
@@ -244,9 +240,22 @@ public class AllFieldMapper extends MetadataFieldMapper {
         if (!enabledState.enabled) {
             return;
         }
-        for (AllEntries.Entry entry : context.allEntries().entries()) {
-            fields.add(new AllField(fieldType().name(), entry.value(), entry.boost(), fieldType()));
+        // reset the entries
+        context.allEntries().reset();
+        Analyzer analyzer = findAnalyzer(context);
+        fields.add(new AllField(fieldType().name(), context.allEntries(), analyzer, fieldType()));
+    }
+
+    private Analyzer findAnalyzer(ParseContext context) {
+        Analyzer analyzer = fieldType().indexAnalyzer();
+        if (analyzer == null) {
+            analyzer = context.docMapper().mappers().indexAnalyzer();
+            if (analyzer == null) {
+                // This should not happen, should we log warn it?
+                analyzer = Lucene.STANDARD_ANALYZER;
+            }
         }
+        return analyzer;
     }
 
     @Override
@@ -289,18 +298,16 @@ public class AllFieldMapper extends MetadataFieldMapper {
         if (includeDefaults || fieldType().storeTermVectorOffsets() != Defaults.FIELD_TYPE.storeTermVectorOffsets()) {
             builder.field("store_term_vector_offsets", fieldType().storeTermVectorOffsets());
         }
-        if (includeDefaults ||
-            fieldType().storeTermVectorPositions() != Defaults.FIELD_TYPE.storeTermVectorPositions()) {
+        if (includeDefaults || fieldType().storeTermVectorPositions() != Defaults.FIELD_TYPE.storeTermVectorPositions()) {
             builder.field("store_term_vector_positions", fieldType().storeTermVectorPositions());
         }
-        if (includeDefaults ||
-            fieldType().storeTermVectorPayloads() != Defaults.FIELD_TYPE.storeTermVectorPayloads()) {
+        if (includeDefaults || fieldType().storeTermVectorPayloads() != Defaults.FIELD_TYPE.storeTermVectorPayloads()) {
             builder.field("store_term_vector_payloads", fieldType().storeTermVectorPayloads());
         }
         if (includeDefaults || fieldType().omitNorms() != Defaults.FIELD_TYPE.omitNorms()) {
-            builder.field("norms", !fieldType().omitNorms());
+            builder.field("omit_norms", fieldType().omitNorms());
         }
-
+        
         doXContentAnalyzers(builder, includeDefaults);
 
         if (fieldType().similarity() != null) {
@@ -312,10 +319,8 @@ public class AllFieldMapper extends MetadataFieldMapper {
 
     @Override
     protected void doMerge(Mapper mergeWith, boolean updateAllTypes) {
-        if (((AllFieldMapper)mergeWith).enabled() != this.enabled() &&
-            ((AllFieldMapper)mergeWith).enabledState != Defaults.ENABLED) {
-            throw new IllegalArgumentException("mapper [" + fieldType().name() +
-                "] enabled is " + this.enabled() + " now encountering "+ ((AllFieldMapper)mergeWith).enabled());
+        if (((AllFieldMapper)mergeWith).enabled() != this.enabled() && ((AllFieldMapper)mergeWith).enabledState != Defaults.ENABLED) {
+            throw new IllegalArgumentException("mapper [" + fieldType().name() + "] enabled is " + this.enabled() + " now encountering "+ ((AllFieldMapper)mergeWith).enabled());
         }
         super.doMerge(mergeWith, updateAllTypes);
     }

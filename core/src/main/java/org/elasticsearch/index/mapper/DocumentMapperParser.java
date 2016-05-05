@@ -25,6 +25,8 @@ import org.elasticsearch.common.ParseFieldMatcher;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.compress.CompressedXContent;
+import org.elasticsearch.common.logging.ESLogger;
+import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentHelper;
 import org.elasticsearch.common.xcontent.XContentParser;
@@ -41,11 +43,13 @@ import java.util.Map;
 import java.util.function.Supplier;
 
 import static java.util.Collections.unmodifiableMap;
+import static org.elasticsearch.index.mapper.MapperBuilders.doc;
 
 public class DocumentMapperParser {
 
     final MapperService mapperService;
     final AnalysisService analysisService;
+    private static final ESLogger logger = Loggers.getLogger(DocumentMapperParser.class);
     private final SimilarityService similarityService;
     private final Supplier<QueryShardContext> queryShardContextSupplier;
 
@@ -108,12 +112,12 @@ public class DocumentMapperParser {
 
         Mapper.TypeParser.ParserContext parserContext = parserContext(type);
         // parse RootObjectMapper
-        DocumentMapper.Builder docBuilder = new DocumentMapper.Builder((RootObjectMapper.Builder) rootObjectTypeParser.parse(type, mapping, parserContext), mapperService);
+        DocumentMapper.Builder docBuilder = doc((RootObjectMapper.Builder) rootObjectTypeParser.parse(type, mapping, parserContext), mapperService);
         Iterator<Map.Entry<String, Object>> iterator = mapping.entrySet().iterator();
         // parse DocumentMapper
         while(iterator.hasNext()) {
             Map.Entry<String, Object> entry = iterator.next();
-            String fieldName = entry.getKey();
+            String fieldName = Strings.toUnderscoreCase(entry.getKey());
             Object fieldNode = entry.getValue();
 
             MetadataFieldMapper.TypeParser typeParser = rootTypeParsers.get(fieldName);
@@ -138,19 +142,19 @@ public class DocumentMapperParser {
         return docBuilder.build(mapperService);
     }
 
-    public static void checkNoRemainingFields(String fieldName, Map<?, ?> fieldNodeMap, Version indexVersionCreated) {
+    public static void checkNoRemainingFields(String fieldName, Map<String, Object> fieldNodeMap, Version indexVersionCreated) {
         checkNoRemainingFields(fieldNodeMap, indexVersionCreated, "Mapping definition for [" + fieldName + "] has unsupported parameters: ");
     }
 
-    public static void checkNoRemainingFields(Map<?, ?> fieldNodeMap, Version indexVersionCreated, String message) {
+    public static void checkNoRemainingFields(Map<String, Object> fieldNodeMap, Version indexVersionCreated, String message) {
         if (!fieldNodeMap.isEmpty()) {
             throw new MapperParsingException(message + getRemainingFields(fieldNodeMap));
         }
     }
 
-    private static String getRemainingFields(Map<?, ?> map) {
+    private static String getRemainingFields(Map<String, ?> map) {
         StringBuilder remainingFields = new StringBuilder();
-        for (Object key : map.keySet()) {
+        for (String key : map.keySet()) {
             remainingFields.append(" [").append(key).append(" : ").append(map.get(key)).append("]");
         }
         return remainingFields.toString();

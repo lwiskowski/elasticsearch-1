@@ -48,12 +48,12 @@ public interface IndexFieldDataCache {
         /**
          * Called after the fielddata is loaded during the cache phase
          */
-        default void onCache(ShardId shardId, String fieldName, Accountable ramUsage){}
+        void onCache(ShardId shardId, String fieldName, FieldDataType fieldDataType, Accountable ramUsage);
 
         /**
          * Called after the fielddata is unloaded
          */
-        default void onRemoval(ShardId shardId, String fieldName, boolean wasEvicted, long sizeInBytes){}
+        void onRemoval(ShardId shardId, String fieldName, FieldDataType fieldDataType, boolean wasEvicted, long sizeInBytes);
     }
 
     class None implements IndexFieldDataCache {

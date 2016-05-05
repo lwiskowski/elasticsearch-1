@@ -4,17 +4,11 @@
   - do:
       indices.create:
         index: test_index
-        body:
-          mappings:
-            queries:
-              properties:
-                query:
-                  type: percolator
 
   - do:
       index:
         index: test_index
-        type: queries
+        type: .percolator
         id:   test_percolator
         body:
           query:

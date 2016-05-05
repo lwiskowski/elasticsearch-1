@@ -52,10 +52,15 @@ public class SpanOrQueryBuilderTests extends AbstractQueryTestCase<SpanOrQueryBu
     }
 
     public void testIllegalArguments() {
-        expectThrows(IllegalArgumentException.class, () -> new SpanOrQueryBuilder((SpanQueryBuilder<?>) null));
+        try {
+            new SpanOrQueryBuilder(null);
+            fail("cannot be null");
+        } catch (IllegalArgumentException e) {
+            // expected
+        }
 
         try {
-            SpanOrQueryBuilder spanOrBuilder = new SpanOrQueryBuilder(new SpanTermQueryBuilder("field", "value"));
+            SpanOrQueryBuilder spanOrBuilder = new SpanOrQueryBuilder(SpanTermQueryBuilder.PROTOTYPE);
             spanOrBuilder.clause(null);
             fail("cannot be null");
         } catch (IllegalArgumentException e) {

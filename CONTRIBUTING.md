@@ -95,10 +95,12 @@ cd elasticsearch/
 gradle assemble
 ```
 
-You will find the newly built packages under: `./distribution/(deb|rpm|tar|zip)/build/distributions/`.
+You will find the newly built packages under: `./distribution/build/distributions/`.
 
 Before submitting your changes, run the test suite to make sure that nothing is broken, with:
 
 ```sh
 gradle check
 ```
+
+Source: [Contributing to elasticsearch](https://www.elastic.co/contributing-to-elasticsearch/)

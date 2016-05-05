@@ -29,9 +29,7 @@ import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentType;
 import org.elasticsearch.index.query.QueryBuilder;
-import org.elasticsearch.search.aggregations.AggregatorBuilder;
-import org.elasticsearch.search.aggregations.pipeline.PipelineAggregatorBuilder;
-import org.elasticsearch.search.builder.SearchSourceBuilder;
+import org.elasticsearch.search.aggregations.AbstractAggregationBuilder;
 import org.elasticsearch.search.highlight.HighlightBuilder;
 import org.elasticsearch.search.sort.ScoreSortBuilder;
 import org.elasticsearch.search.sort.SortBuilder;
@@ -48,13 +46,12 @@ import java.util.Map;
 public class PercolateSourceBuilder extends ToXContentToBytes {
 
     private DocBuilder docBuilder;
-    private QueryBuilder<?> queryBuilder;
+    private QueryBuilder queryBuilder;
     private Integer size;
-    private List<SortBuilder<?>> sorts;
+    private List<SortBuilder> sorts;
     private Boolean trackScores;
     private HighlightBuilder highlightBuilder;
-    private List<AggregatorBuilder<?>> aggregationBuilders;
-    private List<PipelineAggregatorBuilder<?>> pipelineAggregationBuilders;
+    private List<AbstractAggregationBuilder> aggregations;
 
     /**
      * Sets the document to run the percolate queries against.
@@ -68,7 +65,7 @@ public class PercolateSourceBuilder extends ToXContentToBytes {
      * Sets a query to reduce the number of percolate queries to be evaluated and score the queries that match based
      * on this query.
      */
-    public PercolateSourceBuilder setQueryBuilder(QueryBuilder<?> queryBuilder) {
+    public PercolateSourceBuilder setQueryBuilder(QueryBuilder queryBuilder) {
         this.queryBuilder = queryBuilder;
         return this;
     }
@@ -98,7 +95,7 @@ public class PercolateSourceBuilder extends ToXContentToBytes {
      *
      * By default the matching percolator queries are returned in an undefined order.
      */
-    public PercolateSourceBuilder addSort(SortBuilder<?> sort) {
+    public PercolateSourceBuilder addSort(SortBuilder sort) {
         if (sorts == null) {
             sorts = new ArrayList<>();
         }
@@ -126,22 +123,11 @@ public class PercolateSourceBuilder extends ToXContentToBytes {
     /**
      * Add an aggregation definition.
      */
-    public PercolateSourceBuilder addAggregation(AggregatorBuilder<?> aggregationBuilder) {
-        if (aggregationBuilders == null) {
-            aggregationBuilders = new ArrayList<>();
+    public PercolateSourceBuilder addAggregation(AbstractAggregationBuilder aggregationBuilder) {
+        if (aggregations == null) {
+            aggregations = new ArrayList<>();
         }
-        aggregationBuilders.add(aggregationBuilder);
-        return this;
-    }
-
-    /**
-     * Add an aggregation definition.
-     */
-    public PercolateSourceBuilder addAggregation(PipelineAggregatorBuilder<?> aggregationBuilder) {
-        if (pipelineAggregationBuilders == null) {
-            pipelineAggregationBuilders = new ArrayList<>();
-        }
-        pipelineAggregationBuilders.add(aggregationBuilder);
+        aggregations.add(aggregationBuilder);
         return this;
     }
 
@@ -160,8 +146,10 @@ public class PercolateSourceBuilder extends ToXContentToBytes {
         }
         if (sorts != null) {
             builder.startArray("sort");
-            for (SortBuilder<?> sort : sorts) {
+            for (SortBuilder sort : sorts) {
+                builder.startObject();
                 sort.toXContent(builder, params);
+                builder.endObject();
             }
             builder.endArray();
         }
@@ -169,20 +157,13 @@ public class PercolateSourceBuilder extends ToXContentToBytes {
             builder.field("track_scores", trackScores);
         }
         if (highlightBuilder != null) {
-            builder.field(SearchSourceBuilder.HIGHLIGHT_FIELD.getPreferredName(), highlightBuilder);
+            highlightBuilder.toXContent(builder, params);
         }
-        if (aggregationBuilders != null || pipelineAggregationBuilders != null) {
+        if (aggregations != null) {
             builder.field("aggregations");
             builder.startObject();
-            if (aggregationBuilders != null) {
-                for (AggregatorBuilder<?> aggregation : aggregationBuilders) {
-                    aggregation.toXContent(builder, params);
-                }
-            }
-            if (pipelineAggregationBuilders != null) {
-                for (PipelineAggregatorBuilder<?> aggregation : pipelineAggregationBuilders) {
-                    aggregation.toXContent(builder, params);
-                }
+            for (AbstractAggregationBuilder aggregation : aggregations) {
+                aggregation.toXContent(builder, params);
             }
             builder.endObject();
         }

@@ -50,7 +50,7 @@ public class RestFieldStatsAction extends BaseRestHandler {
 
     @Inject
     public RestFieldStatsAction(Settings settings, RestController controller, Client client) {
-        super(settings, client);
+        super(settings, controller, client);
         controller.registerHandler(GET, "/_field_stats", this);
         controller.registerHandler(POST, "/_field_stats", this);
         controller.registerHandler(GET, "/{index}/_field_stats", this);
@@ -58,11 +58,9 @@ public class RestFieldStatsAction extends BaseRestHandler {
     }
 
     @Override
-    public void handleRequest(final RestRequest request,
-                              final RestChannel channel, final Client client) throws Exception {
+    public void handleRequest(final RestRequest request, final RestChannel channel, final Client client) throws Exception {
         if (RestActions.hasBodyContent(request) && request.hasParam("fields")) {
-            throw new IllegalArgumentException("can't specify a request body and [fields] request parameter, " +
-                "either specify a request body or the [fields] request parameter");
+            throw new IllegalArgumentException("can't specify a request body and [fields] request parameter, either specify a request body or the [fields] request parameter");
         }
 
         final FieldStatsRequest fieldStatsRequest = new FieldStatsRequest();
@@ -82,8 +80,7 @@ public class RestFieldStatsAction extends BaseRestHandler {
                 buildBroadcastShardsHeader(builder, request, response);
 
                 builder.startObject("indices");
-                for (Map.Entry<String, Map<String, FieldStats>> entry1 :
-                    response.getIndicesMergedFieldStats().entrySet()) {
+                for (Map.Entry<String, Map<String, FieldStats>> entry1 : response.getIndicesMergedFieldStats().entrySet()) {
                     builder.startObject(entry1.getKey());
                     builder.startObject("fields");
                     for (Map.Entry<String, FieldStats> entry2 : entry1.getValue().entrySet()) {
@@ -94,12 +91,6 @@ public class RestFieldStatsAction extends BaseRestHandler {
                     builder.endObject();
                 }
                 builder.endObject();
-                if (response.getConflicts().size() > 0) {
-                    builder.startObject("conflicts");
-                    for (Map.Entry<String, String> entry : response.getConflicts().entrySet()) {
-                        builder.field(entry.getKey(), entry.getValue());
-                    }
-                }
                 return new BytesRestResponse(RestStatus.OK, builder);
             }
         });

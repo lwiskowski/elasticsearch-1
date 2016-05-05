@@ -36,7 +36,7 @@ import java.util.Locale;
  * Collectors used in the search.  Children CollectorResult's may be
  * embedded inside of a parent CollectorResult
  */
-public class CollectorResult implements ToXContent, Writeable {
+public class CollectorResult implements ToXContent, Writeable<CollectorResult> {
 
     public static final String REASON_SEARCH_COUNT = "search_count";
     public static final String REASON_SEARCH_TOP_HITS = "search_top_hits";
@@ -80,9 +80,6 @@ public class CollectorResult implements ToXContent, Writeable {
         this.children = children;
     }
 
-    /**
-     * Read from a stream.
-     */
     public CollectorResult(StreamInput in) throws IOException {
         this.collectorName = in.readString();
         this.reason = in.readString();
@@ -92,17 +89,6 @@ public class CollectorResult implements ToXContent, Writeable {
         for (int i = 0; i < size; i++) {
             CollectorResult child = new CollectorResult(in);
             this.children.add(child);
-        }
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeString(collectorName);
-        out.writeString(reason);
-        out.writeLong(time);
-        out.writeVInt(children.size());
-        for (CollectorResult child : children) {
-            child.writeTo(out);
         }
     }
 
@@ -139,7 +125,7 @@ public class CollectorResult implements ToXContent, Writeable {
         builder = builder.startObject()
                 .field(NAME.getPreferredName(), getName())
                 .field(REASON.getPreferredName(), getReason())
-                .field(TIME.getPreferredName(), String.format(Locale.US, "%.10gms", (double) (getTime() / 1000000.0)));
+                .field(TIME.getPreferredName(), String.format(Locale.US, "%.10gms", getTime() / 1000000.0));
 
         if (!children.isEmpty()) {
             builder = builder.startArray(CHILDREN.getPreferredName());
@@ -150,5 +136,21 @@ public class CollectorResult implements ToXContent, Writeable {
         }
         builder = builder.endObject();
         return builder;
+    }
+
+    @Override
+    public void writeTo(StreamOutput out) throws IOException {
+        out.writeString(collectorName);
+        out.writeString(reason);
+        out.writeLong(time);
+        out.writeVInt(children.size());
+        for (CollectorResult child : children) {
+            child.writeTo(out);
+        }
+    }
+
+    @Override
+    public CollectorResult readFrom(StreamInput in) throws IOException {
+        return new CollectorResult(in);
     }
 }

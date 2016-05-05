@@ -23,10 +23,10 @@ import org.elasticsearch.action.index.IndexRequestBuilder;
 import org.elasticsearch.action.search.SearchPhaseExecutionException;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.common.collect.EvictingQueue;
-import org.elasticsearch.search.aggregations.bucket.histogram.ExtendedBounds;
 import org.elasticsearch.search.aggregations.bucket.histogram.Histogram;
 import org.elasticsearch.search.aggregations.bucket.histogram.InternalHistogram;
 import org.elasticsearch.search.aggregations.bucket.histogram.InternalHistogram.Bucket;
+import org.elasticsearch.search.aggregations.metrics.ValuesSourceMetricsAggregationBuilder;
 import org.elasticsearch.search.aggregations.metrics.avg.Avg;
 import org.elasticsearch.search.aggregations.pipeline.BucketHelpers;
 import org.elasticsearch.search.aggregations.pipeline.PipelineAggregationHelperTests;
@@ -38,8 +38,6 @@ import org.elasticsearch.search.aggregations.pipeline.movavg.models.HoltWintersM
 import org.elasticsearch.search.aggregations.pipeline.movavg.models.LinearModel;
 import org.elasticsearch.search.aggregations.pipeline.movavg.models.MovAvgModelBuilder;
 import org.elasticsearch.search.aggregations.pipeline.movavg.models.SimpleModel;
-import org.elasticsearch.search.aggregations.support.ValuesSource;
-import org.elasticsearch.search.aggregations.support.ValuesSourceAggregatorBuilder;
 import org.elasticsearch.test.ESIntegTestCase;
 import org.hamcrest.Matchers;
 
@@ -79,7 +77,7 @@ public class MovAvgIT extends ESIntegTestCase {
     static int period;
     static HoltWintersModel.SeasonalityType seasonalityType;
     static BucketHelpers.GapPolicy gapPolicy;
-    static ValuesSourceAggregatorBuilder<? extends ValuesSource, ? extends ValuesSourceAggregatorBuilder<?, ?>> metric;
+    static ValuesSourceMetricsAggregationBuilder<?> metric;
     static List<PipelineAggregationHelperTests.MockBucket> mockHisto;
 
     static Map<String, ArrayList<Double>> testValues;
@@ -275,7 +273,7 @@ public class MovAvgIT extends ESIntegTestCase {
     }
 
     /**
-     * Exponentially weighted (EWMA, Single exponential) moving avg
+     * Exponentionally weighted (EWMA, Single exponential) moving avg
      *
      * @param window Window of values to compute movavg for
      */
@@ -410,16 +408,18 @@ public class MovAvgIT extends ESIntegTestCase {
                 .prepareSearch("idx").setTypes("type")
                 .addAggregation(
                         histogram("histo").field(INTERVAL_FIELD).interval(interval)
-                                .extendedBounds(new ExtendedBounds(0L, (long) (interval * (numBuckets - 1))))
+                                .extendedBounds(0L, (long) (interval * (numBuckets - 1)))
                                 .subAggregation(metric)
-                                .subAggregation(movingAvg("movavg_counts","_count")
+                                .subAggregation(movingAvg("movavg_counts")
                                         .window(windowSize)
                                         .modelBuilder(new SimpleModel.SimpleModelBuilder())
-                                        .gapPolicy(gapPolicy))
-                                .subAggregation(movingAvg("movavg_values","the_metric")
+                                        .gapPolicy(gapPolicy)
+                                        .setBucketsPaths("_count"))
+                                .subAggregation(movingAvg("movavg_values")
                                         .window(windowSize)
                                         .modelBuilder(new SimpleModel.SimpleModelBuilder())
-                                        .gapPolicy(gapPolicy))
+                                        .gapPolicy(gapPolicy)
+                                        .setBucketsPaths("the_metric"))
                 ).execute().actionGet();
 
         assertSearchResponse(response);
@@ -458,16 +458,18 @@ public class MovAvgIT extends ESIntegTestCase {
                 .prepareSearch("idx").setTypes("type")
                 .addAggregation(
                         histogram("histo").field(INTERVAL_FIELD).interval(interval)
-                                .extendedBounds(new ExtendedBounds(0L, (long) (interval * (numBuckets - 1))))
+                                .extendedBounds(0L, (long) (interval * (numBuckets - 1)))
                                 .subAggregation(metric)
-                                .subAggregation(movingAvg("movavg_counts", "_count")
+                                .subAggregation(movingAvg("movavg_counts")
                                         .window(windowSize)
                                         .modelBuilder(new LinearModel.LinearModelBuilder())
-                                        .gapPolicy(gapPolicy))
-                                .subAggregation(movingAvg("movavg_values", "the_metric")
+                                        .gapPolicy(gapPolicy)
+                                        .setBucketsPaths("_count"))
+                                .subAggregation(movingAvg("movavg_values")
                                         .window(windowSize)
                                         .modelBuilder(new LinearModel.LinearModelBuilder())
-                                        .gapPolicy(gapPolicy))
+                                        .gapPolicy(gapPolicy)
+                                        .setBucketsPaths("the_metric"))
                 ).execute().actionGet();
 
         assertSearchResponse(response);
@@ -506,16 +508,18 @@ public class MovAvgIT extends ESIntegTestCase {
                 .prepareSearch("idx").setTypes("type")
                 .addAggregation(
                         histogram("histo").field(INTERVAL_FIELD).interval(interval)
-                                .extendedBounds(new ExtendedBounds(0L, (long) (interval * (numBuckets - 1))))
+                                .extendedBounds(0L, (long) (interval * (numBuckets - 1)))
                                 .subAggregation(metric)
-                                .subAggregation(movingAvg("movavg_counts", "_count")
+                                .subAggregation(movingAvg("movavg_counts")
                                         .window(windowSize)
                                         .modelBuilder(new EwmaModel.EWMAModelBuilder().alpha(alpha))
-                                        .gapPolicy(gapPolicy))
-                                .subAggregation(movingAvg("movavg_values", "the_metric")
+                                        .gapPolicy(gapPolicy)
+                                        .setBucketsPaths("_count"))
+                                .subAggregation(movingAvg("movavg_values")
                                         .window(windowSize)
                                         .modelBuilder(new EwmaModel.EWMAModelBuilder().alpha(alpha))
-                                        .gapPolicy(gapPolicy))
+                                        .gapPolicy(gapPolicy)
+                                        .setBucketsPaths("the_metric"))
                 ).execute().actionGet();
 
         assertSearchResponse(response);
@@ -554,16 +558,18 @@ public class MovAvgIT extends ESIntegTestCase {
                 .prepareSearch("idx").setTypes("type")
                 .addAggregation(
                         histogram("histo").field(INTERVAL_FIELD).interval(interval)
-                                .extendedBounds(new ExtendedBounds(0L, (long) (interval * (numBuckets - 1))))
+                                .extendedBounds(0L, (long) (interval * (numBuckets - 1)))
                                 .subAggregation(metric)
-                                .subAggregation(movingAvg("movavg_counts", "_count")
+                                .subAggregation(movingAvg("movavg_counts")
                                         .window(windowSize)
                                         .modelBuilder(new HoltLinearModel.HoltLinearModelBuilder().alpha(alpha).beta(beta))
-                                        .gapPolicy(gapPolicy))
-                                .subAggregation(movingAvg("movavg_values", "the_metric")
+                                        .gapPolicy(gapPolicy)
+                                        .setBucketsPaths("_count"))
+                                .subAggregation(movingAvg("movavg_values")
                                         .window(windowSize)
                                         .modelBuilder(new HoltLinearModel.HoltLinearModelBuilder().alpha(alpha).beta(beta))
-                                        .gapPolicy(gapPolicy))
+                                        .gapPolicy(gapPolicy)
+                                        .setBucketsPaths("the_metric"))
                 ).execute().actionGet();
 
         assertSearchResponse(response);
@@ -602,20 +608,22 @@ public class MovAvgIT extends ESIntegTestCase {
                 .prepareSearch("idx").setTypes("type")
                 .addAggregation(
                         histogram("histo").field(INTERVAL_FIELD).interval(interval)
-                                .extendedBounds(new ExtendedBounds(0L, (long) (interval * (numBuckets - 1))))
+                                .extendedBounds(0L, (long) (interval * (numBuckets - 1)))
                                 .subAggregation(metric)
-                                .subAggregation(movingAvg("movavg_counts", "_count")
+                                .subAggregation(movingAvg("movavg_counts")
                                         .window(windowSize)
                                         .modelBuilder(new HoltWintersModel.HoltWintersModelBuilder()
                                                 .alpha(alpha).beta(beta).gamma(gamma).period(period).seasonalityType(seasonalityType))
                                         .gapPolicy(gapPolicy)
-                                        .minimize(false))
-                                .subAggregation(movingAvg("movavg_values", "the_metric")
+                                        .minimize(false)
+                                        .setBucketsPaths("_count"))
+                                .subAggregation(movingAvg("movavg_values")
                                         .window(windowSize)
                                         .modelBuilder(new HoltWintersModel.HoltWintersModelBuilder()
                                                 .alpha(alpha).beta(beta).gamma(gamma).period(period).seasonalityType(seasonalityType))
                                         .gapPolicy(gapPolicy)
-                                        .minimize(false))
+                                        .minimize(false)
+                                        .setBucketsPaths("the_metric"))
                 ).execute().actionGet();
 
         assertSearchResponse(response);
@@ -660,8 +668,8 @@ public class MovAvgIT extends ESIntegTestCase {
                                 .interval(1)
                                 .subAggregation(avg("avg").field(VALUE_FIELD))
                                 .subAggregation(
-                                        movingAvg("movavg_values", "avg").window(windowSize).modelBuilder(new SimpleModel.SimpleModelBuilder())
-                                                .gapPolicy(gapPolicy).predict(5))).execute().actionGet();
+                                        movingAvg("movavg_values").window(windowSize).modelBuilder(new SimpleModel.SimpleModelBuilder())
+                                                .gapPolicy(gapPolicy).predict(5).setBucketsPaths("avg"))).execute().actionGet();
 
         assertSearchResponse(response);
 
@@ -678,7 +686,7 @@ public class MovAvgIT extends ESIntegTestCase {
             Bucket bucket = buckets.get(i);
             assertThat(bucket, notNullValue());
             assertThat((long) bucket.getKey(), equalTo((long) i - 10));
-            assertThat(bucket.getDocCount(), equalTo(1L));
+            assertThat(bucket.getDocCount(), equalTo(1l));
             Avg avgAgg = bucket.getAggregations().get("avg");
             assertThat(avgAgg, notNullValue());
             assertThat(avgAgg.value(), equalTo(10d));
@@ -691,7 +699,7 @@ public class MovAvgIT extends ESIntegTestCase {
             Bucket bucket = buckets.get(i);
             assertThat(bucket, notNullValue());
             assertThat((long) bucket.getKey(), equalTo((long) i - 10));
-            assertThat(bucket.getDocCount(), equalTo(0L));
+            assertThat(bucket.getDocCount(), equalTo(0l));
             Avg avgAgg = bucket.getAggregations().get("avg");
             assertThat(avgAgg, nullValue());
             SimpleValue movAvgAgg = bucket.getAggregations().get("movavg_values");
@@ -706,16 +714,17 @@ public class MovAvgIT extends ESIntegTestCase {
                     .prepareSearch("idx").setTypes("type")
                     .addAggregation(
                             histogram("histo").field(INTERVAL_FIELD).interval(interval)
-                                    .extendedBounds(new ExtendedBounds(0L, (long) (interval * (numBuckets - 1))))
+                                    .extendedBounds(0L, (long) (interval * (numBuckets - 1)))
                                     .subAggregation(randomMetric("the_metric", VALUE_FIELD))
-                                    .subAggregation(movingAvg("movavg_counts", "the_metric")
+                                    .subAggregation(movingAvg("movavg_counts")
                                             .window(0)
                                             .modelBuilder(new SimpleModel.SimpleModelBuilder())
-                                            .gapPolicy(gapPolicy))
+                                            .gapPolicy(gapPolicy)
+                                            .setBucketsPaths("the_metric"))
                     ).execute().actionGet();
             fail("MovingAvg should not accept a window that is zero");
-        } catch (IllegalArgumentException e) {
-            assertThat(e.getMessage(), is("[window] must be a positive integer: [movavg_counts]"));
+        } catch (SearchPhaseExecutionException e) {
+           assertThat(e.getMessage(), is("all shards failed"));
         }
     }
 
@@ -726,10 +735,11 @@ public class MovAvgIT extends ESIntegTestCase {
                     .addAggregation(
                             range("histo").field(INTERVAL_FIELD).addRange(0, 10)
                                     .subAggregation(randomMetric("the_metric", VALUE_FIELD))
-                                    .subAggregation(movingAvg("movavg_counts", "the_metric")
-                                            .window(windowSize)
+                                    .subAggregation(movingAvg("movavg_counts")
+                                            .window(0)
                                             .modelBuilder(new SimpleModel.SimpleModelBuilder())
-                                            .gapPolicy(gapPolicy))
+                                            .gapPolicy(gapPolicy)
+                                            .setBucketsPaths("the_metric"))
                     ).execute().actionGet();
             fail("MovingAvg should not accept non-histogram as parent");
 
@@ -744,16 +754,20 @@ public class MovAvgIT extends ESIntegTestCase {
                     .prepareSearch("idx").setTypes("type")
                     .addAggregation(
                             histogram("histo").field(INTERVAL_FIELD).interval(interval)
-                                    .extendedBounds(new ExtendedBounds(0L, (long) (interval * (numBuckets - 1))))
+                                    .extendedBounds(0L, (long) (interval * (numBuckets - 1)))
                                     .subAggregation(randomMetric("the_metric", VALUE_FIELD))
-                                    .subAggregation(movingAvg("movavg_counts", "_count")
+                                    .subAggregation(movingAvg("movavg_counts")
                                             .window(-10)
                                             .modelBuilder(new SimpleModel.SimpleModelBuilder())
-                                            .gapPolicy(gapPolicy))
+                                            .gapPolicy(gapPolicy)
+                                            .setBucketsPaths("_count"))
                     ).execute().actionGet();
             fail("MovingAvg should not accept a window that is negative");
-        } catch (IllegalArgumentException e) {
-            assertThat(e.getMessage(), is("[window] must be a positive integer: [movavg_counts]"));
+
+        } catch (SearchPhaseExecutionException exception) {
+            //Throwable rootCause = exception.unwrapCause();
+            //assertThat(rootCause, instanceOf(SearchParseException.class));
+            //assertThat("[window] value must be a positive, non-zero integer.  Value supplied was [0] in [movingAvg].", equalTo(exception.getMessage()));
         }
     }
 
@@ -764,10 +778,11 @@ public class MovAvgIT extends ESIntegTestCase {
                 .addAggregation(
                         histogram("histo").field("test").interval(interval)
                                 .subAggregation(randomMetric("the_metric", VALUE_FIELD))
-                                .subAggregation(movingAvg("movavg_counts", "the_metric")
+                                .subAggregation(movingAvg("movavg_counts")
                                         .window(windowSize)
                                         .modelBuilder(new SimpleModel.SimpleModelBuilder())
-                                        .gapPolicy(gapPolicy))
+                                        .gapPolicy(gapPolicy)
+                                        .setBucketsPaths("the_metric"))
                 ).execute().actionGet();
 
         assertSearchResponse(response);
@@ -786,10 +801,11 @@ public class MovAvgIT extends ESIntegTestCase {
                 .addAggregation(
                         histogram("histo").field("test").interval(interval)
                                 .subAggregation(randomMetric("the_metric", VALUE_FIELD))
-                                .subAggregation(movingAvg("movavg_counts", "the_metric")
+                                .subAggregation(movingAvg("movavg_counts")
                                         .window(windowSize)
                                         .modelBuilder(new SimpleModel.SimpleModelBuilder())
                                         .gapPolicy(gapPolicy)
+                                        .setBucketsPaths("the_metric")
                                         .predict(numPredictions))
                 ).execute().actionGet();
 
@@ -808,17 +824,18 @@ public class MovAvgIT extends ESIntegTestCase {
                     .prepareSearch("idx").setTypes("type")
                     .addAggregation(
                             histogram("histo").field(INTERVAL_FIELD).interval(interval)
-                                    .extendedBounds(new ExtendedBounds(0L, (long) (interval * (numBuckets - 1))))
+                                    .extendedBounds(0L, (long) (interval * (numBuckets - 1)))
                                     .subAggregation(randomMetric("the_metric", VALUE_FIELD))
-                                    .subAggregation(movingAvg("movavg_counts", "the_metric")
+                                    .subAggregation(movingAvg("movavg_counts")
                                             .window(windowSize)
                                             .modelBuilder(randomModelBuilder())
                                             .gapPolicy(gapPolicy)
-                                            .predict(0))
+                                            .predict(0)
+                                            .setBucketsPaths("the_metric"))
                     ).execute().actionGet();
             fail("MovingAvg should not accept a prediction size that is zero");
 
-        } catch (IllegalArgumentException exception) {
+        } catch (SearchPhaseExecutionException exception) {
             // All Good
         }
     }
@@ -829,39 +846,42 @@ public class MovAvgIT extends ESIntegTestCase {
                     .prepareSearch("idx").setTypes("type")
                     .addAggregation(
                             histogram("histo").field(INTERVAL_FIELD).interval(interval)
-                                    .extendedBounds(new ExtendedBounds(0L, (long) (interval * (numBuckets - 1))))
+                                    .extendedBounds(0L, (long) (interval * (numBuckets - 1)))
                                     .subAggregation(randomMetric("the_metric", VALUE_FIELD))
-                                    .subAggregation(movingAvg("movavg_counts", "the_metric")
+                                    .subAggregation(movingAvg("movavg_counts")
                                             .window(windowSize)
                                             .modelBuilder(randomModelBuilder())
                                             .gapPolicy(gapPolicy)
-                                            .predict(-10))
+                                            .predict(-10)
+                                            .setBucketsPaths("the_metric"))
                     ).execute().actionGet();
             fail("MovingAvg should not accept a prediction size that is negative");
 
-        } catch (IllegalArgumentException exception) {
+        } catch (SearchPhaseExecutionException exception) {
             // All Good
         }
     }
 
     public void testHoltWintersNotEnoughData() {
         try {
-            SearchResponse response = client()
+            client()
                     .prepareSearch("idx").setTypes("type")
                     .addAggregation(
                             histogram("histo").field(INTERVAL_FIELD).interval(interval)
-                                    .extendedBounds(new ExtendedBounds(0L, (long) (interval * (numBuckets - 1))))
+                                    .extendedBounds(0L, (long) (interval * (numBuckets - 1)))
                                     .subAggregation(metric)
-                                    .subAggregation(movingAvg("movavg_counts", "_count")
+                                    .subAggregation(movingAvg("movavg_counts")
                                             .window(10)
                                             .modelBuilder(new HoltWintersModel.HoltWintersModelBuilder()
                                                     .alpha(alpha).beta(beta).gamma(gamma).period(20).seasonalityType(seasonalityType))
-                                            .gapPolicy(gapPolicy))
-                                    .subAggregation(movingAvg("movavg_values", "the_metric")
+                                            .gapPolicy(gapPolicy)
+                                            .setBucketsPaths("_count"))
+                                    .subAggregation(movingAvg("movavg_values")
                                             .window(windowSize)
                                             .modelBuilder(new HoltWintersModel.HoltWintersModelBuilder()
                                                     .alpha(alpha).beta(beta).gamma(gamma).period(20).seasonalityType(seasonalityType))
-                                            .gapPolicy(gapPolicy))
+                                            .gapPolicy(gapPolicy)
+                                            .setBucketsPaths("the_metric"))
                     ).execute().actionGet();
         } catch (SearchPhaseExecutionException e) {
             // All good
@@ -878,13 +898,14 @@ public class MovAvgIT extends ESIntegTestCase {
                                 .field(INTERVAL_FIELD)
                                 .interval(1)
                                 .subAggregation(avg("avg").field(VALUE_FIELD))
-                                .subAggregation(derivative("deriv", "avg").gapPolicy(gapPolicy))
+                                .subAggregation(derivative("deriv")
+                                        .setBucketsPaths("avg").gapPolicy(gapPolicy))
                                 .subAggregation(
-                                        movingAvg("avg_movavg", "avg").window(windowSize).modelBuilder(new SimpleModel.SimpleModelBuilder())
-                                                .gapPolicy(gapPolicy).predict(12))
+                                        movingAvg("avg_movavg").window(windowSize).modelBuilder(new SimpleModel.SimpleModelBuilder())
+                                                .gapPolicy(gapPolicy).predict(12).setBucketsPaths("avg"))
                                 .subAggregation(
-                                        movingAvg("deriv_movavg", "deriv").window(windowSize).modelBuilder(new SimpleModel.SimpleModelBuilder())
-                                                .gapPolicy(gapPolicy).predict(12))
+                                        movingAvg("deriv_movavg").window(windowSize).modelBuilder(new SimpleModel.SimpleModelBuilder())
+                                                .gapPolicy(gapPolicy).predict(12).setBucketsPaths("deriv"))
                 ).execute().actionGet();
 
         assertSearchResponse(response);
@@ -898,7 +919,7 @@ public class MovAvgIT extends ESIntegTestCase {
         Bucket bucket = buckets.get(0);
         assertThat(bucket, notNullValue());
         assertThat((long) bucket.getKey(), equalTo((long) 0));
-        assertThat(bucket.getDocCount(), equalTo(1L));
+        assertThat(bucket.getDocCount(), equalTo(1l));
 
         Avg avgAgg = bucket.getAggregations().get("avg");
         assertThat(avgAgg, notNullValue());
@@ -917,7 +938,7 @@ public class MovAvgIT extends ESIntegTestCase {
         bucket = buckets.get(1);
         assertThat(bucket, notNullValue());
         assertThat((long) bucket.getKey(), equalTo(1L));
-        assertThat(bucket.getDocCount(), equalTo(1L));
+        assertThat(bucket.getDocCount(), equalTo(1l));
 
         avgAgg = bucket.getAggregations().get("avg");
         assertThat(avgAgg, notNullValue());
@@ -938,7 +959,7 @@ public class MovAvgIT extends ESIntegTestCase {
             bucket = buckets.get(i);
             assertThat(bucket, notNullValue());
             assertThat((long) bucket.getKey(), equalTo((long) i));
-            assertThat(bucket.getDocCount(), equalTo(1L));
+            assertThat(bucket.getDocCount(), equalTo(1l));
 
             avgAgg = bucket.getAggregations().get("avg");
             assertThat(avgAgg, notNullValue());
@@ -962,7 +983,7 @@ public class MovAvgIT extends ESIntegTestCase {
             bucket = buckets.get(i);
             assertThat(bucket, notNullValue());
             assertThat((long) bucket.getKey(), equalTo((long) i));
-            assertThat(bucket.getDocCount(), equalTo(0L));
+            assertThat(bucket.getDocCount(), equalTo(0l));
 
             avgAgg = bucket.getAggregations().get("avg");
             assertThat(avgAgg, nullValue());
@@ -982,16 +1003,17 @@ public class MovAvgIT extends ESIntegTestCase {
 
     public void testBadModelParams() {
         try {
-            SearchResponse response = client()
+            client()
                     .prepareSearch("idx").setTypes("type")
                     .addAggregation(
                             histogram("histo").field(INTERVAL_FIELD).interval(interval)
-                                    .extendedBounds(new ExtendedBounds(0L, (long) (interval * (numBuckets - 1))))
+                                    .extendedBounds(0L, (long) (interval * (numBuckets - 1)))
                                     .subAggregation(metric)
-                                    .subAggregation(movingAvg("movavg_counts", "_count")
+                                    .subAggregation(movingAvg("movavg_counts")
                                             .window(10)
                                             .modelBuilder(randomModelBuilder(100))
-                                            .gapPolicy(gapPolicy))
+                                            .gapPolicy(gapPolicy)
+                                            .setBucketsPaths("_count"))
                     ).execute().actionGet();
         } catch (SearchPhaseExecutionException e) {
             // All good
@@ -1004,20 +1026,22 @@ public class MovAvgIT extends ESIntegTestCase {
                 .prepareSearch("idx").setTypes("type")
                 .addAggregation(
                         histogram("histo").field(INTERVAL_FIELD).interval(interval)
-                                .extendedBounds(new ExtendedBounds(0L, (long) (interval * (numBuckets - 1))))
+                                .extendedBounds(0L, (long) (interval * (numBuckets - 1)))
                                 .subAggregation(metric)
-                                .subAggregation(movingAvg("movavg_counts", "_count")
+                                .subAggregation(movingAvg("movavg_counts")
                                         .window(windowSize)
                                         .modelBuilder(new HoltWintersModel.HoltWintersModelBuilder()
                                                 .period(period).seasonalityType(seasonalityType))
                                         .gapPolicy(gapPolicy)
-                                        .minimize(true))
-                                .subAggregation(movingAvg("movavg_values", "the_metric")
+                                        .minimize(true)
+                                        .setBucketsPaths("_count"))
+                                .subAggregation(movingAvg("movavg_values")
                                         .window(windowSize)
                                         .modelBuilder(new HoltWintersModel.HoltWintersModelBuilder()
                                                 .period(period).seasonalityType(seasonalityType))
                                         .gapPolicy(gapPolicy)
-                                        .minimize(true))
+                                        .minimize(true)
+                                        .setBucketsPaths("the_metric"))
                 ).execute().actionGet();
 
         assertSearchResponse(response);
@@ -1090,18 +1114,20 @@ public class MovAvgIT extends ESIntegTestCase {
                 .prepareSearch("idx").setTypes("type")
                 .addAggregation(
                         histogram("histo").field(INTERVAL_FIELD).interval(interval)
-                                .extendedBounds(new ExtendedBounds(0L, (long) (interval * (numBuckets - 1))))
+                                .extendedBounds(0L, (long) (interval * (numBuckets - 1)))
                                 .subAggregation(metric)
-                                .subAggregation(movingAvg("movavg_counts", "_count")
+                                .subAggregation(movingAvg("movavg_counts")
                                         .window(numBuckets)
                                         .modelBuilder(new HoltLinearModel.HoltLinearModelBuilder().alpha(alpha).beta(beta))
                                         .gapPolicy(gapPolicy)
-                                        .minimize(true))
-                                .subAggregation(movingAvg("movavg_values", "the_metric")
+                                        .minimize(true)
+                                        .setBucketsPaths("_count"))
+                                .subAggregation(movingAvg("movavg_values")
                                         .window(numBuckets)
                                         .modelBuilder(new HoltLinearModel.HoltLinearModelBuilder().alpha(alpha).beta(beta))
                                         .gapPolicy(gapPolicy)
-                                        .minimize(true))
+                                        .minimize(true)
+                                        .setBucketsPaths("the_metric"))
                 ).execute().actionGet();
 
         assertSearchResponse(response);
@@ -1144,13 +1170,14 @@ public class MovAvgIT extends ESIntegTestCase {
                 .prepareSearch("idx").setTypes("type")
                 .addAggregation(
                         histogram("histo").field(INTERVAL_FIELD).interval(interval)
-                                .extendedBounds(new ExtendedBounds(0L, (long) (interval * (numBuckets - 1))))
+                                .extendedBounds(0L, (long) (interval * (numBuckets - 1)))
                                 .subAggregation(metric)
-                                .subAggregation(movingAvg("movavg_counts", "_count")
+                                .subAggregation(movingAvg("movavg_counts")
                                         .window(numBuckets)
                                         .modelBuilder(new SimpleModel.SimpleModelBuilder())
                                         .gapPolicy(gapPolicy)
-                                        .minimize(true))
+                                        .minimize(true)
+                                        .setBucketsPaths("_count"))
                 ).execute().actionGet();
             fail("Simple Model cannot be minimized, but an exception was not thrown");
         } catch (SearchPhaseExecutionException e) {
@@ -1162,13 +1189,14 @@ public class MovAvgIT extends ESIntegTestCase {
                     .prepareSearch("idx").setTypes("type")
                     .addAggregation(
                             histogram("histo").field(INTERVAL_FIELD).interval(interval)
-                                    .extendedBounds(new ExtendedBounds(0L, (long) (interval * (numBuckets - 1))))
+                                    .extendedBounds(0L, (long) (interval * (numBuckets - 1)))
                                     .subAggregation(metric)
-                                    .subAggregation(movingAvg("movavg_counts", "_count")
+                                    .subAggregation(movingAvg("movavg_counts")
                                             .window(numBuckets)
                                             .modelBuilder(new LinearModel.LinearModelBuilder())
                                             .gapPolicy(gapPolicy)
-                                            .minimize(true))
+                                            .minimize(true)
+                                            .setBucketsPaths("_count"))
                     ).execute().actionGet();
             fail("Linear Model cannot be minimized, but an exception was not thrown");
         } catch (SearchPhaseExecutionException e) {
@@ -1192,13 +1220,14 @@ public class MovAvgIT extends ESIntegTestCase {
                         .prepareSearch("idx").setTypes("type")
                         .addAggregation(
                                 histogram("histo").field(INTERVAL_FIELD).interval(interval)
-                                        .extendedBounds(new ExtendedBounds(0L, (long) (interval * (numBuckets - 1))))
+                                        .extendedBounds(0L, (long) (interval * (numBuckets - 1)))
                                         .subAggregation(metric)
-                                        .subAggregation(movingAvg("movavg_counts", "_count")
+                                        .subAggregation(movingAvg("movavg_counts")
                                                 .window(numBuckets)
                                                 .modelBuilder(builder)
                                                 .gapPolicy(gapPolicy)
-                                                .minimize(true))
+                                                .minimize(true)
+                                                .setBucketsPaths("_count"))
                         ).execute().actionGet();
             } catch (SearchPhaseExecutionException e) {
                 fail("Model [" + builder.toString() + "] can be minimized, but an exception was thrown");
@@ -1206,7 +1235,40 @@ public class MovAvgIT extends ESIntegTestCase {
         }
     }
 
-    private void assertValidIterators(Iterator expectedBucketIter, Iterator expectedCountsIter, Iterator expectedValuesIter) {
+    public void testUnrecognizedParams() {
+        MovAvgModelBuilder[] builders = new MovAvgModelBuilder[]{
+                new SimpleModel.SimpleModelBuilder(),
+                new LinearModel.LinearModelBuilder(),
+                new EwmaModel.EWMAModelBuilder(),
+                new HoltLinearModel.HoltLinearModelBuilder(),
+                new HoltWintersModel.HoltWintersModelBuilder()
+        };
+        Map<String, Object> badSettings = new HashMap<>(1);
+        badSettings.put("abc", 1.2);
+
+        for (MovAvgModelBuilder builder : builders) {
+            try {
+                client()
+                        .prepareSearch("idx").setTypes("type")
+                        .addAggregation(
+                                histogram("histo").field(INTERVAL_FIELD).interval(interval)
+                                        .extendedBounds(0L, (long) (interval * (numBuckets - 1)))
+                                        .subAggregation(metric)
+                                        .subAggregation(movingAvg("movavg_counts")
+                                                .window(10)
+                                                .modelBuilder(builder)
+                                                .gapPolicy(gapPolicy)
+                                                .settings(badSettings)
+                                                .setBucketsPaths("_count"))
+                        ).execute().actionGet();
+            } catch (SearchPhaseExecutionException e) {
+                // All good
+            }
+        }
+    }
+
+
+    private void assertValidIterators(Iterator<?> expectedBucketIter, Iterator<?> expectedCountsIter, Iterator<?> expectedValuesIter) {
         if (!expectedBucketIter.hasNext()) {
             fail("`expectedBucketIter` iterator ended before `actual` iterator, size mismatch");
         }
@@ -1289,8 +1351,7 @@ public class MovAvgIT extends ESIntegTestCase {
         }
     }
 
-    private ValuesSourceAggregatorBuilder<? extends ValuesSource, ? extends ValuesSourceAggregatorBuilder<?, ?>> randomMetric(String name,
-            String field) {
+    private ValuesSourceMetricsAggregationBuilder<?> randomMetric(String name, String field) {
         int rand = randomIntBetween(0,3);
 
         switch (rand) {

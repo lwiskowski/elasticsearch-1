@@ -45,6 +45,7 @@ import static org.elasticsearch.cluster.routing.ShardRoutingState.STARTED;
 import static org.elasticsearch.cluster.routing.allocation.decider.EnableAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ENABLE_SETTING;
 import static org.elasticsearch.cluster.routing.allocation.decider.EnableAllocationDecider.CLUSTER_ROUTING_REBALANCE_ENABLE_SETTING;
 import static org.elasticsearch.cluster.routing.allocation.decider.EnableAllocationDecider.INDEX_ROUTING_ALLOCATION_ENABLE_SETTING;
+import static org.elasticsearch.common.settings.Settings.settingsBuilder;
 import static org.hamcrest.Matchers.equalTo;
 
 /**
@@ -54,7 +55,7 @@ public class EnableAllocationTests extends ESAllocationTestCase {
     private final ESLogger logger = Loggers.getLogger(EnableAllocationTests.class);
 
     public void testClusterEnableNone() {
-        AllocationService strategy = createAllocationService(Settings.builder()
+        AllocationService strategy = createAllocationService(settingsBuilder()
                 .put(CLUSTER_ROUTING_ALLOCATION_ENABLE_SETTING.getKey(), Allocation.NONE.name())
                 .build());
 
@@ -82,7 +83,7 @@ public class EnableAllocationTests extends ESAllocationTestCase {
     }
 
     public void testClusterEnableOnlyPrimaries() {
-        AllocationService strategy = createAllocationService(Settings.builder()
+        AllocationService strategy = createAllocationService(settingsBuilder()
                 .put(CLUSTER_ROUTING_ALLOCATION_ENABLE_SETTING.getKey(), Allocation.PRIMARIES.name())
                 .build());
 
@@ -115,7 +116,7 @@ public class EnableAllocationTests extends ESAllocationTestCase {
     }
 
     public void testIndexEnableNone() {
-        AllocationService strategy = createAllocationService(Settings.builder()
+        AllocationService strategy = createAllocationService(settingsBuilder()
                 .build());
 
         MetaData metaData = MetaData.builder()
@@ -154,15 +155,15 @@ public class EnableAllocationTests extends ESAllocationTestCase {
 
     public void testEnableClusterBalance() {
         final boolean useClusterSetting = randomBoolean();
-        final Rebalance allowedOnes = RandomPicks.randomFrom(random(), EnumSet.of(Rebalance.PRIMARIES, Rebalance.REPLICAS, Rebalance.ALL));
-        Settings build = Settings.builder()
-                .put(CLUSTER_ROUTING_REBALANCE_ENABLE_SETTING.getKey(), useClusterSetting ? Rebalance.NONE: RandomPicks.randomFrom(random(), Rebalance.values())) // index settings override cluster settings
+        final Rebalance allowedOnes = RandomPicks.randomFrom(getRandom(), EnumSet.of(Rebalance.PRIMARIES, Rebalance.REPLICAS, Rebalance.ALL));
+        Settings build = settingsBuilder()
+                .put(CLUSTER_ROUTING_REBALANCE_ENABLE_SETTING.getKey(), useClusterSetting ? Rebalance.NONE: RandomPicks.randomFrom(getRandom(), Rebalance.values())) // index settings override cluster settings
                 .put(ConcurrentRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_CLUSTER_CONCURRENT_REBALANCE_SETTING.getKey(), 3)
                 .put(ThrottlingAllocationDecider.CLUSTER_ROUTING_ALLOCATION_NODE_CONCURRENT_OUTGOING_RECOVERIES_SETTING.getKey(), 10)
                 .build();
         ClusterSettings clusterSettings = new ClusterSettings(build, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-        AllocationService strategy = createAllocationService(build, clusterSettings, random());
-        Settings indexSettings = useClusterSetting ? Settings.EMPTY : Settings.builder().put(EnableAllocationDecider.INDEX_ROUTING_REBALANCE_ENABLE_SETTING.getKey(), Rebalance.NONE).build();
+        AllocationService strategy = createAllocationService(build, clusterSettings, getRandom());
+        Settings indexSettings = useClusterSetting ? Settings.EMPTY : settingsBuilder().put(EnableAllocationDecider.INDEX_ROUTING_REBALANCE_ENABLE_SETTING.getKey(), Rebalance.NONE).build();
 
         logger.info("Building initial routing table");
         MetaData metaData = MetaData.builder()
@@ -210,7 +211,7 @@ public class EnableAllocationTests extends ESAllocationTestCase {
 
         if (useClusterSetting) {
             prevState = clusterState;
-            clusterState = ClusterState.builder(clusterState).metaData(MetaData.builder(metaData).transientSettings(Settings.builder()
+            clusterState = ClusterState.builder(clusterState).metaData(MetaData.builder(metaData).transientSettings(settingsBuilder()
                 .put(CLUSTER_ROUTING_REBALANCE_ENABLE_SETTING.getKey(), allowedOnes)
                 .build())).build();
         } else {
@@ -218,7 +219,7 @@ public class EnableAllocationTests extends ESAllocationTestCase {
             IndexMetaData meta = clusterState.getMetaData().index("test");
             IndexMetaData meta1 = clusterState.getMetaData().index("always_disabled");
             clusterState = ClusterState.builder(clusterState).metaData(MetaData.builder(metaData).removeAllIndices().put(IndexMetaData.builder(meta1))
-                    .put(IndexMetaData.builder(meta).settings(Settings.builder().put(meta.getSettings()).put(EnableAllocationDecider.INDEX_ROUTING_REBALANCE_ENABLE_SETTING.getKey(), allowedOnes).build())))
+                    .put(IndexMetaData.builder(meta).settings(settingsBuilder().put(meta.getSettings()).put(EnableAllocationDecider.INDEX_ROUTING_REBALANCE_ENABLE_SETTING.getKey(), allowedOnes).build())))
                     .build();
 
         }
@@ -232,18 +233,18 @@ public class EnableAllocationTests extends ESAllocationTestCase {
             case PRIMARIES:
                 for (ShardRouting routing : mutableShardRoutings) {
                     assertTrue("only primaries are allowed to relocate", routing.primary());
-                    assertThat("only test index can rebalance", routing.getIndexName(), equalTo("test"));
+                    assertThat("only test index can rebalance", routing.getIndex(), equalTo("test"));
                 }
                 break;
             case REPLICAS:
                 for (ShardRouting routing : mutableShardRoutings) {
                     assertFalse("only replicas are allowed to relocate", routing.primary());
-                    assertThat("only test index can rebalance", routing.getIndexName(), equalTo("test"));
+                    assertThat("only test index can rebalance", routing.getIndex(), equalTo("test"));
                 }
                 break;
             case ALL:
                 for (ShardRouting routing : mutableShardRoutings) {
-                    assertThat("only test index can rebalance", routing.getIndexName(), equalTo("test"));
+                    assertThat("only test index can rebalance", routing.getIndex(), equalTo("test"));
                 }
                 break;
             default:
@@ -258,13 +259,13 @@ public class EnableAllocationTests extends ESAllocationTestCase {
 
     public void testEnableClusterBalanceNoReplicas() {
         final boolean useClusterSetting = randomBoolean();
-        Settings build = Settings.builder()
-                .put(CLUSTER_ROUTING_REBALANCE_ENABLE_SETTING.getKey(), useClusterSetting ? Rebalance.NONE: RandomPicks.randomFrom(random(), Rebalance.values())) // index settings override cluster settings
+        Settings build = settingsBuilder()
+                .put(CLUSTER_ROUTING_REBALANCE_ENABLE_SETTING.getKey(), useClusterSetting ? Rebalance.NONE: RandomPicks.randomFrom(getRandom(), Rebalance.values())) // index settings override cluster settings
                 .put(ConcurrentRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_CLUSTER_CONCURRENT_REBALANCE_SETTING.getKey(), 3)
                 .build();
         ClusterSettings clusterSettings = new ClusterSettings(build, ClusterSettings.BUILT_IN_CLUSTER_SETTINGS);
-        AllocationService strategy = createAllocationService(build, clusterSettings, random());
-        Settings indexSettings = useClusterSetting ? Settings.EMPTY : Settings.builder().put(EnableAllocationDecider.INDEX_ROUTING_REBALANCE_ENABLE_SETTING.getKey(), Rebalance.NONE).build();
+        AllocationService strategy = createAllocationService(build, clusterSettings, getRandom());
+        Settings indexSettings = useClusterSetting ? Settings.EMPTY : settingsBuilder().put(EnableAllocationDecider.INDEX_ROUTING_REBALANCE_ENABLE_SETTING.getKey(), Rebalance.NONE).build();
 
         logger.info("Building initial routing table");
         MetaData metaData = MetaData.builder()
@@ -304,14 +305,14 @@ public class EnableAllocationTests extends ESAllocationTestCase {
         assertThat(clusterState.getRoutingNodes().shardsWithState(RELOCATING).size(), equalTo(0));
         if (useClusterSetting) {
             prevState = clusterState;
-            clusterState = ClusterState.builder(clusterState).metaData(MetaData.builder(metaData).transientSettings(Settings.builder()
+            clusterState = ClusterState.builder(clusterState).metaData(MetaData.builder(metaData).transientSettings(settingsBuilder()
                     .put(CLUSTER_ROUTING_REBALANCE_ENABLE_SETTING.getKey(), randomBoolean() ? Rebalance.PRIMARIES : Rebalance.ALL)
                     .build())).build();
         } else {
             prevState = clusterState;
             IndexMetaData meta = clusterState.getMetaData().index("test");
             clusterState = ClusterState.builder(clusterState).metaData(MetaData.builder(metaData).removeAllIndices()
-                    .put(IndexMetaData.builder(meta).settings(Settings.builder().put(meta.getSettings()).put(EnableAllocationDecider.INDEX_ROUTING_REBALANCE_ENABLE_SETTING.getKey(), randomBoolean() ? Rebalance.PRIMARIES : Rebalance.ALL).build()))).build();
+                    .put(IndexMetaData.builder(meta).settings(settingsBuilder().put(meta.getSettings()).put(EnableAllocationDecider.INDEX_ROUTING_REBALANCE_ENABLE_SETTING.getKey(), randomBoolean() ? Rebalance.PRIMARIES : Rebalance.ALL).build()))).build();
         }
         clusterSettings.applySettings(clusterState.metaData().settings());
         routingTable = strategy.reroute(clusterState, "reroute").routingTable();

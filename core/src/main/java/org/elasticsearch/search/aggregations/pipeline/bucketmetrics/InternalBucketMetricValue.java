@@ -22,11 +22,12 @@ package org.elasticsearch.search.aggregations.pipeline.bucketmetrics;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.xcontent.XContentBuilder;
-import org.elasticsearch.search.DocValueFormat;
 import org.elasticsearch.search.aggregations.AggregationStreams;
 import org.elasticsearch.search.aggregations.InternalAggregation;
 import org.elasticsearch.search.aggregations.metrics.InternalNumericMetricsAggregation;
 import org.elasticsearch.search.aggregations.pipeline.PipelineAggregator;
+import org.elasticsearch.search.aggregations.support.format.ValueFormatter;
+import org.elasticsearch.search.aggregations.support.format.ValueFormatterStreams;
 
 import java.io.IOException;
 import java.util.List;
@@ -57,12 +58,12 @@ public class InternalBucketMetricValue extends InternalNumericMetricsAggregation
         super();
     }
 
-    public InternalBucketMetricValue(String name, String[] keys, double value, DocValueFormat formatter,
+    public InternalBucketMetricValue(String name, String[] keys, double value, ValueFormatter formatter,
             List<PipelineAggregator> pipelineAggregators, Map<String, Object> metaData) {
         super(name, pipelineAggregators, metaData);
         this.keys = keys;
         this.value = value;
-        this.format = formatter;
+        this.valueFormatter = formatter;
     }
 
     @Override
@@ -99,14 +100,14 @@ public class InternalBucketMetricValue extends InternalNumericMetricsAggregation
 
     @Override
     protected void doReadFrom(StreamInput in) throws IOException {
-        format = in.readNamedWriteable(DocValueFormat.class);
+        valueFormatter = ValueFormatterStreams.readOptional(in);
         value = in.readDouble();
         keys = in.readStringArray();
     }
 
     @Override
     protected void doWriteTo(StreamOutput out) throws IOException {
-        out.writeNamedWriteable(format);
+        ValueFormatterStreams.writeOptional(valueFormatter, out);
         out.writeDouble(value);
         out.writeStringArray(keys);
     }
@@ -115,8 +116,8 @@ public class InternalBucketMetricValue extends InternalNumericMetricsAggregation
     public XContentBuilder doXContentBody(XContentBuilder builder, Params params) throws IOException {
         boolean hasValue = !Double.isInfinite(value);
         builder.field(CommonFields.VALUE, hasValue ? value : null);
-        if (hasValue && format != DocValueFormat.RAW) {
-            builder.field(CommonFields.VALUE_AS_STRING, format.format(value));
+        if (hasValue && !(valueFormatter instanceof ValueFormatter.Raw)) {
+            builder.field(CommonFields.VALUE_AS_STRING, valueFormatter.format(value));
         }
         builder.startArray("keys");
         for (String key : keys) {

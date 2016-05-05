@@ -29,10 +29,10 @@ import org.elasticsearch.index.fielddata.IndexGeoPointFieldData;
 import org.elasticsearch.index.fielddata.IndexNumericFieldData;
 import org.elasticsearch.index.fielddata.IndexOrdinalsFieldData;
 import org.elasticsearch.index.fielddata.plain.ParentChildIndexFieldData;
+import org.elasticsearch.index.mapper.core.DateFieldMapper;
 import org.elasticsearch.search.SearchParseException;
 import org.elasticsearch.search.aggregations.AggregationExecutionException;
 import org.elasticsearch.search.internal.SearchContext;
-import org.joda.time.DateTimeZone;
 
 import java.io.IOException;
 
@@ -70,11 +70,13 @@ public class AggregationContext {
             if (config.missing == null) {
                 // otherwise we will have values because of the missing value
                 vs = null;
-            } else if (config.valueSourceType == ValuesSourceType.NUMERIC) {
+            } else if (ValuesSource.Numeric.class.isAssignableFrom(config.valueSourceType)) {
                 vs = (VS) ValuesSource.Numeric.EMPTY;
-            } else if (config.valueSourceType == ValuesSourceType.GEOPOINT) {
+            } else if (ValuesSource.GeoPoint.class.isAssignableFrom(config.valueSourceType)) {
                 vs = (VS) ValuesSource.GeoPoint.EMPTY;
-            } else if (config.valueSourceType == ValuesSourceType.ANY || config.valueSourceType == ValuesSourceType.BYTES) {
+            } else if (ValuesSource.class.isAssignableFrom(config.valueSourceType)
+                    || ValuesSource.Bytes.class.isAssignableFrom(config.valueSourceType)
+                    || ValuesSource.Bytes.WithOrdinals.class.isAssignableFrom(config.valueSourceType)) {
                 vs = (VS) ValuesSource.Bytes.EMPTY;
             } else {
                 throw new SearchParseException(searchContext, "Can't deal with unmapped ValuesSource type " + config.valueSourceType, null);
@@ -99,11 +101,19 @@ public class AggregationContext {
             if (config.missing instanceof Number) {
                 missing = (Number) config.missing;
             } else {
-                if (config.fieldContext != null && config.fieldContext.fieldType() != null) {
-                    missing = config.fieldContext.fieldType().docValueFormat(null, DateTimeZone.UTC)
-                            .parseDouble(config.missing.toString(), false, context.nowCallable());
+                if (config.fieldContext != null && config.fieldContext.fieldType() instanceof DateFieldMapper.DateFieldType) {
+                    final DateFieldMapper.DateFieldType fieldType = (DateFieldMapper.DateFieldType) config.fieldContext.fieldType();
+                    try {
+                        missing = fieldType.dateTimeFormatter().parser().parseDateTime(config.missing.toString()).getMillis();
+                    } catch (IllegalArgumentException e) {
+                        throw new SearchParseException(context, "Expected a date value in [missing] but got [" + config.missing + "]", null, e);
+                    }
                 } else {
-                    missing = Double.parseDouble(config.missing.toString());
+                    try {
+                        missing = Double.parseDouble(config.missing.toString());
+                    } catch (NumberFormatException e) {
+                        throw new SearchParseException(context, "Expected a numeric value in [missing] but got [" + config.missing + "]", null, e);
+                    }
                 }
             }
             return (VS) MissingValues.replaceMissing((ValuesSource.Numeric) vs, missing);
@@ -122,20 +132,19 @@ public class AggregationContext {
      */
     private <VS extends ValuesSource> VS originalValuesSource(ValuesSourceConfig<VS> config) throws IOException {
         if (config.fieldContext == null) {
-            if (config.valueSourceType == ValuesSourceType.NUMERIC) {
+            if (ValuesSource.Numeric.class.isAssignableFrom(config.valueSourceType)) {
                 return (VS) numericScript(config);
             }
-            if (config.valueSourceType == ValuesSourceType.BYTES) {
+            if (ValuesSource.Bytes.class.isAssignableFrom(config.valueSourceType)) {
                 return (VS) bytesScript(config);
             }
-            throw new AggregationExecutionException("value source of type [" + config.valueSourceType.name()
-                    + "] is not supported by scripts");
+            throw new AggregationExecutionException("value source of type [" + config.valueSourceType.getSimpleName() + "] is not supported by scripts");
         }
 
-        if (config.valueSourceType == ValuesSourceType.NUMERIC) {
+        if (ValuesSource.Numeric.class.isAssignableFrom(config.valueSourceType)) {
             return (VS) numericField(config);
         }
-        if (config.valueSourceType == ValuesSourceType.GEOPOINT) {
+        if (ValuesSource.GeoPoint.class.isAssignableFrom(config.valueSourceType)) {
             return (VS) geoPointField(config);
         }
         // falling back to bytes values

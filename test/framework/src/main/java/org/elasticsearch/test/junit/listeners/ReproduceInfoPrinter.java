@@ -42,8 +42,8 @@ import static org.elasticsearch.test.rest.ESRestTestCase.REST_TESTS_SPEC;
 import static org.elasticsearch.test.rest.ESRestTestCase.REST_TESTS_SUITE;
 
 /**
- * A {@link RunListener} that emits a command you can use to re-run a failing test with the failing random seed to
- * {@link System#err}.
+ * A {@link RunListener} that emits to {@link System#err} a string with command
+ * line parameters allowing quick test re-run under MVN command line.
  */
 public class ReproduceInfoPrinter extends RunListener {
 
@@ -60,7 +60,7 @@ public class ReproduceInfoPrinter extends RunListener {
     }
 
     /**
-     * Are we in the integ test phase?
+     * true if we are running maven integration tests (mvn verify)
      */
     static boolean inVerifyPhase() {
         return Boolean.parseBoolean(System.getProperty("tests.verify.phase"));
@@ -75,7 +75,7 @@ public class ReproduceInfoPrinter extends RunListener {
 
         final StringBuilder b = new StringBuilder("REPRODUCE WITH: gradle ");
         String task = System.getProperty("tests.task");
-        // TODO: enforce (intellij still runs the runner?) or use default "test" but that won't work for integ
+        // TODO: enforce (intellij still runs the runner?) or use default "test" but that wont' work for integ
         b.append(task);
 
         GradleMessageBuilder gradleMessageBuilder = new GradleMessageBuilder(b);
@@ -140,15 +140,14 @@ public class ReproduceInfoPrinter extends RunListener {
             appendProperties("es.logger.level");
             if (inVerifyPhase()) {
                 // these properties only make sense for integration tests
-                appendProperties("es.node.mode", "es.node.local", TESTS_CLUSTER,
-                    ESIntegTestCase.TESTS_ENABLE_MOCK_MODULES);
+                appendProperties("es.node.mode", "es.node.local", TESTS_CLUSTER, ESIntegTestCase.TESTS_ENABLE_MOCK_MODULES);
             }
             appendProperties("tests.assertion.disabled", "tests.security.manager", "tests.nightly", "tests.jvms",
                              "tests.client.ratio", "tests.heap.size", "tests.bwc", "tests.bwc.version");
             if (System.getProperty("tests.jvm.argline") != null && !System.getProperty("tests.jvm.argline").isEmpty()) {
                 appendOpt("tests.jvm.argline", "\"" + System.getProperty("tests.jvm.argline") + "\"");
             }
-            appendOpt("tests.locale", Locale.getDefault().toLanguageTag());
+            appendOpt("tests.locale", Locale.getDefault().toString());
             appendOpt("tests.timezone", TimeZone.getDefault().getID());
             return this;
         }

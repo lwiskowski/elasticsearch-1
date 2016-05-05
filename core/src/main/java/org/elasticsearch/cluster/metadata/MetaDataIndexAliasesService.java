@@ -23,15 +23,14 @@ import com.carrotsearch.hppc.cursors.ObjectCursor;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.admin.indices.alias.IndicesAliasesClusterStateUpdateRequest;
 import org.elasticsearch.cluster.AckedClusterStateUpdateTask;
+import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ack.ClusterStateUpdateResponse;
-import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.index.Index;
 import org.elasticsearch.index.IndexNotFoundException;
 import org.elasticsearch.index.IndexService;
 import org.elasticsearch.index.NodeServicesProvider;
@@ -75,7 +74,7 @@ public class MetaDataIndexAliasesService extends AbstractComponent {
 
             @Override
             public ClusterState execute(final ClusterState currentState) {
-                List<Index> indicesToClose = new ArrayList<>();
+                List<String> indicesToClose = new ArrayList<>();
                 Map<String, IndexService> indices = new HashMap<>();
                 try {
                     for (AliasAction aliasAction : request.actions()) {
@@ -115,10 +114,10 @@ public class MetaDataIndexAliasesService extends AbstractComponent {
                                         }
                                         indicesToClose.add(indexMetaData.getIndex());
                                     }
-                                    indices.put(indexMetaData.getIndex().getName(), indexService);
+                                    indices.put(indexMetaData.getIndex(), indexService);
                                 }
 
-                                aliasValidator.validateAliasFilter(aliasAction.alias(), filter, indexService.newQueryShardContext());
+                                aliasValidator.validateAliasFilter(aliasAction.alias(), filter, indexService.getQueryShardContext());
                             }
                             AliasMetaData newAliasMd = AliasMetaData.newAliasMetaDataBuilder(
                                     aliasAction.alias())
@@ -154,7 +153,7 @@ public class MetaDataIndexAliasesService extends AbstractComponent {
                     }
                     return currentState;
                 } finally {
-                    for (Index index : indicesToClose) {
+                    for (String index : indicesToClose) {
                         indicesService.removeIndex(index, "created for alias processing");
                     }
                 }

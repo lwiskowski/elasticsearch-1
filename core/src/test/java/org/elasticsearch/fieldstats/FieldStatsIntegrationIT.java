@@ -20,14 +20,11 @@
 package org.elasticsearch.fieldstats;
 
 import org.apache.lucene.util.BytesRef;
-import org.elasticsearch.Version;
 import org.elasticsearch.action.ActionRequestValidationException;
 import org.elasticsearch.action.fieldstats.FieldStats;
 import org.elasticsearch.action.fieldstats.FieldStatsResponse;
 import org.elasticsearch.action.fieldstats.IndexConstraint;
 import org.elasticsearch.action.index.IndexRequestBuilder;
-import org.elasticsearch.cluster.metadata.IndexMetaData;
-import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.test.ESIntegTestCase;
 
 import java.util.ArrayList;
@@ -50,44 +47,10 @@ public class FieldStatsIntegrationIT extends ESIntegTestCase {
 
     public void testRandom() throws Exception {
         assertAcked(prepareCreate("test").addMapping(
-                    "test",
-                    "string", "type=text",
-                    "date", "type=date",
-                    "double", "type=double",
-                    "float", "type=float",
-                    "long", "type=long",
-                    "integer", "type=integer",
-                    "short", "type=short",
-                    "byte", "type=byte"));
+                "test", "string", "type=string", "date", "type=date", "double", "type=double", "double", "type=double",
+                "float", "type=float", "long", "type=long", "integer", "type=integer", "short", "type=short", "byte", "type=byte"
+        ));
         ensureGreen("test");
-
-        // index=false
-        assertAcked(prepareCreate("test1").addMapping(
-            "test",
-            "string", "type=text,index=false",
-            "date", "type=date,index=false",
-            "double", "type=double,index=false",
-            "float", "type=float,index=false",
-            "long", "type=long,index=false",
-            "integer", "type=integer,index=false",
-            "short", "type=short,index=false",
-            "byte", "type=byte,index=false"
-        ));
-        ensureGreen("test1");
-
-        // no value indexed
-        assertAcked(prepareCreate("test3").addMapping(
-            "test",
-            "string", "type=text,index=false",
-            "date", "type=date,index=false",
-            "double", "type=double,index=false",
-            "float", "type=float,index=false",
-            "long", "type=long,index=false",
-            "integer", "type=integer,index=false",
-            "short", "type=short,index=false",
-            "byte", "type=byte,index=false"
-        ));
-        ensureGreen("test3");
 
         long minByte = Byte.MAX_VALUE;
         long maxByte = Byte.MIN_VALUE;
@@ -97,8 +60,8 @@ public class FieldStatsIntegrationIT extends ESIntegTestCase {
         long maxInt = Integer.MIN_VALUE;
         long minLong = Long.MAX_VALUE;
         long maxLong = Long.MIN_VALUE;
-        double minFloat = Float.MAX_VALUE;
-        double maxFloat = Float.MIN_VALUE;
+        float minFloat = Float.MAX_VALUE;
+        float maxFloat = Float.MIN_VALUE;
         double minDouble = Double.MAX_VALUE;
         double maxDouble = Double.MIN_VALUE;
         String minString = new String(Character.toChars(1114111));
@@ -134,20 +97,12 @@ public class FieldStatsIntegrationIT extends ESIntegTestCase {
             }
 
             request.add(client().prepareIndex("test", "test", Integer.toString(doc))
-                            .setSource("byte", b,
-                                "short", s,
-                                "integer", i,
-                                "long", l,
-                                "float", f,
-                                "double", d,
-                                "string", str)
+                            .setSource("byte", b, "short", s, "integer", i, "long", l, "float", f, "double", d, "string", str)
             );
         }
         indexRandom(true, false, request);
 
-        FieldStatsResponse response = client()
-            .prepareFieldStats()
-            .setFields("byte", "short", "integer", "long", "float", "double", "string").get();
+        FieldStatsResponse response = client().prepareFieldStats().setFields("byte", "short", "integer", "long", "float", "double", "string").get();
         assertAllSuccessful(response);
 
         for (FieldStats stats : response.getAllFieldStats().values()) {
@@ -189,32 +144,32 @@ public class FieldStatsIntegrationIT extends ESIntegTestCase {
         // default:
         FieldStatsResponse response = client().prepareFieldStats().setFields("value").get();
         assertAllSuccessful(response);
-        assertThat(response.getAllFieldStats().get("value").getMinValue(), equalTo(-10L));
-        assertThat(response.getAllFieldStats().get("value").getMaxValue(), equalTo(300L));
+        assertThat(response.getAllFieldStats().get("value").getMinValue(), equalTo(-10l));
+        assertThat(response.getAllFieldStats().get("value").getMaxValue(), equalTo(300l));
         assertThat(response.getIndicesMergedFieldStats().size(), equalTo(1));
-        assertThat(response.getIndicesMergedFieldStats().get("_all").get("value").getMinValue(), equalTo(-10L));
-        assertThat(response.getIndicesMergedFieldStats().get("_all").get("value").getMaxValue(), equalTo(300L));
+        assertThat(response.getIndicesMergedFieldStats().get("_all").get("value").getMinValue(), equalTo(-10l));
+        assertThat(response.getIndicesMergedFieldStats().get("_all").get("value").getMaxValue(), equalTo(300l));
 
         // Level: cluster
         response = client().prepareFieldStats().setFields("value").setLevel("cluster").get();
         assertAllSuccessful(response);
-        assertThat(response.getAllFieldStats().get("value").getMinValue(), equalTo(-10L));
-        assertThat(response.getAllFieldStats().get("value").getMaxValue(), equalTo(300L));
+        assertThat(response.getAllFieldStats().get("value").getMinValue(), equalTo(-10l));
+        assertThat(response.getAllFieldStats().get("value").getMaxValue(), equalTo(300l));
         assertThat(response.getIndicesMergedFieldStats().size(), equalTo(1));
-        assertThat(response.getIndicesMergedFieldStats().get("_all").get("value").getMinValue(), equalTo(-10L));
-        assertThat(response.getIndicesMergedFieldStats().get("_all").get("value").getMaxValue(), equalTo(300L));
+        assertThat(response.getIndicesMergedFieldStats().get("_all").get("value").getMinValue(), equalTo(-10l));
+        assertThat(response.getIndicesMergedFieldStats().get("_all").get("value").getMaxValue(), equalTo(300l));
 
         // Level: indices
         response = client().prepareFieldStats().setFields("value").setLevel("indices").get();
         assertAllSuccessful(response);
         assertThat(response.getAllFieldStats(), nullValue());
         assertThat(response.getIndicesMergedFieldStats().size(), equalTo(3));
-        assertThat(response.getIndicesMergedFieldStats().get("test1").get("value").getMinValue(), equalTo(-10L));
-        assertThat(response.getIndicesMergedFieldStats().get("test1").get("value").getMaxValue(), equalTo(100L));
-        assertThat(response.getIndicesMergedFieldStats().get("test2").get("value").getMinValue(), equalTo(101L));
-        assertThat(response.getIndicesMergedFieldStats().get("test2").get("value").getMaxValue(), equalTo(200L));
-        assertThat(response.getIndicesMergedFieldStats().get("test3").get("value").getMinValue(), equalTo(201L));
-        assertThat(response.getIndicesMergedFieldStats().get("test3").get("value").getMaxValue(), equalTo(300L));
+        assertThat(response.getIndicesMergedFieldStats().get("test1").get("value").getMinValue(), equalTo(-10l));
+        assertThat(response.getIndicesMergedFieldStats().get("test1").get("value").getMaxValue(), equalTo(100l));
+        assertThat(response.getIndicesMergedFieldStats().get("test2").get("value").getMinValue(), equalTo(101l));
+        assertThat(response.getIndicesMergedFieldStats().get("test2").get("value").getMaxValue(), equalTo(200l));
+        assertThat(response.getIndicesMergedFieldStats().get("test3").get("value").getMinValue(), equalTo(201l));
+        assertThat(response.getIndicesMergedFieldStats().get("test3").get("value").getMaxValue(), equalTo(300l));
 
         // Illegal level option:
         try {
@@ -225,79 +180,35 @@ public class FieldStatsIntegrationIT extends ESIntegTestCase {
         }
     }
 
-    public void testIncompatibleFieldTypesSingleField() {
+    public void testIncompatibleFieldTypes() {
         assertAcked(prepareCreate("test1").addMapping(
-            "test", "value", "type=long"
+                "test", "value", "type=long"
         ));
         assertAcked(prepareCreate("test2").addMapping(
-            "test", "value", "type=text"
+                "test", "value", "type=string"
         ));
         ensureGreen("test1", "test2");
 
-        client().prepareIndex("test1", "test").setSource("value", 1L).get();
-        client().prepareIndex("test1", "test").setSource("value", 2L).get();
+        client().prepareIndex("test1", "test").setSource("value", 1l).get();
+        client().prepareIndex("test1", "test").setSource("value", 2l).get();
         client().prepareIndex("test2", "test").setSource("value", "a").get();
         client().prepareIndex("test2", "test").setSource("value", "b").get();
         refresh();
 
-        FieldStatsResponse response = client().prepareFieldStats().setFields("value", "value2").get();
-        assertAllSuccessful(response);
-        assertThat(response.getIndicesMergedFieldStats().size(), equalTo(1));
-        assertThat(response.getIndicesMergedFieldStats().get("_all").size(), equalTo(0));
-        assertThat(response.getConflicts().size(), equalTo(1));
-        assertThat(response.getConflicts().get("value"),
-            equalTo("Field [value] of type [text] conflicts with existing field of type [whole-number] " +
-                "in other index."));
+        try {
+            client().prepareFieldStats().setFields("value").get();
+            fail();
+        } catch (IllegalStateException e){
+            assertThat(e.getMessage(), containsString("trying to merge the field stats of field [value]"));
+        }
 
-        response = client().prepareFieldStats().setFields("value").setLevel("indices").get();
+        FieldStatsResponse response = client().prepareFieldStats().setFields("value").setLevel("indices").get();
         assertAllSuccessful(response);
         assertThat(response.getIndicesMergedFieldStats().size(), equalTo(2));
-        assertThat(response.getIndicesMergedFieldStats().get("test1").get("value").getMinValue(), equalTo(1L));
-        assertThat(response.getIndicesMergedFieldStats().get("test1").get("value").getMaxValue(), equalTo(2L));
-        assertThat(response.getIndicesMergedFieldStats().get("test2").get("value").getMinValue(),
-            equalTo(new BytesRef("a")));
-        assertThat(response.getIndicesMergedFieldStats().get("test2").get("value").getMaxValue(),
-            equalTo(new BytesRef("b")));
-    }
-
-    @AwaitsFix(bugUrl="https://issues.apache.org/jira/browse/LUCENE-7257")
-    public void testIncompatibleFieldTypesMultipleFields() {
-        assertAcked(prepareCreate("test1").addMapping(
-                "test", "value", "type=long", "value2", "type=long"
-        ));
-        assertAcked(prepareCreate("test2").addMapping(
-                "test", "value", "type=text", "value2", "type=long"
-        ));
-        ensureGreen("test1", "test2");
-
-        client().prepareIndex("test1", "test").setSource("value", 1L, "value2", 1L).get();
-        client().prepareIndex("test1", "test").setSource("value", 2L).get();
-        client().prepareIndex("test2", "test").setSource("value", "a").get();
-        client().prepareIndex("test2", "test").setSource("value", "b").get();
-        refresh();
-
-        FieldStatsResponse response = client().prepareFieldStats().setFields("value", "value2").get();
-        assertAllSuccessful(response);
-        assertThat(response.getIndicesMergedFieldStats().size(), equalTo(1));
-        assertThat(response.getIndicesMergedFieldStats().get("_all").size(), equalTo(1));
-        assertThat(response.getIndicesMergedFieldStats().get("_all").get("value2").getMinValue(), equalTo(1L));
-        assertThat(response.getIndicesMergedFieldStats().get("_all").get("value2").getMaxValue(), equalTo(1L));
-        assertThat(response.getConflicts().size(), equalTo(1));
-        assertThat(response.getConflicts().get("value"),
-            equalTo("Field [value] of type [text] conflicts with existing field of type [whole-number] " +
-                "in other index."));
-
-        response = client().prepareFieldStats().setFields("value", "value2").setLevel("indices").get();
-        assertAllSuccessful(response);
-        assertThat(response.getIndicesMergedFieldStats().size(), equalTo(2));
-        assertThat(response.getIndicesMergedFieldStats().get("test1").get("value").getMinValue(), equalTo(1L));
-        assertThat(response.getIndicesMergedFieldStats().get("test1").get("value").getMaxValue(), equalTo(2L));
-        assertThat(response.getIndicesMergedFieldStats().get("test1").get("value2").getMinValue(), equalTo(1L));
-        assertThat(response.getIndicesMergedFieldStats().get("test1").get("value2").getMaxValue(), equalTo(1L));
-        assertThat(response.getIndicesMergedFieldStats().get("test2").get("value").getMinValue(),
-            equalTo(new BytesRef("a")));
-        assertThat(response.getIndicesMergedFieldStats().get("test2").get("value").getMaxValue(),
-            equalTo(new BytesRef("b")));
+        assertThat(response.getIndicesMergedFieldStats().get("test1").get("value").getMinValue(), equalTo(1l));
+        assertThat(response.getIndicesMergedFieldStats().get("test1").get("value").getMaxValue(), equalTo(2l));
+        assertThat(response.getIndicesMergedFieldStats().get("test2").get("value").getMinValue(), equalTo(new BytesRef("a")));
+        assertThat(response.getIndicesMergedFieldStats().get("test2").get("value").getMaxValue(), equalTo(new BytesRef("b")));
     }
 
     public void testFieldStatsFiltering() throws Exception {
@@ -318,15 +229,14 @@ public class FieldStatsIntegrationIT extends ESIntegTestCase {
 
         FieldStatsResponse response = client().prepareFieldStats()
                 .setFields("value")
-                .setIndexContraints(new IndexConstraint("value", MIN, GTE, "200"),
-                    new IndexConstraint("value", MAX , LTE, "300"))
+                .setIndexContraints(new IndexConstraint("value", MIN, GTE, "200"), new IndexConstraint("value", MAX , LTE, "300"))
                 .setLevel("indices")
                 .get();
         assertAllSuccessful(response);
         assertThat(response.getAllFieldStats(), nullValue());
         assertThat(response.getIndicesMergedFieldStats().size(), equalTo(1));
-        assertThat(response.getIndicesMergedFieldStats().get("test3").get("value").getMinValue(), equalTo(201L));
-        assertThat(response.getIndicesMergedFieldStats().get("test3").get("value").getMaxValue(), equalTo(300L));
+        assertThat(response.getIndicesMergedFieldStats().get("test3").get("value").getMinValue(), equalTo(201l));
+        assertThat(response.getIndicesMergedFieldStats().get("test3").get("value").getMaxValue(), equalTo(300l));
 
         response = client().prepareFieldStats()
                 .setFields("value")
@@ -336,10 +246,10 @@ public class FieldStatsIntegrationIT extends ESIntegTestCase {
         assertAllSuccessful(response);
         assertThat(response.getAllFieldStats(), nullValue());
         assertThat(response.getIndicesMergedFieldStats().size(), equalTo(2));
-        assertThat(response.getIndicesMergedFieldStats().get("test1").get("value").getMinValue(), equalTo(-10L));
-        assertThat(response.getIndicesMergedFieldStats().get("test1").get("value").getMaxValue(), equalTo(100L));
-        assertThat(response.getIndicesMergedFieldStats().get("test2").get("value").getMinValue(), equalTo(101L));
-        assertThat(response.getIndicesMergedFieldStats().get("test2").get("value").getMaxValue(), equalTo(200L));
+        assertThat(response.getIndicesMergedFieldStats().get("test1").get("value").getMinValue(), equalTo(-10l));
+        assertThat(response.getIndicesMergedFieldStats().get("test1").get("value").getMaxValue(), equalTo(100l));
+        assertThat(response.getIndicesMergedFieldStats().get("test2").get("value").getMinValue(), equalTo(101l));
+        assertThat(response.getIndicesMergedFieldStats().get("test2").get("value").getMaxValue(), equalTo(200l));
 
         response = client().prepareFieldStats()
                 .setFields("value")
@@ -349,15 +259,14 @@ public class FieldStatsIntegrationIT extends ESIntegTestCase {
         assertAllSuccessful(response);
         assertThat(response.getAllFieldStats(), nullValue());
         assertThat(response.getIndicesMergedFieldStats().size(), equalTo(2));
-        assertThat(response.getIndicesMergedFieldStats().get("test2").get("value").getMinValue(), equalTo(101L));
-        assertThat(response.getIndicesMergedFieldStats().get("test2").get("value").getMaxValue(), equalTo(200L));
-        assertThat(response.getIndicesMergedFieldStats().get("test3").get("value").getMinValue(), equalTo(201L));
-        assertThat(response.getIndicesMergedFieldStats().get("test3").get("value").getMaxValue(), equalTo(300L));
+        assertThat(response.getIndicesMergedFieldStats().get("test2").get("value").getMinValue(), equalTo(101l));
+        assertThat(response.getIndicesMergedFieldStats().get("test2").get("value").getMaxValue(), equalTo(200l));
+        assertThat(response.getIndicesMergedFieldStats().get("test3").get("value").getMinValue(), equalTo(201l));
+        assertThat(response.getIndicesMergedFieldStats().get("test3").get("value").getMaxValue(), equalTo(300l));
 
         response = client().prepareFieldStats()
                 .setFields("value")
-                .setIndexContraints(new IndexConstraint("value", MIN, GTE, "-20"),
-                    new IndexConstraint("value", MAX, LT, "-10"))
+                .setIndexContraints(new IndexConstraint("value", MIN, GTE, "-20"), new IndexConstraint("value", MAX, LT, "-10"))
                 .setLevel("indices")
                 .get();
         assertAllSuccessful(response);
@@ -366,8 +275,7 @@ public class FieldStatsIntegrationIT extends ESIntegTestCase {
 
         response = client().prepareFieldStats()
                 .setFields("value")
-                .setIndexContraints(new IndexConstraint("value", MIN, GTE, "-100"),
-                    new IndexConstraint("value", MAX, LTE, "-20"))
+                .setIndexContraints(new IndexConstraint("value", MIN, GTE, "-100"), new IndexConstraint("value", MAX, LTE, "-20"))
                 .setLevel("indices")
                 .get();
         assertAllSuccessful(response);
@@ -376,27 +284,25 @@ public class FieldStatsIntegrationIT extends ESIntegTestCase {
 
         response = client().prepareFieldStats()
                 .setFields("value")
-                .setIndexContraints(new IndexConstraint("value", MIN, GTE, "100"),
-                    new IndexConstraint("value", MAX, LTE, "200"))
+                .setIndexContraints(new IndexConstraint("value", MIN, GTE, "100"), new IndexConstraint("value", MAX, LTE, "200"))
                 .setLevel("indices")
                 .get();
         assertAllSuccessful(response);
         assertThat(response.getAllFieldStats(), nullValue());
         assertThat(response.getIndicesMergedFieldStats().size(), equalTo(1));
-        assertThat(response.getIndicesMergedFieldStats().get("test2").get("value").getMinValue(), equalTo(101L));
-        assertThat(response.getIndicesMergedFieldStats().get("test2").get("value").getMaxValue(), equalTo(200L));
+        assertThat(response.getIndicesMergedFieldStats().get("test2").get("value").getMinValue(), equalTo(101l));
+        assertThat(response.getIndicesMergedFieldStats().get("test2").get("value").getMaxValue(), equalTo(200l));
 
         response = client().prepareFieldStats()
                 .setFields("value")
-                .setIndexContraints(new IndexConstraint("value", MIN, GTE, "150"),
-                    new IndexConstraint("value", MAX, LTE, "300"))
+                .setIndexContraints(new IndexConstraint("value", MIN, GTE, "150"), new IndexConstraint("value", MAX, LTE, "300"))
                 .setLevel("indices")
                 .get();
         assertAllSuccessful(response);
         assertThat(response.getAllFieldStats(), nullValue());
         assertThat(response.getIndicesMergedFieldStats().size(), equalTo(1));
-        assertThat(response.getIndicesMergedFieldStats().get("test3").get("value").getMinValue(), equalTo(201L));
-        assertThat(response.getIndicesMergedFieldStats().get("test3").get("value").getMaxValue(), equalTo(300L));
+        assertThat(response.getIndicesMergedFieldStats().get("test3").get("value").getMinValue(), equalTo(201l));
+        assertThat(response.getIndicesMergedFieldStats().get("test3").get("value").getMaxValue(), equalTo(300l));
     }
 
     public void testIncompatibleFilter() throws Exception {
@@ -414,38 +320,6 @@ public class FieldStatsIntegrationIT extends ESIntegTestCase {
         } catch (IllegalArgumentException e) {
             assertThat(e.getMessage(), equalTo("For input string: \"abc\""));
         }
-    }
-
-    public void testWildcardFields() throws Exception {
-        assertAcked(prepareCreate("test1").addMapping(
-            "test", "foo", "type=long", "foobar", "type=text", "barfoo", "type=long"
-        ));
-        assertAcked(prepareCreate("test2").addMapping(
-            "test", "foobar", "type=text", "barfoo", "type=long"
-        ));
-        ensureGreen("test1", "test2");
-        FieldStatsResponse response = client().prepareFieldStats()
-            .setFields("foo*")
-            .get();
-        assertAllSuccessful(response);
-        assertThat(response.getAllFieldStats().size(), equalTo(2));
-        assertThat(response.getAllFieldStats().get("foo").getMinValue(), nullValue());
-        assertThat(response.getAllFieldStats().get("foobar").getMaxValue(), nullValue());
-
-        response = client().prepareFieldStats()
-            .setFields("foo*")
-            .setLevel("indices")
-            .get();
-        assertAllSuccessful(response);
-        assertThat(response.getIndicesMergedFieldStats().size(), equalTo(2));
-        assertThat(response.getIndicesMergedFieldStats().get("test1").size(), equalTo(2));
-        assertThat(response.getIndicesMergedFieldStats().get("test1").get("foo").getMinValue(), nullValue());
-        assertThat(response.getIndicesMergedFieldStats().get("test1").get("foo").getMaxValue(), nullValue());
-        assertThat(response.getIndicesMergedFieldStats().get("test1").get("foobar").getMinValue(), nullValue());
-        assertThat(response.getIndicesMergedFieldStats().get("test1").get("foobar").getMaxValue(), nullValue());
-        assertThat(response.getIndicesMergedFieldStats().get("test2").size(), equalTo(1));
-        assertThat(response.getIndicesMergedFieldStats().get("test2").get("foobar").getMinValue(), nullValue());
-        assertThat(response.getIndicesMergedFieldStats().get("test2").get("foobar").getMaxValue(), nullValue());
     }
 
     private void indexRange(String index, long from, long to) throws Exception {

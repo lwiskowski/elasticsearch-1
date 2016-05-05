@@ -41,7 +41,7 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.Map;
 
-import static org.elasticsearch.common.xcontent.support.XContentMapValues.lenientNodeBooleanValue;
+import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeBooleanValue;
 
 /**
  * Mapping configuration for a type.
@@ -84,10 +84,20 @@ public class MappingMetaData extends AbstractDiffable<MappingMetaData> {
 
         private static final FormatDateTimeFormatter EPOCH_MILLIS_PARSER = Joda.forPattern("epoch_millis");
 
-        public static String parseStringTimestamp(String timestampAsString, FormatDateTimeFormatter dateTimeFormatter) throws TimestampParsingException {
+        public static String parseStringTimestamp(String timestampAsString, FormatDateTimeFormatter dateTimeFormatter,
+                                                  Version version) throws TimestampParsingException {
             try {
-                return Long.toString(dateTimeFormatter.parser().parseMillis(timestampAsString));
+                // no need for unix timestamp parsing in 2.x
+                FormatDateTimeFormatter formatter = version.onOrAfter(Version.V_2_0_0_beta1) ? dateTimeFormatter : EPOCH_MILLIS_PARSER;
+                return Long.toString(formatter.parser().parseMillis(timestampAsString));
             } catch (RuntimeException e) {
+                if (version.before(Version.V_2_0_0_beta1)) {
+                    try {
+                        return Long.toString(dateTimeFormatter.parser().parseMillis(timestampAsString));
+                    } catch (RuntimeException e1) {
+                        throw new TimestampParsingException(timestampAsString, e1);
+                    }
+                }
                 throw new TimestampParsingException(timestampAsString, e);
             }
         }
@@ -224,10 +234,10 @@ public class MappingMetaData extends AbstractDiffable<MappingMetaData> {
             boolean required = false;
             Map<String, Object> routingNode = (Map<String, Object>) withoutType.get("_routing");
             for (Map.Entry<String, Object> entry : routingNode.entrySet()) {
-                String fieldName = entry.getKey();
+                String fieldName = Strings.toUnderscoreCase(entry.getKey());
                 Object fieldNode = entry.getValue();
                 if (fieldName.equals("required")) {
-                    required = lenientNodeBooleanValue(fieldNode);
+                    required = nodeBooleanValue(fieldNode);
                 }
             }
             this.routing = new Routing(required);
@@ -241,16 +251,16 @@ public class MappingMetaData extends AbstractDiffable<MappingMetaData> {
             Boolean ignoreMissing = null;
             Map<String, Object> timestampNode = (Map<String, Object>) withoutType.get("_timestamp");
             for (Map.Entry<String, Object> entry : timestampNode.entrySet()) {
-                String fieldName = entry.getKey();
+                String fieldName = Strings.toUnderscoreCase(entry.getKey());
                 Object fieldNode = entry.getValue();
                 if (fieldName.equals("enabled")) {
-                    enabled = lenientNodeBooleanValue(fieldNode);
+                    enabled = nodeBooleanValue(fieldNode);
                 } else if (fieldName.equals("format")) {
                     format = fieldNode.toString();
                 } else if (fieldName.equals("default") && fieldNode != null) {
                     defaultTimestamp = fieldNode.toString();
                 } else if (fieldName.equals("ignore_missing")) {
-                    ignoreMissing = lenientNodeBooleanValue(fieldNode);
+                    ignoreMissing = nodeBooleanValue(fieldNode);
                 }
             }
             this.timestamp = new Timestamp(enabled, format, defaultTimestamp, ignoreMissing);

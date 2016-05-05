@@ -23,7 +23,6 @@ import org.apache.lucene.analysis.Analyzer;
 import org.elasticsearch.Version;
 import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.inject.Inject;
-import org.elasticsearch.common.settings.IndexScopedSettings;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.index.IndexSettings;
 import org.elasticsearch.index.analysis.AnalysisService;
@@ -33,7 +32,9 @@ import org.elasticsearch.index.similarity.SimilarityService;
 import org.elasticsearch.indices.mapper.MapperRegistry;
 
 import java.util.Collections;
+import java.util.Set;
 
+import static java.util.Collections.unmodifiableSet;
 import static org.elasticsearch.common.util.set.Sets.newHashSet;
 
 /**
@@ -47,13 +48,11 @@ import static org.elasticsearch.common.util.set.Sets.newHashSet;
 public class MetaDataIndexUpgradeService extends AbstractComponent {
 
     private final MapperRegistry mapperRegistry;
-    private final IndexScopedSettings indexScopedSettings;
 
     @Inject
-    public MetaDataIndexUpgradeService(Settings settings, MapperRegistry mapperRegistry, IndexScopedSettings indexScopedSettings) {
+    public MetaDataIndexUpgradeService(Settings settings, MapperRegistry mapperRegistry) {
         super(settings);
         this.mapperRegistry = mapperRegistry;
-        this.indexScopedSettings = indexScopedSettings;
     }
 
     /**
@@ -66,25 +65,21 @@ public class MetaDataIndexUpgradeService extends AbstractComponent {
     public IndexMetaData upgradeIndexMetaData(IndexMetaData indexMetaData) {
         // Throws an exception if there are too-old segments:
         if (isUpgraded(indexMetaData)) {
-            assert indexMetaData == archiveBrokenIndexSettings(indexMetaData) : "all settings must have been upgraded before";
             return indexMetaData;
         }
         checkSupportedVersion(indexMetaData);
         IndexMetaData newMetaData = indexMetaData;
-        // we have to run this first otherwise in we try to create IndexSettings
-        // with broken settings and fail in checkMappingsCompatibility
-        newMetaData = archiveBrokenIndexSettings(newMetaData);
-        // only run the check with the upgraded settings!!
         checkMappingsCompatibility(newMetaData);
-        return markAsUpgraded(newMetaData);
+        newMetaData = markAsUpgraded(newMetaData);
+        return newMetaData;
     }
 
 
     /**
      * Checks if the index was already opened by this version of Elasticsearch and doesn't require any additional checks.
      */
-    boolean isUpgraded(IndexMetaData indexMetaData) {
-        return indexMetaData.getUpgradedVersion().onOrAfter(Version.CURRENT);
+    private boolean isUpgraded(IndexMetaData indexMetaData) {
+        return indexMetaData.getUpgradedVersion().onOrAfter(Version.V_3_0_0);
     }
 
     /**
@@ -127,10 +122,11 @@ public class MetaDataIndexUpgradeService extends AbstractComponent {
             SimilarityService similarityService = new SimilarityService(indexSettings, Collections.emptyMap());
 
             try (AnalysisService analysisService = new FakeAnalysisService(indexSettings)) {
-                MapperService mapperService = new MapperService(indexSettings, analysisService, similarityService, mapperRegistry, () -> null);
-                for (ObjectCursor<MappingMetaData> cursor : indexMetaData.getMappings().values()) {
-                    MappingMetaData mappingMetaData = cursor.value;
-                    mapperService.merge(mappingMetaData.type(), mappingMetaData.source(), MapperService.MergeReason.MAPPING_RECOVERY, false);
+                try (MapperService mapperService = new MapperService(indexSettings, analysisService, similarityService, mapperRegistry, () -> null)) {
+                    for (ObjectCursor<MappingMetaData> cursor : indexMetaData.getMappings().values()) {
+                        MappingMetaData mappingMetaData = cursor.value;
+                        mapperService.merge(mappingMetaData.type(), mappingMetaData.source(), MapperService.MergeReason.MAPPING_RECOVERY, false);
+                    }
                 }
             }
         } catch (Exception ex) {
@@ -175,13 +171,4 @@ public class MetaDataIndexUpgradeService extends AbstractComponent {
         }
     }
 
-    IndexMetaData archiveBrokenIndexSettings(IndexMetaData indexMetaData) {
-        final Settings settings = indexMetaData.getSettings();
-        final Settings upgrade = indexScopedSettings.archiveUnknownOrBrokenSettings(settings);
-        if (upgrade != settings) {
-            return IndexMetaData.builder(indexMetaData).settings(upgrade).build();
-        } else {
-            return indexMetaData;
-        }
-    }
 }

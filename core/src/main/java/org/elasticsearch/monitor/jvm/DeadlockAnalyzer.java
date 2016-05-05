@@ -79,34 +79,29 @@ public class DeadlockAnalyzer {
         Set<LinkedHashSet<ThreadInfo>> cycles = new HashSet<>();
         for (Map.Entry<Long, ThreadInfo> entry : threadInfoMap.entrySet()) {
             LinkedHashSet<ThreadInfo> cycle = new LinkedHashSet<>();
-            for (ThreadInfo t = entry.getValue(); !cycle.contains(t); t = threadInfoMap.get(Long.valueOf(t.getLockOwnerId()))) {
+            for (ThreadInfo t = entry.getValue(); !cycle.contains(t); t = threadInfoMap.get(Long.valueOf(t.getLockOwnerId())))
                 cycle.add(t);
-            }
 
-            if (!cycles.contains(cycle)) {
+            if (!cycles.contains(cycle))
                 cycles.add(cycle);
-            }
         }
         return cycles;
     }
 
 
-    private Set<LinkedHashSet<ThreadInfo>> calculateCycleDeadlockChains(Map<Long, ThreadInfo> threadInfoMap,
-            Set<LinkedHashSet<ThreadInfo>> cycles) {
+    private Set<LinkedHashSet<ThreadInfo>> calculateCycleDeadlockChains(Map<Long, ThreadInfo> threadInfoMap, Set<LinkedHashSet<ThreadInfo>> cycles) {
         ThreadInfo allThreads[] = threadBean.getThreadInfo(threadBean.getAllThreadIds());
         Set<LinkedHashSet<ThreadInfo>> deadlockChain = new HashSet<>();
         Set<Long> knownDeadlockedThreads = threadInfoMap.keySet();
         for (ThreadInfo threadInfo : allThreads) {
             Thread.State state = threadInfo.getThreadState();
             if (state == Thread.State.BLOCKED && !knownDeadlockedThreads.contains(threadInfo.getThreadId())) {
-                for (LinkedHashSet<ThreadInfo> cycle : cycles) {
+                for (LinkedHashSet cycle : cycles) {
                     if (cycle.contains(threadInfoMap.get(Long.valueOf(threadInfo.getLockOwnerId())))) {
                         LinkedHashSet<ThreadInfo> chain = new LinkedHashSet<>();
-                        ThreadInfo node = threadInfo;
-                        while (!chain.contains(node)) {
+                        for (ThreadInfo node = threadInfo; !chain.contains(node); node = threadInfoMap.get(Long.valueOf(node.getLockOwnerId())))
                             chain.add(node);
-                            node = threadInfoMap.get(Long.valueOf(node.getLockOwnerId()));
-                        }
+
                         deadlockChain.add(chain);
                     }
                 }
@@ -140,12 +135,10 @@ public class DeadlockAnalyzer {
             for (int x = 0; x < members.length; x++) {
                 ThreadInfo ti = members[x];
                 sb.append(ti.getThreadName());
-                if (x < members.length) {
+                if (x < members.length)
                     sb.append(" > ");
-                }
-                if (x == members.length - 1) {
+                if (x == members.length - 1)
                     sb.append(ti.getLockOwnerName());
-                }
                 builder.add(ti.getThreadId());
             }
             this.description = sb.toString();

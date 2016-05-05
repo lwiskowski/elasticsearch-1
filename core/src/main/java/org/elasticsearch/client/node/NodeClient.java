@@ -27,6 +27,7 @@ import org.elasticsearch.action.ActionResponse;
 import org.elasticsearch.action.GenericAction;
 import org.elasticsearch.action.support.TransportAction;
 import org.elasticsearch.client.support.AbstractClient;
+import org.elasticsearch.client.support.Headers;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.threadpool.ThreadPool;
@@ -43,8 +44,8 @@ public class NodeClient extends AbstractClient {
     private final Map<GenericAction, TransportAction> actions;
 
     @Inject
-    public NodeClient(Settings settings, ThreadPool threadPool, Map<GenericAction, TransportAction> actions) {
-        super(settings, threadPool);
+    public NodeClient(Settings settings, ThreadPool threadPool, Headers headers, Map<GenericAction, TransportAction> actions) {
+        super(settings, threadPool, headers);
         this.actions = unmodifiableMap(actions);
     }
 

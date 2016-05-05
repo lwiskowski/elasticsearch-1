@@ -25,32 +25,35 @@ import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Streamable;
-import org.elasticsearch.common.io.stream.Writeable;
 import org.elasticsearch.common.lucene.Lucene;
 
 import java.io.IOException;
-import java.util.Objects;
 
 /**
  *
  */
-public class StoreFileMetaData implements Writeable {
+public class StoreFileMetaData implements Streamable {
 
-    public static final Version FIRST_LUCENE_CHECKSUM_VERSION = Version.LUCENE_5_0_0;
-
-    private final String name;
+    private String name;
 
     // the actual file size on "disk", if compressed, the compressed size
-    private final long length;
+    private long length;
 
-    private final String checksum;
+    private String checksum;
 
-    private final Version writtenBy;
+    private Version writtenBy;
 
-    private final BytesRef hash;
+    private BytesRef hash;
+
+    private StoreFileMetaData() {
+    }
+
+    public StoreFileMetaData(String name, long length) {
+        this(name, length, null);
+    }
 
     public StoreFileMetaData(String name, long length, String checksum) {
-        this(name, length, checksum, FIRST_LUCENE_CHECKSUM_VERSION);
+        this(name, length, checksum, null, null);
     }
 
     public StoreFileMetaData(String name, long length, String checksum, Version writtenBy) {
@@ -58,10 +61,6 @@ public class StoreFileMetaData implements Writeable {
     }
 
     public StoreFileMetaData(String name, long length, String checksum, Version writtenBy, BytesRef hash) {
-        assert writtenBy != null && writtenBy.onOrAfter(FIRST_LUCENE_CHECKSUM_VERSION) : "index version less that "
-            + FIRST_LUCENE_CHECKSUM_VERSION + " are not supported but got: " + writtenBy;
-        Objects.requireNonNull(writtenBy, "writtenBy must not be null");
-        Objects.requireNonNull(checksum, "checksum must not be null");
         this.name = name;
         this.length = length;
         this.checksum = checksum;
@@ -69,26 +68,6 @@ public class StoreFileMetaData implements Writeable {
         this.hash = hash == null ? new BytesRef() : hash;
     }
 
-    /**
-     * Read from a stream.
-     */
-    public StoreFileMetaData(StreamInput in) throws IOException {
-        name = in.readString();
-        length = in.readVLong();
-        checksum = in.readString();
-        // TODO Why not Version.parse?
-        writtenBy = Lucene.parseVersionLenient(in.readString(), FIRST_LUCENE_CHECKSUM_VERSION);
-        hash = in.readBytesRef();
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeString(name);
-        out.writeVLong(length);
-        out.writeString(checksum);
-        out.writeString(writtenBy.toString());
-        out.writeBytesRef(hash);
-    }
 
     /**
      * Returns the name of this file
@@ -106,8 +85,10 @@ public class StoreFileMetaData implements Writeable {
 
     /**
      * Returns a string representation of the files checksum. Since Lucene 4.8 this is a CRC32 checksum written
-     * by lucene.
+     * by lucene. Previously we use Adler32 on top of Lucene as the checksum algorithm, if {@link #hasLegacyChecksum()} returns
+     * <code>true</code> this is a Adler32 checksum.
      */
+    @Nullable
     public String checksum() {
         return this.checksum;
     }
@@ -123,9 +104,34 @@ public class StoreFileMetaData implements Writeable {
         return length == other.length && checksum.equals(other.checksum) && hash.equals(other.hash);
     }
 
+    public static StoreFileMetaData readStoreFileMetaData(StreamInput in) throws IOException {
+        StoreFileMetaData md = new StoreFileMetaData();
+        md.readFrom(in);
+        return md;
+    }
+
     @Override
     public String toString() {
         return "name [" + name + "], length [" + length + "], checksum [" + checksum + "], writtenBy [" + writtenBy + "]" ;
+    }
+
+    @Override
+    public void readFrom(StreamInput in) throws IOException {
+        name = in.readString();
+        length = in.readVLong();
+        checksum = in.readOptionalString();
+        String versionString = in.readOptionalString();
+        writtenBy = Lucene.parseVersionLenient(versionString, null);
+        hash = in.readBytesRef();
+    }
+
+    @Override
+    public void writeTo(StreamOutput out) throws IOException {
+        out.writeString(name);
+        out.writeVLong(length);
+        out.writeOptionalString(checksum);
+        out.writeOptionalString(writtenBy == null ? null : writtenBy.toString());
+        out.writeBytesRef(hash);
     }
 
     /**
@@ -133,6 +139,14 @@ public class StoreFileMetaData implements Writeable {
      */
     public Version writtenBy() {
         return writtenBy;
+    }
+
+    /**
+     * Returns <code>true</code>  iff the checksum is not <code>null</code> and if the file has NOT been written by
+     * a Lucene version greater or equal to Lucene 4.8
+     */
+    public boolean hasLegacyChecksum() {
+        return checksum != null && (writtenBy == null || writtenBy.onOrAfter(Version.LUCENE_4_8) == false);
     }
 
     /**

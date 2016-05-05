@@ -28,7 +28,7 @@ curl -XGET 'localhost:9200/_analyze' -d '
 --------------------------------------------------
 
 Or by building a custom transient analyzer out of tokenizers,
-token filters and char filters. Token filters can use the shorter 'filter'
+token filters and char filters. Token filters can use the shorter 'filters'
 parameter name:
 
 [source,js]
@@ -36,20 +36,18 @@ parameter name:
 curl -XGET 'localhost:9200/_analyze' -d '
 {
   "tokenizer" : "keyword",
-  "filter" : ["lowercase"],
+  "filters" : ["lowercase"],
   "text" : "this is a test"
 }'
 
 curl -XGET 'localhost:9200/_analyze' -d '
 {
   "tokenizer" : "keyword",
-  "token_filter" : ["lowercase"],
-  "char_filter" : ["html_strip"],
+  "token_filters" : ["lowercase"],
+  "char_filters" : ["html_strip"],
   "text" : "this is a <b>test</b>"
 }'
 --------------------------------------------------
-
-deprecated[5.0.0, Use `filter`/`token_filter`/`char_filter` instead of `filters`/`token_filters`/`char_filters`]
 
 It can also run against a specific index:
 
@@ -92,7 +90,7 @@ All parameters can also supplied as request parameters. For example:
 
 [source,js]
 --------------------------------------------------
-curl -XGET 'localhost:9200/_analyze?tokenizer=keyword&filter=lowercase&text=this+is+a+test'
+curl -XGET 'localhost:9200/_analyze?tokenizer=keyword&filters=lowercase&text=this+is+a+test'
 --------------------------------------------------
 
 For backwards compatibility, we also accept the text parameter as the body of the request,
@@ -100,7 +98,7 @@ provided it doesn't start with `{` :
 
 [source,js]
 --------------------------------------------------
-curl -XGET 'localhost:9200/_analyze?tokenizer=keyword&token_filter=lowercase&char_filter=html_strip' -d 'this is a <b>test</b>'
+curl -XGET 'localhost:9200/_analyze?tokenizer=keyword&token_filters=lowercase&char_filters=html_strip' -d 'this is a <b>test</b>'
 --------------------------------------------------
 
 === Explain Analyze
@@ -115,7 +113,7 @@ experimental[The format of the additional detail information is experimental and
 GET test/_analyze
 {
   "tokenizer" : "standard",
-  "token_filter" : ["snowball"],
+  "token_filters" : ["snowball"],
   "text" : "detailed output",
   "explain" : true,
   "attributes" : ["keyword"] <1>

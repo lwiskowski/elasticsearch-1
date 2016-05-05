@@ -65,7 +65,7 @@ public class NodesStatsResponse extends BaseNodesResponse<NodeStats> implements 
 
         builder.startObject("nodes");
         for (NodeStats nodeStats : this) {
-            builder.startObject(nodeStats.getNode().getId());
+            builder.startObject(nodeStats.getNode().id(), XContentBuilder.FieldCaseConversion.NONE);
             builder.field("timestamp", nodeStats.getTimestamp());
             nodeStats.toXContent(builder, params);
 

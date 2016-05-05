@@ -27,7 +27,7 @@ import java.io.IOException;
 /**
  *
  */
-public enum SpatialStrategy implements Writeable {
+public enum SpatialStrategy implements Writeable<SpatialStrategy> {
 
     TERM("term"),
     RECURSIVE("recursive");
@@ -42,7 +42,8 @@ public enum SpatialStrategy implements Writeable {
         return strategyName;
     }
 
-    public static SpatialStrategy readFromStream(StreamInput in) throws IOException {
+    @Override
+    public SpatialStrategy readFrom(StreamInput in) throws IOException {
         int ordinal = in.readVInt();
         if (ordinal < 0 || ordinal >= values().length) {
             throw new IOException("Unknown SpatialStrategy ordinal [" + ordinal + "]");

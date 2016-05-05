@@ -35,8 +35,7 @@ import org.elasticsearch.search.aggregations.bucket.AbstractTermsTestCase;
 import org.elasticsearch.search.aggregations.bucket.histogram.DateHistogramInterval;
 import org.elasticsearch.search.aggregations.bucket.histogram.Histogram;
 import org.elasticsearch.search.aggregations.bucket.terms.Terms;
-import org.elasticsearch.search.aggregations.bucket.terms.TermsAggregatorBuilder;
-import org.elasticsearch.search.aggregations.bucket.terms.support.IncludeExclude;
+import org.elasticsearch.search.aggregations.bucket.terms.TermsBuilder;
 import org.elasticsearch.test.ESIntegTestCase;
 import org.joda.time.DateTime;
 import org.joda.time.DateTimeZone;
@@ -56,7 +55,6 @@ import static org.elasticsearch.common.xcontent.XContentFactory.jsonBuilder;
 import static org.elasticsearch.search.aggregations.AggregationBuilders.dateHistogram;
 import static org.elasticsearch.search.aggregations.AggregationBuilders.histogram;
 import static org.elasticsearch.search.aggregations.AggregationBuilders.terms;
-import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAllSuccessful;
 
 
@@ -74,8 +72,7 @@ public class MinDocCountTests extends AbstractTermsTestCase {
 
     @Override
     public void setupSuiteScopeCluster() throws Exception {
-        assertAcked(client().admin().indices().prepareCreate("idx")
-                .addMapping("type", "s", "type=keyword").get());
+        createIndex("idx");
 
         cardinality = randomIntBetween(8, 30);
         final List<IndexRequestBuilder> indexRequests = new ArrayList<>();
@@ -84,7 +81,7 @@ public class MinDocCountTests extends AbstractTermsTestCase {
         for (int i = 0; i < cardinality; ++i) {
             String stringTerm;
             do {
-                stringTerm = RandomStrings.randomAsciiOfLength(random(), 8);
+                stringTerm = RandomStrings.randomAsciiOfLength(getRandom(), 8);
             } while (!stringTerms.add(stringTerm));
             long longTerm;
             do {
@@ -113,17 +110,17 @@ public class MinDocCountTests extends AbstractTermsTestCase {
     private enum Script {
         NO {
             @Override
-            TermsAggregatorBuilder apply(TermsAggregatorBuilder builder, String field) {
+            TermsBuilder apply(TermsBuilder builder, String field) {
                 return builder.field(field);
             }
         },
         YES {
             @Override
-            TermsAggregatorBuilder apply(TermsAggregatorBuilder builder, String field) {
+            TermsBuilder apply(TermsBuilder builder, String field) {
                 return builder.script(new org.elasticsearch.script.Script("doc['" + field + "'].values"));
             }
         };
-        abstract TermsAggregatorBuilder apply(TermsAggregatorBuilder builder, String field);
+        abstract TermsBuilder apply(TermsBuilder builder, String field);
     }
 
     // check that terms2 is a subset of terms1
@@ -300,7 +297,7 @@ public class MinDocCountTests extends AbstractTermsTestCase {
                             .executionHint(randomExecutionHint())
                             .order(order)
                             .size(size)
-                            .includeExclude(include == null ? null : new IncludeExclude(include, null))
+                            .include(include)
                             .shardSize(cardinality + randomInt(10))
                             .minDocCount(minDocCount)).request();
             final SearchResponse response = client().search(request).get();
@@ -380,7 +377,7 @@ public class MinDocCountTests extends AbstractTermsTestCase {
         final SearchResponse allResponse = client().prepareSearch("idx").setTypes("type")
                 .setSize(0)
                 .setQuery(QUERY)
-                .addAggregation(dateHistogram("histo").field("date").dateHistogramInterval(DateHistogramInterval.DAY).order(order).minDocCount(0))
+                .addAggregation(dateHistogram("histo").field("date").interval(DateHistogramInterval.DAY).order(order).minDocCount(0))
                 .execute().actionGet();
 
         final Histogram allHisto = allResponse.getAggregations().get("histo");
@@ -389,7 +386,7 @@ public class MinDocCountTests extends AbstractTermsTestCase {
             final SearchResponse response = client().prepareSearch("idx").setTypes("type")
                     .setSize(0)
                     .setQuery(QUERY)
-                    .addAggregation(dateHistogram("histo").field("date").dateHistogramInterval(DateHistogramInterval.DAY).order(order).minDocCount(minDocCount))
+                    .addAggregation(dateHistogram("histo").field("date").interval(DateHistogramInterval.DAY).order(order).minDocCount(minDocCount))
                     .execute().actionGet();
             assertSubset(allHisto, (Histogram) response.getAggregations().get("histo"), minDocCount);
         }

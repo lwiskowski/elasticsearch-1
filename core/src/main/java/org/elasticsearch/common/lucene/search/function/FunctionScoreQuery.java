@@ -28,6 +28,7 @@ import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.Weight;
+import org.apache.lucene.util.ToStringUtils;
 
 import java.io.IOException;
 import java.util.Objects;
@@ -40,7 +41,7 @@ public class FunctionScoreQuery extends Query {
 
     public static final float DEFAULT_MAX_BOOST = Float.MAX_VALUE;
 
-    final Query subQuery;
+    Query subQuery;
     final ScoreFunction function;
     final float maxBoost;
     final CombineFunction combineFunction;
@@ -83,7 +84,9 @@ public class FunctionScoreQuery extends Query {
         if (newQ == subQuery) {
             return this;
         }
-        return new FunctionScoreQuery(newQ, function, minScore, combineFunction, maxBoost);
+        FunctionScoreQuery bq = (FunctionScoreQuery) this.clone();
+        bq.subQuery = newQ;
+        return bq;
     }
 
     @Override
@@ -202,6 +205,7 @@ public class FunctionScoreQuery extends Query {
     public String toString(String field) {
         StringBuilder sb = new StringBuilder();
         sb.append("function score (").append(subQuery.toString(field)).append(",function=").append(function).append(')');
+        sb.append(ToStringUtils.boost(getBoost()));
         return sb.toString();
     }
 

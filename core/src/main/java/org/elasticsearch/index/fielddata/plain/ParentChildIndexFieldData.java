@@ -40,6 +40,7 @@ import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.index.Index;
 import org.elasticsearch.index.IndexSettings;
 import org.elasticsearch.index.fielddata.AtomicParentChildFieldData;
+import org.elasticsearch.index.fielddata.FieldDataType;
 import org.elasticsearch.index.fielddata.IndexFieldData;
 import org.elasticsearch.index.fielddata.IndexFieldData.XFieldComparatorSource.Nested;
 import org.elasticsearch.index.fielddata.IndexFieldDataCache;
@@ -74,9 +75,9 @@ public class ParentChildIndexFieldData extends AbstractIndexFieldData<AtomicPare
     private final CircuitBreakerService breakerService;
 
     public ParentChildIndexFieldData(IndexSettings indexSettings, String fieldName,
-                                     IndexFieldDataCache cache, MapperService mapperService,
+                                     FieldDataType fieldDataType, IndexFieldDataCache cache, MapperService mapperService,
                                      CircuitBreakerService breakerService) {
-        super(indexSettings, fieldName, cache);
+        super(indexSettings, fieldName, fieldDataType, cache);
         this.breakerService = breakerService;
         Set<String> parentTypes = new HashSet<>();
         for (DocumentMapper mapper : mapperService.docMappers(false)) {
@@ -145,7 +146,7 @@ public class ParentChildIndexFieldData extends AbstractIndexFieldData<AtomicPare
                                        MappedFieldType fieldType,
                                        IndexFieldDataCache cache, CircuitBreakerService breakerService,
                                        MapperService mapperService) {
-            return new ParentChildIndexFieldData(indexSettings, fieldType.name(), cache,
+            return new ParentChildIndexFieldData(indexSettings, fieldType.name(), fieldType.fieldDataType(), cache,
                     mapperService, breakerService);
         }
     }
@@ -209,7 +210,7 @@ public class ParentChildIndexFieldData extends AbstractIndexFieldData<AtomicPare
         breakerService.getBreaker(CircuitBreaker.FIELDDATA).addWithoutBreaking(ramBytesUsed);
         if (logger.isDebugEnabled()) {
             logger.debug(
-                    "global-ordinals [_parent] took [{}]",
+                    "Global-ordinals[_parent] took {}",
                     new TimeValue(System.nanoTime() - startTime, TimeUnit.NANOSECONDS)
             );
         }
@@ -304,15 +305,13 @@ public class ParentChildIndexFieldData extends AbstractIndexFieldData<AtomicPare
 
     public class GlobalFieldData implements IndexParentChildFieldData, Accountable {
 
-        private final Object coreCacheKey;
-        private final List<LeafReaderContext> leaves;
         private final AtomicParentChildFieldData[] fielddata;
+        private final IndexReader reader;
         private final long ramBytesUsed;
         private final Map<String, OrdinalMapAndAtomicFieldData> ordinalMapPerType;
 
         GlobalFieldData(IndexReader reader, AtomicParentChildFieldData[] fielddata, long ramBytesUsed, Map<String, OrdinalMapAndAtomicFieldData> ordinalMapPerType) {
-            this.coreCacheKey = reader.getCoreCacheKey();
-            this.leaves = reader.leaves();
+            this.reader = reader;
             this.ramBytesUsed = ramBytesUsed;
             this.fielddata = fielddata;
             this.ordinalMapPerType = ordinalMapPerType;
@@ -324,8 +323,13 @@ public class ParentChildIndexFieldData extends AbstractIndexFieldData<AtomicPare
         }
 
         @Override
+        public FieldDataType getFieldDataType() {
+            return ParentChildIndexFieldData.this.getFieldDataType();
+        }
+
+        @Override
         public AtomicParentChildFieldData load(LeafReaderContext context) {
-            assert context.reader().getCoreCacheKey() == leaves.get(context.ord).reader().getCoreCacheKey();
+            assert context.reader().getCoreCacheKey() == reader.leaves().get(context.ord).reader().getCoreCacheKey();
             return fielddata[context.ord];
         }
 
@@ -361,7 +365,7 @@ public class ParentChildIndexFieldData extends AbstractIndexFieldData<AtomicPare
 
         @Override
         public IndexParentChildFieldData loadGlobal(DirectoryReader indexReader) {
-            if (indexReader.getCoreCacheKey() == coreCacheKey) {
+            if (indexReader.getCoreCacheKey() == reader.getCoreCacheKey()) {
                 return this;
             }
             throw new IllegalStateException();

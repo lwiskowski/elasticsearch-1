@@ -19,14 +19,12 @@
 
 package org.elasticsearch.tribe;
 
-import org.apache.lucene.util.IOUtils;
 import org.elasticsearch.client.Client;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.node.DiscoveryNode;
-import org.elasticsearch.cluster.node.DiscoveryNodeService;
 import org.elasticsearch.common.SuppressForbidden;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.env.Environment;
+import org.elasticsearch.discovery.DiscoveryService;
 import org.elasticsearch.node.Node;
 import org.elasticsearch.node.internal.InternalSettingsPreparer;
 import org.elasticsearch.test.ESIntegTestCase;
@@ -35,7 +33,6 @@ import org.elasticsearch.test.InternalTestCluster;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 
-import java.io.IOException;
 import java.nio.file.Path;
 
 import static org.hamcrest.CoreMatchers.either;
@@ -58,29 +55,30 @@ public class TribeUnitTests extends ESTestCase {
     public static void createTribes() {
         Settings baseSettings = Settings.builder()
             .put("http.enabled", false)
-            .put(Node.NODE_MODE_SETTING.getKey(), NODE_MODE)
-            .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir()).build();
+            .put("node.mode", NODE_MODE)
+            .put("path.home", createTempDir()).build();
 
         tribe1 = new TribeClientNode(
             Settings.builder()
                 .put(baseSettings)
                 .put("cluster.name", "tribe1")
-                .put("node.name", "tribe1_node")
-                    .put(DiscoveryNodeService.NODE_ID_SEED_SETTING.getKey(), random().nextLong())
+                .put("name", "tribe1_node")
+                .put(DiscoveryService.SETTING_DISCOVERY_SEED, random().nextLong())
                 .build()).start();
         tribe2 = new TribeClientNode(
             Settings.builder()
                 .put(baseSettings)
                 .put("cluster.name", "tribe2")
-                .put("node.name", "tribe2_node")
-                    .put(DiscoveryNodeService.NODE_ID_SEED_SETTING.getKey(), random().nextLong())
+                .put("name", "tribe2_node")
+                .put(DiscoveryService.SETTING_DISCOVERY_SEED, random().nextLong())
                 .build()).start();
     }
 
     @AfterClass
-    public static void closeTribes() throws IOException {
-        IOUtils.close(tribe1, tribe2);
+    public static void closeTribes() {
+        tribe1.close();
         tribe1 = null;
+        tribe2.close();
         tribe2 = null;
     }
 
@@ -88,38 +86,32 @@ public class TribeUnitTests extends ESTestCase {
         System.setProperty("es.cluster.name", "tribe_node_cluster");
         System.setProperty("es.tribe.t1.cluster.name", "tribe1");
         System.setProperty("es.tribe.t2.cluster.name", "tribe2");
-        System.setProperty("es.tribe.t1.node_id.seed", Long.toString(random().nextLong()));
-        System.setProperty("es.tribe.t2.node_id.seed", Long.toString(random().nextLong()));
+        System.setProperty("es.tribe.t1.discovery.id.seed", Long.toString(random().nextLong()));
+        System.setProperty("es.tribe.t2.discovery.id.seed", Long.toString(random().nextLong()));
 
         try {
-            assertTribeNodeSuccessfullyCreated(Settings.EMPTY);
+            assertTribeNodeSuccesfullyCreated(Settings.EMPTY);
         } finally {
             System.clearProperty("es.cluster.name");
             System.clearProperty("es.tribe.t1.cluster.name");
             System.clearProperty("es.tribe.t2.cluster.name");
-            System.clearProperty("es.tribe.t1.node_id.seed");
-            System.clearProperty("es.tribe.t2.node_id.seed");
+            System.clearProperty("es.tribe.t1.discovery.id.seed");
+            System.clearProperty("es.tribe.t2.discovery.id.seed");
         }
     }
 
     public void testThatTribeClientsIgnoreGlobalConfig() throws Exception {
         Path pathConf = getDataPath("elasticsearch.yml").getParent();
-        Settings settings = Settings
-            .builder()
-            .put(InternalSettingsPreparer.IGNORE_SYSTEM_PROPERTIES_SETTING.getKey(), true)
-            .put(Environment.PATH_CONF_SETTING.getKey(), pathConf)
-            .build();
-        assertTribeNodeSuccessfullyCreated(settings);
+        Settings settings = Settings.builder().put(InternalSettingsPreparer.IGNORE_SYSTEM_PROPERTIES_SETTING, true).put("path.conf", pathConf).build();
+        assertTribeNodeSuccesfullyCreated(settings);
     }
 
-    private static void assertTribeNodeSuccessfullyCreated(Settings extraSettings) throws Exception {
+    private static void assertTribeNodeSuccesfullyCreated(Settings extraSettings) throws Exception {
         //tribe node doesn't need the node.mode setting, as it's forced local internally anyways. The tribe clients do need it to make sure
         //they can find their corresponding tribes using the proper transport
         Settings settings = Settings.builder().put("http.enabled", false).put("node.name", "tribe_node")
                 .put("tribe.t1.node.mode", NODE_MODE).put("tribe.t2.node.mode", NODE_MODE)
-                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir())
-                .put(Node.NODE_MODE_SETTING.getKey(), NODE_MODE)
-                .put(extraSettings).build();
+                .put("path.home", createTempDir()).put(extraSettings).build();
 
         try (Node node = new Node(settings).start()) {
             try (Client client = node.client()) {

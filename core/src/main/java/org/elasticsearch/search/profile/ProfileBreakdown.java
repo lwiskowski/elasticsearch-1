@@ -51,7 +51,7 @@ public final class ProfileBreakdown {
      */
     private final long[] timings;
 
-    /** Scratch to store the current timing type. */
+    /** Scrach to store the current timing type. */
     private TimingType currentTimingType;
 
     /**

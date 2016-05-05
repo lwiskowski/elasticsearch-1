@@ -32,7 +32,6 @@ import org.elasticsearch.cluster.routing.ShardRouting;
 import org.elasticsearch.cluster.routing.allocation.decider.ClusterRebalanceAllocationDecider;
 import org.elasticsearch.common.logging.ESLogger;
 import org.elasticsearch.common.logging.Loggers;
-import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.test.ESAllocationTestCase;
 
 import java.util.ArrayList;
@@ -45,6 +44,7 @@ import static org.elasticsearch.cluster.routing.ShardRoutingState.RELOCATING;
 import static org.elasticsearch.cluster.routing.ShardRoutingState.STARTED;
 import static org.elasticsearch.cluster.routing.ShardRoutingState.UNASSIGNED;
 import static org.elasticsearch.cluster.routing.allocation.RoutingNodesUtils.numberOfShardsOfType;
+import static org.elasticsearch.common.settings.Settings.settingsBuilder;
 import static org.hamcrest.Matchers.anyOf;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasItem;
@@ -59,7 +59,7 @@ public class SingleShardNoReplicasRoutingTests extends ESAllocationTestCase {
     private final ESLogger logger = Loggers.getLogger(SingleShardNoReplicasRoutingTests.class);
 
     public void testSingleIndexStartedShard() {
-        AllocationService strategy = createAllocationService(Settings.builder().put("cluster.routing.allocation.node_concurrent_recoveries", 10).build());
+        AllocationService strategy = createAllocationService(settingsBuilder().put("cluster.routing.allocation.node_concurrent_recoveries", 10).build());
 
         logger.info("Building initial routing table");
 
@@ -160,7 +160,7 @@ public class SingleShardNoReplicasRoutingTests extends ESAllocationTestCase {
     }
 
     public void testSingleIndexShardFailed() {
-        AllocationService strategy = createAllocationService(Settings.builder().put("cluster.routing.allocation.node_concurrent_recoveries", 10).build());
+        AllocationService strategy = createAllocationService(settingsBuilder().put("cluster.routing.allocation.node_concurrent_recoveries", 10).build());
 
         logger.info("Building initial routing table");
 
@@ -209,7 +209,7 @@ public class SingleShardNoReplicasRoutingTests extends ESAllocationTestCase {
     }
 
     public void testMultiIndexEvenDistribution() {
-        AllocationService strategy = createAllocationService(Settings.builder()
+        AllocationService strategy = createAllocationService(settingsBuilder()
                 .put("cluster.routing.allocation.node_concurrent_recoveries", 10)
                 .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.getKey(), "always")
                 .put("cluster.routing.allocation.cluster_concurrent_rebalance", -1)
@@ -274,8 +274,8 @@ public class SingleShardNoReplicasRoutingTests extends ESAllocationTestCase {
             assertThat(nodeIndex, lessThan(25));
             // check that we don't have a shard associated with a node with the same index name (we have a single shard)
             for (ShardRouting shardRoutingEntry : routingNode) {
-                assertThat(encounteredIndices, not(hasItem(shardRoutingEntry.getIndexName())));
-                encounteredIndices.add(shardRoutingEntry.getIndexName());
+                assertThat(encounteredIndices, not(hasItem(shardRoutingEntry.index())));
+                encounteredIndices.add(shardRoutingEntry.index());
             }
         }
 
@@ -321,7 +321,7 @@ public class SingleShardNoReplicasRoutingTests extends ESAllocationTestCase {
     }
 
     public void testMultiIndexUnevenNodes() {
-        AllocationService strategy = createAllocationService(Settings.builder()
+        AllocationService strategy = createAllocationService(settingsBuilder()
                 .put("cluster.routing.allocation.node_concurrent_recoveries", 10)
                 .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.getKey(), "always")
                 .put("cluster.routing.allocation.cluster_concurrent_rebalance", -1)

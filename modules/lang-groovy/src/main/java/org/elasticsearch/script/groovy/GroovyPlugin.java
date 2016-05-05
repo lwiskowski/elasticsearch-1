@@ -20,7 +20,6 @@
 package org.elasticsearch.script.groovy;
 
 import org.elasticsearch.plugins.Plugin;
-import org.elasticsearch.script.ScriptEngineRegistry;
 import org.elasticsearch.script.ScriptModule;
 
 public class GroovyPlugin extends Plugin {
@@ -36,6 +35,6 @@ public class GroovyPlugin extends Plugin {
     }
 
     public void onModule(ScriptModule module) {
-        module.addScriptEngine(new ScriptEngineRegistry.ScriptEngineRegistration(GroovyScriptEngineService.class, GroovyScriptEngineService.TYPES));
+        module.addScriptEngine(GroovyScriptEngineService.class);
     }
 }

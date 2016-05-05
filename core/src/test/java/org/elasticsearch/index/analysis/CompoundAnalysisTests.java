@@ -28,6 +28,7 @@ import org.elasticsearch.common.lucene.all.AllEntries;
 import org.elasticsearch.common.lucene.all.AllTokenStream;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.env.Environment;
+import org.elasticsearch.index.Index;
 import org.elasticsearch.index.IndexSettings;
 import org.elasticsearch.index.analysis.compound.DictionaryCompoundWordTokenFilterFactory;
 import org.elasticsearch.index.analysis.filter1.MyFilterTokenFilterFactory;
@@ -40,6 +41,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import static org.elasticsearch.common.settings.Settings.settingsBuilder;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasItems;
 import static org.hamcrest.Matchers.instanceOf;
@@ -48,8 +50,9 @@ import static org.hamcrest.Matchers.instanceOf;
  */
 public class CompoundAnalysisTests extends ESTestCase {
     public void testDefaultsCompoundAnalysis() throws Exception {
+        Index index = new Index("test");
         Settings settings = getJsonSettings();
-        IndexSettings idxSettings = IndexSettingsModule.newIndexSettings("test", settings);
+        IndexSettings idxSettings = IndexSettingsModule.newIndexSettings(index, settings);
         AnalysisService analysisService = new AnalysisRegistry(null, new Environment(settings),
                 Collections.emptyMap(),Collections.singletonMap("myfilter", MyFilterTokenFilterFactory::new),Collections.emptyMap(),Collections.emptyMap()).build(idxSettings);
 
@@ -67,7 +70,8 @@ public class CompoundAnalysisTests extends ESTestCase {
     }
 
     private List<String> analyze(Settings settings, String analyzerName, String text) throws IOException {
-        IndexSettings idxSettings = IndexSettingsModule.newIndexSettings("test", settings);
+        Index index = new Index("test");
+        IndexSettings idxSettings = IndexSettingsModule.newIndexSettings(index, settings);
         AnalysisService analysisService = new AnalysisRegistry(null, new Environment(settings),
                 Collections.emptyMap(), Collections.singletonMap("myfilter", MyFilterTokenFilterFactory::new),Collections.emptyMap(),Collections.emptyMap()).build(idxSettings);
 
@@ -75,8 +79,9 @@ public class CompoundAnalysisTests extends ESTestCase {
 
         AllEntries allEntries = new AllEntries();
         allEntries.addText("field1", text, 1.0f);
+        allEntries.reset();
 
-        TokenStream stream = AllTokenStream.allTokenStream("_all", text, 1.0f, analyzer);
+        TokenStream stream = AllTokenStream.allTokenStream("_all", allEntries, analyzer);
         stream.reset();
         CharTermAttribute termAtt = stream.addAttribute(CharTermAttribute.class);
 
@@ -90,19 +95,19 @@ public class CompoundAnalysisTests extends ESTestCase {
 
     private Settings getJsonSettings() {
         String json = "/org/elasticsearch/index/analysis/test1.json";
-        return Settings.builder()
+        return settingsBuilder()
                 .loadFromStream(json, getClass().getResourceAsStream(json))
                 .put(IndexMetaData.SETTING_VERSION_CREATED, Version.CURRENT)
-                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
+                .put("path.home", createTempDir().toString())
                 .build();
     }
 
     private Settings getYamlSettings() {
         String yaml = "/org/elasticsearch/index/analysis/test1.yml";
-        return Settings.builder()
+        return settingsBuilder()
                 .loadFromStream(yaml, getClass().getResourceAsStream(yaml))
                 .put(IndexMetaData.SETTING_VERSION_CREATED, Version.CURRENT)
-                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
+                .put("path.home", createTempDir().toString())
                 .build();
     }
 }

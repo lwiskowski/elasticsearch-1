@@ -40,6 +40,7 @@ import java.io.IOException;
 import java.util.Collection;
 import java.util.concurrent.ExecutionException;
 
+import static org.elasticsearch.common.settings.Settings.settingsBuilder;
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertHitCount;
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertNoFailures;
 
@@ -56,7 +57,8 @@ public class SearchWithRandomIOExceptionsIT extends ESIntegTestCase {
             startObject("type").
             startObject("properties").
             startObject("test")
-            .field("type", "keyword")
+            .field("type", "string")
+            .field("index", "not_analyzed")
             .endObject().
                 endObject().
                 endObject()
@@ -85,7 +87,7 @@ public class SearchWithRandomIOExceptionsIT extends ESIntegTestCase {
         int numInitialDocs = 0;
 
         if (createIndexWithoutErrors) {
-            Settings.Builder settings = Settings.builder()
+            Settings.Builder settings = settingsBuilder()
                 .put("index.number_of_replicas", numberOfReplicas());
             logger.info("creating index: [test] using settings: [{}]", settings.build().getAsMap());
             client().admin().indices().prepareCreate("test")
@@ -99,12 +101,12 @@ public class SearchWithRandomIOExceptionsIT extends ESIntegTestCase {
             client().admin().indices().prepareRefresh("test").execute().get();
             client().admin().indices().prepareFlush("test").setWaitIfOngoing(true).execute().get();
             client().admin().indices().prepareClose("test").execute().get();
-            client().admin().indices().prepareUpdateSettings("test").setSettings(Settings.builder()
+            client().admin().indices().prepareUpdateSettings("test").setSettings(settingsBuilder()
                 .put(MockFSDirectoryService.RANDOM_IO_EXCEPTION_RATE_SETTING.getKey(), exceptionRate)
                 .put(MockFSDirectoryService.RANDOM_IO_EXCEPTION_RATE_ON_OPEN_SETTING.getKey(), exceptionOnOpenRate));
             client().admin().indices().prepareOpen("test").execute().get();
         } else {
-            Settings.Builder settings = Settings.builder()
+            Settings.Builder settings = settingsBuilder()
                 .put("index.number_of_replicas", randomIntBetween(0, 1))
                 .put(MockFSIndexStore.INDEX_CHECK_INDEX_ON_CLOSE_SETTING.getKey(), false)
                 .put(MockFSDirectoryService.RANDOM_IO_EXCEPTION_RATE_SETTING.getKey(), exceptionRate)
@@ -181,7 +183,7 @@ public class SearchWithRandomIOExceptionsIT extends ESIntegTestCase {
         if (createIndexWithoutErrors) {
             // check the index still contains the records that we indexed without errors
             client().admin().indices().prepareClose("test").execute().get();
-            client().admin().indices().prepareUpdateSettings("test").setSettings(Settings.builder()
+            client().admin().indices().prepareUpdateSettings("test").setSettings(settingsBuilder()
                 .put(MockFSDirectoryService.RANDOM_IO_EXCEPTION_RATE_SETTING.getKey(), 0)
                 .put(MockFSDirectoryService.RANDOM_IO_EXCEPTION_RATE_ON_OPEN_SETTING.getKey(), 0));
             client().admin().indices().prepareOpen("test").execute().get();

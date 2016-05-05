@@ -32,9 +32,6 @@ import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.CollectionUtils;
 import org.elasticsearch.common.xcontent.XContentParser;
-import org.elasticsearch.index.fielddata.IndexFieldData;
-import org.elasticsearch.index.fielddata.plain.BytesBinaryDVIndexFieldData;
-import org.elasticsearch.index.mapper.CustomDocValuesField;
 import org.elasticsearch.index.mapper.FieldMapper;
 import org.elasticsearch.index.mapper.MappedFieldType;
 import org.elasticsearch.index.mapper.Mapper;
@@ -45,6 +42,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
+import static org.elasticsearch.index.mapper.MapperBuilders.binaryField;
 import static org.elasticsearch.index.mapper.core.TypeParsers.parseField;
 
 /**
@@ -81,7 +79,7 @@ public class BinaryFieldMapper extends FieldMapper {
     public static class TypeParser implements Mapper.TypeParser {
         @Override
         public Mapper.Builder parse(String name, Map<String, Object> node, ParserContext parserContext) throws MapperParsingException {
-            BinaryFieldMapper.Builder builder = new BinaryFieldMapper.Builder(name);
+            BinaryFieldMapper.Builder builder = binaryField(name);
             parseField(builder, name, node, parserContext);
             return builder;
         }
@@ -108,7 +106,7 @@ public class BinaryFieldMapper extends FieldMapper {
 
 
         @Override
-        public BytesReference valueForSearch(Object value) {
+        public BytesReference value(Object value) {
             if (value == null) {
                 return null;
             }
@@ -131,9 +129,8 @@ public class BinaryFieldMapper extends FieldMapper {
         }
 
         @Override
-        public IndexFieldData.Builder fielddataBuilder() {
-            failIfNoDocValues();
-            return new BytesBinaryDVIndexFieldData.Builder();
+        public Object valueForSearch(Object value) {
+            return value(value);
         }
     }
 
@@ -179,7 +176,7 @@ public class BinaryFieldMapper extends FieldMapper {
         return CONTENT_TYPE;
     }
 
-    public static class CustomBinaryDocValuesField extends CustomDocValuesField {
+    public static class CustomBinaryDocValuesField extends NumberFieldMapper.CustomNumericDocValuesField {
 
         private final ObjectArrayList<byte[]> bytesList;
 

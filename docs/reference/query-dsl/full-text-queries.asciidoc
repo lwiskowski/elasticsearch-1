@@ -34,10 +34,6 @@ The queries in this group are:
 
 include::match-query.asciidoc[]
 
-include::match-phrase-query.asciidoc[]
-
-include::match-phrase-prefix-query.asciidoc[]
-
 include::multi-match-query.asciidoc[]
 
 include::common-terms-query.asciidoc[]
@@ -45,3 +41,4 @@ include::common-terms-query.asciidoc[]
 include::query-string-query.asciidoc[]
 
 include::simple-query-string-query.asciidoc[]
+

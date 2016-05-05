@@ -50,7 +50,7 @@ public class RestGetRepositoriesAction extends BaseRestHandler {
 
     @Inject
     public RestGetRepositoriesAction(Settings settings, RestController controller, Client client, SettingsFilter settingsFilter) {
-        super(settings, client);
+        super(settings, controller, client);
         controller.registerHandler(GET, "/_snapshot", this);
         controller.registerHandler(GET, "/_snapshot/{repository}", this);
         this.settingsFilter = settingsFilter;

@@ -22,12 +22,11 @@ package org.elasticsearch.mapper.attachments;
 import org.elasticsearch.Version;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.env.Environment;
 import org.elasticsearch.indices.IndicesModule;
 import org.elasticsearch.test.ESTestCase;
 import org.junit.Before;
 
-public abstract class AttachmentUnitTestCase extends ESTestCase {
+public class AttachmentUnitTestCase extends ESTestCase {
 
     protected Settings testSettings;
 
@@ -40,7 +39,7 @@ public abstract class AttachmentUnitTestCase extends ESTestCase {
     @Before
     public void createSettings() throws Exception {
       testSettings = Settings.builder()
-                             .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir())
+                             .put("path.home", createTempDir())
                              .put(IndexMetaData.SETTING_VERSION_CREATED, Version.CURRENT.id)
                              .build();
     }

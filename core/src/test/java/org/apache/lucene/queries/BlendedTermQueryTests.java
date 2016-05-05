@@ -82,7 +82,7 @@ public class BlendedTermQueryTests extends ESTestCase {
             w.addDocument(d);
         }
         w.commit();
-        DirectoryReader reader = DirectoryReader.open(w);
+        DirectoryReader reader = DirectoryReader.open(w, true);
         IndexSearcher searcher = setSimilarity(newSearcher(reader));
 
         {
@@ -143,7 +143,7 @@ public class BlendedTermQueryTests extends ESTestCase {
             w.addDocument(d);
         }
         w.commit();
-        DirectoryReader reader = DirectoryReader.open(w);
+        DirectoryReader reader = DirectoryReader.open(w, true);
         IndexSearcher searcher = setSimilarity(newSearcher(reader));
         {
             String[] fields = new String[]{"username", "song"};

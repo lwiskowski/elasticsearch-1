@@ -24,13 +24,11 @@ import org.elasticsearch.client.Client;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.rest.BaseRestHandler;
 import org.elasticsearch.rest.RestChannel;
 import org.elasticsearch.rest.RestController;
 import org.elasticsearch.rest.RestRequest;
 import org.elasticsearch.rest.action.support.RestToXContentListener;
-import org.elasticsearch.tasks.TaskId;
 
 import static org.elasticsearch.rest.RestRequest.Method.GET;
 
@@ -39,33 +37,25 @@ public class RestListTasksAction extends BaseRestHandler {
 
     @Inject
     public RestListTasksAction(Settings settings, RestController controller, Client client) {
-        super(settings, client);
+        super(settings, controller, client);
         controller.registerHandler(GET, "/_tasks", this);
-        controller.registerHandler(GET, "/_tasks/{taskId}", this);
-    }
-
-    public static ListTasksRequest generateListTasksRequest(RestRequest request) {
-        boolean detailed = request.paramAsBoolean("detailed", false);
-        String[] nodesIds = Strings.splitStringByCommaToArray(request.param("node_id"));
-        TaskId taskId = new TaskId(request.param("taskId", request.param("task_id")));
-        String[] actions = Strings.splitStringByCommaToArray(request.param("actions"));
-        TaskId parentTaskId = new TaskId(request.param("parent_task_id"));
-        boolean waitForCompletion = request.paramAsBoolean("wait_for_completion", false);
-        TimeValue timeout = request.paramAsTime("timeout", null);
-
-        ListTasksRequest listTasksRequest = new ListTasksRequest();
-        listTasksRequest.setTaskId(taskId);
-        listTasksRequest.setNodesIds(nodesIds);
-        listTasksRequest.setDetailed(detailed);
-        listTasksRequest.setActions(actions);
-        listTasksRequest.setParentTaskId(parentTaskId);
-        listTasksRequest.setWaitForCompletion(waitForCompletion);
-        listTasksRequest.setTimeout(timeout);
-        return listTasksRequest;
+        controller.registerHandler(GET, "/_tasks/{nodeId}", this);
+        controller.registerHandler(GET, "/_tasks/{nodeId}/{actions}", this);
     }
 
     @Override
     public void handleRequest(final RestRequest request, final RestChannel channel, final Client client) {
-        client.admin().cluster().listTasks(generateListTasksRequest(request), new RestToXContentListener<>(channel));
+        boolean detailed = request.paramAsBoolean("detailed", false);
+        String[] nodesIds = Strings.splitStringByCommaToArray(request.param("nodeId"));
+        String[] actions = Strings.splitStringByCommaToArray(request.param("actions"));
+        String parentNode = request.param("parent_node");
+        long parentTaskId = request.paramAsLong("parent_task", ListTasksRequest.ALL_TASKS);
+
+        ListTasksRequest listTasksRequest = new ListTasksRequest(nodesIds);
+        listTasksRequest.detailed(detailed);
+        listTasksRequest.actions(actions);
+        listTasksRequest.parentNode(parentNode);
+        listTasksRequest.parentTaskId(parentTaskId);
+        client.admin().cluster().listTasks(listTasksRequest, new RestToXContentListener<>(channel));
     }
 }

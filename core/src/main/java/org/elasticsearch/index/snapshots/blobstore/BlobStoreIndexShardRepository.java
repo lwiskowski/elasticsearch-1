@@ -32,9 +32,9 @@ import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.BytesRefBuilder;
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.Version;
+import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.metadata.SnapshotId;
 import org.elasticsearch.cluster.node.DiscoveryNode;
-import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.ParseFieldMatcher;
 import org.elasticsearch.common.blobstore.BlobContainer;
 import org.elasticsearch.common.blobstore.BlobMetaData;
@@ -299,7 +299,7 @@ public class BlobStoreIndexShardRepository extends AbstractComponent implements 
             this.snapshotId = snapshotId;
             this.version = version;
             this.shardId = shardId;
-            blobContainer = blobStore.blobContainer(basePath.add("indices").add(snapshotShardId.getIndexName()).add(Integer.toString(snapshotShardId.getId())));
+            blobContainer = blobStore.blobContainer(basePath.add("indices").add(snapshotShardId.getIndex()).add(Integer.toString(snapshotShardId.getId())));
         }
 
         /**
@@ -728,7 +728,7 @@ public class BlobStoreIndexShardRepository extends AbstractComponent implements 
     }
 
     /**
-     * This is a BWC layer to ensure we update the snapshots metadata with the corresponding hashes before we compare them.
+     * This is a BWC layer to ensure we update the snapshots metdata with the corresponding hashes before we compare them.
      * The new logic for StoreFileMetaData reads the entire <tt>.si</tt> and <tt>segments.n</tt> files to strengthen the
      * comparison of the files on a per-segment / per-commit level.
      */
@@ -926,6 +926,13 @@ public class BlobStoreIndexShardRepository extends AbstractComponent implements 
                     }
                     Store.verify(indexOutput);
                     indexOutput.close();
+                    // write the checksum
+                    if (fileInfo.metadata().hasLegacyChecksum()) {
+                        Store.LegacyChecksums legacyChecksums = new Store.LegacyChecksums();
+                        legacyChecksums.add(fileInfo.metadata());
+                        legacyChecksums.write(store);
+
+                    }
                     store.directory().sync(Collections.singleton(fileInfo.physicalName()));
                     success = true;
                 } catch (CorruptIndexException | IndexFormatTooOldException | IndexFormatTooNewException ex) {

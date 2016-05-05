@@ -22,7 +22,6 @@ import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.routing.UnassignedInfo;
 import org.elasticsearch.cluster.routing.allocation.decider.EnableAllocationDecider;
 import org.elasticsearch.cluster.routing.allocation.decider.ShardsLimitAllocationDecider;
-import org.elasticsearch.common.settings.Setting.Property;
 import org.elasticsearch.gateway.PrimaryShardAllocator;
 import org.elasticsearch.index.IndexModule;
 import org.elasticsearch.index.IndexSettings;
@@ -35,30 +34,28 @@ import org.elasticsearch.index.engine.EngineConfig;
 import org.elasticsearch.index.fielddata.IndexFieldDataService;
 import org.elasticsearch.index.mapper.FieldMapper;
 import org.elasticsearch.index.mapper.MapperService;
-import org.elasticsearch.index.percolator.PercolatorQueryCache;
-import org.elasticsearch.index.similarity.SimilarityService;
+import org.elasticsearch.index.percolator.PercolatorQueriesRegistry;
 import org.elasticsearch.index.store.FsDirectoryService;
 import org.elasticsearch.index.store.IndexStore;
 import org.elasticsearch.index.store.Store;
-import org.elasticsearch.index.IndexWarmer;
-import org.elasticsearch.indices.IndicesRequestCache;
+import org.elasticsearch.indices.cache.request.IndicesRequestCache;
+import org.elasticsearch.search.SearchService;
 
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
 import java.util.function.Predicate;
 
 /**
  * Encapsulates all valid index level settings.
- * @see Property#IndexScope
+ * @see org.elasticsearch.common.settings.Setting.Scope#INDEX
  */
 public final class IndexScopedSettings extends AbstractScopedSettings {
 
     public static final Predicate<String> INDEX_SETTINGS_KEY_PREDICATE = (s) -> s.startsWith(IndexMetaData.INDEX_SETTING_PREFIX);
 
-    public static final Set<Setting<?>> BUILT_IN_INDEX_SETTINGS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
+    public static Set<Setting<?>> BUILT_IN_INDEX_SETTINGS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
         IndexSettings.INDEX_TTL_DISABLE_PURGE_SETTING,
         IndexStore.INDEX_STORE_THROTTLE_TYPE_SETTING,
         IndexStore.INDEX_STORE_THROTTLE_MAX_BYTES_PER_SEC_SETTING,
@@ -109,7 +106,6 @@ public final class IndexScopedSettings extends AbstractScopedSettings {
         IndexSettings.INDEX_WARMER_ENABLED_SETTING,
         IndexSettings.INDEX_REFRESH_INTERVAL_SETTING,
         IndexSettings.MAX_RESULT_WINDOW_SETTING,
-        IndexSettings.MAX_RESCORE_WINDOW_SETTING,
         IndexSettings.INDEX_TRANSLOG_SYNC_INTERVAL_SETTING,
         IndexSettings.DEFAULT_FIELD_SETTING,
         IndexSettings.QUERY_STRING_LENIENT_SETTING,
@@ -121,42 +117,32 @@ public final class IndexScopedSettings extends AbstractScopedSettings {
         UnassignedInfo.INDEX_DELAYED_NODE_LEFT_TIMEOUT_SETTING,
         EnableAllocationDecider.INDEX_ROUTING_REBALANCE_ENABLE_SETTING,
         EnableAllocationDecider.INDEX_ROUTING_ALLOCATION_ENABLE_SETTING,
-        IndexSettings.INDEX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTING,
+        IndexSettings.INDEX_TRANSLOG_FLUSH_THRESHOLD_SIZE_SETTTING,
         IndexFieldDataService.INDEX_FIELDDATA_CACHE_KEY,
         FieldMapper.IGNORE_MALFORMED_SETTING,
         FieldMapper.COERCE_SETTING,
         Store.INDEX_STORE_STATS_REFRESH_INTERVAL_SETTING,
-        PercolatorQueryCache.INDEX_MAP_UNMAPPED_FIELDS_AS_STRING_SETTING,
+        PercolatorQueriesRegistry.INDEX_MAP_UNMAPPED_FIELDS_AS_STRING_SETTING,
         MapperService.INDEX_MAPPER_DYNAMIC_SETTING,
         MapperService.INDEX_MAPPING_NESTED_FIELDS_LIMIT_SETTING,
-        MapperService.INDEX_MAPPING_TOTAL_FIELDS_LIMIT_SETTING,
-        MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING,
         BitsetFilterCache.INDEX_LOAD_RANDOM_ACCESS_FILTERS_EAGERLY_SETTING,
         IndexModule.INDEX_STORE_TYPE_SETTING,
-        IndexModule.INDEX_QUERY_CACHE_ENABLED_SETTING,
+        IndexModule.INDEX_QUERY_CACHE_TYPE_SETTING,
         IndexModule.INDEX_QUERY_CACHE_EVERYTHING_SETTING,
         PrimaryShardAllocator.INDEX_RECOVERY_INITIAL_SHARDS_SETTING,
         FsDirectoryService.INDEX_LOCK_FACTOR_SETTING,
         EngineConfig.INDEX_CODEC_SETTING,
-        // validate that built-in similarities don't get redefined
-        Setting.groupSetting("index.similarity.", (s) -> {
-            Map<String, Settings> groups = s.getAsGroups();
-            for (String key : SimilarityService.BUILT_IN.keySet()) {
-                if (groups.containsKey(key)) {
-                    throw new IllegalArgumentException("illegal value for [index.similarity." + key +
-                            "] cannot redefine built-in similarity");
-                }
-            }
-        }, Property.IndexScope), // this allows similarity settings to be passed
-        Setting.groupSetting("index.analysis.", Property.IndexScope) // this allows analysis settings to be passed
+        SearchService.INDEX_NORMS_LOADING_SETTING,
+        // this sucks but we can't really validate all the analyzers/similarity in here
+        Setting.groupSetting("index.similarity.", false, Setting.Scope.INDEX), // this allows similarity settings to be passed
+        Setting.groupSetting("index.analysis.", false, Setting.Scope.INDEX) // this allows analysis settings to be passed
 
     )));
 
-    public static final IndexScopedSettings DEFAULT_SCOPED_SETTINGS = new IndexScopedSettings(Settings.EMPTY,
-            BUILT_IN_INDEX_SETTINGS);
+    public static final IndexScopedSettings DEFAULT_SCOPED_SETTINGS = new IndexScopedSettings(Settings.EMPTY, IndexScopedSettings.BUILT_IN_INDEX_SETTINGS);
 
     public IndexScopedSettings(Settings settings, Set<Setting<?>> settingsSet) {
-        super(settings, settingsSet, Property.IndexScope);
+        super(settings, settingsSet, Setting.Scope.INDEX);
     }
 
     private IndexScopedSettings(Settings settings, IndexScopedSettings other, IndexMetaData metaData) {
@@ -165,27 +151,5 @@ public final class IndexScopedSettings extends AbstractScopedSettings {
 
     public IndexScopedSettings copy(Settings settings, IndexMetaData metaData) {
         return new IndexScopedSettings(settings, this, metaData);
-    }
-
-    @Override
-    protected void validateSettingKey(Setting setting) {
-        if (setting.getKey().startsWith("index.") == false) {
-            throw new IllegalArgumentException("illegal settings key: [" + setting.getKey() + "] must start with [index.]");
-        }
-        super.validateSettingKey(setting);
-    }
-
-    @Override
-    protected final boolean isPrivateSetting(String key) {
-        switch (key) {
-            case IndexMetaData.SETTING_CREATION_DATE:
-            case IndexMetaData.SETTING_INDEX_UUID:
-            case IndexMetaData.SETTING_VERSION_CREATED:
-            case IndexMetaData.SETTING_VERSION_UPGRADED:
-            case MergePolicyConfig.INDEX_MERGE_ENABLED:
-                return true;
-            default:
-                return false;
-        }
     }
 }

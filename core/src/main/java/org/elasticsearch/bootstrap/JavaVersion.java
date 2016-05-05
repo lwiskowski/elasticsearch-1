@@ -19,26 +19,28 @@
 
 package org.elasticsearch.bootstrap;
 
+import org.elasticsearch.common.Strings;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Objects;
-import java.util.stream.Collectors;
 
-public class JavaVersion implements Comparable<JavaVersion> {
+class JavaVersion implements Comparable<JavaVersion> {
     private final List<Integer> version;
 
     public List<Integer> getVersion() {
-        return version;
+        return Collections.unmodifiableList(version);
     }
 
     private JavaVersion(List<Integer> version) {
-        this.version = Collections.unmodifiableList(version);
+        this.version = version;
     }
 
     public static JavaVersion parse(String value) {
-        Objects.requireNonNull(value);
-        if (!isValid(value)) {
+        if (value == null) {
+            throw new NullPointerException("value");
+        }
+        if ("".equals(value)) {
             throw new IllegalArgumentException("value");
         }
 
@@ -77,6 +79,6 @@ public class JavaVersion implements Comparable<JavaVersion> {
 
     @Override
     public String toString() {
-        return version.stream().map(v -> Integer.toString(v)).collect(Collectors.joining("."));
+        return Strings.collectionToDelimitedString(version, ".");
     }
 }

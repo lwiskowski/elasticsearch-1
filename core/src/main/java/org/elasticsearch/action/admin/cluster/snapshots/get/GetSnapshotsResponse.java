@@ -24,6 +24,7 @@ import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.common.xcontent.XContentBuilderString;
 import org.elasticsearch.snapshots.SnapshotInfo;
 
 import java.io.IOException;
@@ -75,7 +76,7 @@ public class GetSnapshotsResponse extends ActionResponse implements ToXContent {
     }
 
     static final class Fields {
-        static final String SNAPSHOTS = "snapshots";
+        static final XContentBuilderString SNAPSHOTS = new XContentBuilderString("snapshots");
     }
 
     @Override

@@ -156,7 +156,7 @@ def remove_plugin(version, release_dir, plugin_name):
   run_plugin(version, release_dir, 'remove', [plugin_name])
 
 def run_plugin(version, release_dir, plugin_cmd, args):
-  cmd = [os.path.join(release_dir, 'bin/elasticsearch-plugin'), plugin_cmd] + args
+  cmd = [os.path.join(release_dir, 'bin/plugin'), plugin_cmd] + args
   subprocess.check_call(cmd)
 
 def create_client(http_port=DEFAULT_HTTP_TCP_PORT, timeout=30):
@@ -246,34 +246,6 @@ def generate_index(client, version, index_name):
         'auto_boost': True
       }
     }
-
-  mappings['norms'] = {
-    'properties': {
-      'string_with_norms_disabled': {
-        'type': 'string',
-        'norms': {
-          'enabled': False
-        }
-      },
-      'string_with_norms_enabled': {
-        'type': 'string',
-        'index': 'not_analyzed',
-        'norms': {
-          'enabled': True,
-          'loading': 'eager'
-        }
-      }
-    }
-  }
-
-  mappings['doc'] = {
-    'properties': {
-      'string': {
-        'type': 'string',
-        'boost': 4
-      }
-    }
-  }
 
   settings = {
     'number_of_shards': 1,

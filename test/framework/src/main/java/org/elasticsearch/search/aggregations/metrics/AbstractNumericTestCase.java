@@ -97,6 +97,4 @@ public abstract class AbstractNumericTestCase extends ESIntegTestCase {
     public abstract void testScriptMultiValued() throws Exception;
 
     public abstract void testScriptMultiValuedWithParams() throws Exception;
-
-    public abstract void testOrderByEmptyAggregation() throws Exception;
 }

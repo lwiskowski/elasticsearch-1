@@ -62,12 +62,15 @@ public class MultiLineStringBuilderTests extends AbstractShapeBuilderTestCase<Mu
                 }
             }
         } else {
-            mutation.linestring((LineStringBuilder) RandomShapeGenerator.createShape(random(), ShapeType.LINESTRING));
+            mutation.linestring((LineStringBuilder) RandomShapeGenerator.createShape(getRandom(), ShapeType.LINESTRING));
         }
         return mutation;
     }
 
     static MultiLineStringBuilder createRandomShape() {
-        return new MultiLineStringBuilder();
+        if (true) {
+            return new MultiLineStringBuilder();
+        }
+        return (MultiLineStringBuilder) RandomShapeGenerator.createShape(getRandom(), ShapeType.MULTILINESTRING);
     }
 }

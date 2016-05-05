@@ -122,7 +122,7 @@ public class BootstrapForTesting {
                 }
                 // intellij hack: intellij test runner wants setIO and will
                 // screw up all test logging without it!
-                if (System.getProperty("tests.gradle") == null) {
+                if (System.getProperty("tests.maven") == null) {
                     perms.add(new RuntimePermission("setIO"));
                 }
 
@@ -154,9 +154,11 @@ public class BootstrapForTesting {
                     try (InputStream stream = url.openStream()) {
                         properties.load(stream);
                     }
-                    String clazz = properties.getProperty("classname");
-                    if (clazz != null) {
-                        Class.forName(clazz);
+                    if (Boolean.parseBoolean(properties.getProperty("jvm"))) {
+                        String clazz = properties.getProperty("classname");
+                        if (clazz != null) {
+                            Class.forName(clazz);
+                        }
                     }
                 }
             } catch (Exception e) {
@@ -166,7 +168,7 @@ public class BootstrapForTesting {
     }
 
     /**
-     * we don't know which codesources belong to which plugin, so just remove the permission from key codebases
+     * we dont know which codesources belong to which plugin, so just remove the permission from key codebases
      * like core, test-framework, etc. this way tests fail if accesscontroller blocks are missing.
      */
     @SuppressForbidden(reason = "accesses fully qualified URLs to configure security")

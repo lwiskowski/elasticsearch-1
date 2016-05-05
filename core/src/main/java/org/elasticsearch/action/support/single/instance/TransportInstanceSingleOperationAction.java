@@ -24,6 +24,7 @@ import org.elasticsearch.action.ActionResponse;
 import org.elasticsearch.action.UnavailableShardsException;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.HandledTransportAction;
+import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateObserver;
 import org.elasticsearch.cluster.block.ClusterBlockException;
@@ -33,10 +34,11 @@ import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.routing.ShardIterator;
 import org.elasticsearch.cluster.routing.ShardRouting;
-import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Nullable;
+import org.elasticsearch.common.logging.support.LoggerMessageFormat;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
+import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.node.NodeClosedException;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.BaseTransportResponseHandler;
@@ -89,11 +91,11 @@ public abstract class TransportInstanceSingleOperationAction<Request extends Ins
     protected ClusterBlockException checkRequestBlock(ClusterState state, Request request) {
         return state.blocks().indexBlockedException(ClusterBlockLevel.WRITE, request.concreteIndex());
     }
-
     /**
-     * Resolves the request. Throws an exception if the request cannot be resolved.
+     * Resolves the request. If the resolve means a different execution, then return false
+     * here to indicate not to continue and execute this request.
      */
-    protected abstract void resolveRequest(ClusterState state, Request request);
+    protected abstract boolean resolveRequest(ClusterState state, Request request, ActionListener<Response> listener);
 
     protected boolean retryOnFailure(Throwable e) {
         return false;
@@ -122,7 +124,7 @@ public abstract class TransportInstanceSingleOperationAction<Request extends Ins
         }
 
         public void start() {
-            this.observer = new ClusterStateObserver(clusterService, request.timeout(), logger, threadPool.getThreadContext());
+            this.observer = new ClusterStateObserver(clusterService, request.timeout(), logger);
             doStart();
         }
 
@@ -138,8 +140,12 @@ public abstract class TransportInstanceSingleOperationAction<Request extends Ins
                         throw blockException;
                     }
                 }
-                request.concreteIndex(indexNameExpressionResolver.concreteSingleIndex(observer.observedState(), request).getName());
-                resolveRequest(observer.observedState(), request);
+                request.concreteIndex(indexNameExpressionResolver.concreteSingleIndex(observer.observedState(), request));
+                // check if we need to execute, and if not, return
+                if (!resolveRequest(observer.observedState(), request, listener)) {
+                    listener.onFailure(new IllegalStateException(LoggerMessageFormat.format("{} request {} could not be resolved", new ShardId(request.index, request.shardId), actionName)));
+                    return;
+                }
                 blockException = checkRequestBlock(observer.observedState(), request);
                 if (blockException != null) {
                     if (blockException.retryable()) {
@@ -172,7 +178,7 @@ public abstract class TransportInstanceSingleOperationAction<Request extends Ins
                 return;
             }
 
-            request.shardId = shardIt.shardId();
+            request.shardId = shardIt.shardId().id();
             DiscoveryNode node = nodes.get(shard.currentNodeId());
             transportService.sendRequest(node, shardActionName, request, transportOptions(), new BaseTransportResponseHandler<Response>() {
 
@@ -211,7 +217,7 @@ public abstract class TransportInstanceSingleOperationAction<Request extends Ins
                 Throwable listenFailure = failure;
                 if (listenFailure == null) {
                     if (shardIt == null) {
-                        listenFailure = new UnavailableShardsException(request.concreteIndex(), -1, "Timeout waiting for [{}], request: {}", request.timeout(), actionName);
+                        listenFailure = new UnavailableShardsException(new ShardId(request.concreteIndex(), -1), "Timeout waiting for [{}], request: {}", request.timeout(), actionName);
                     } else {
                         listenFailure = new UnavailableShardsException(shardIt.shardId(), "[{}] shardIt, [{}] active : Timeout waiting for [{}], request: {}", shardIt.size(), shardIt.sizeActive(), request.timeout(), actionName);
                     }
@@ -228,7 +234,7 @@ public abstract class TransportInstanceSingleOperationAction<Request extends Ins
 
                 @Override
                 public void onClusterServiceClose() {
-                    listener.onFailure(new NodeClosedException(nodes.getLocalNode()));
+                    listener.onFailure(new NodeClosedException(nodes.localNode()));
                 }
 
                 @Override

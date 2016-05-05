@@ -40,7 +40,11 @@ public class Template extends Script {
     public static final String DEFAULT_LANG = "mustache";
 
     private XContentType contentType;
-    
+
+    public Template() {
+        super();
+    }
+
     /**
      * Constructor for simple inline template. The template will have no lang,
      * content type or params set.
@@ -75,8 +79,17 @@ public class Template extends Script {
         this.contentType = xContentType;
     }
 
-    public Template(StreamInput in) throws IOException {
-        super(in);
+    /**
+     * Method for getting the {@link XContentType} of the template.
+     *
+     * @return The {@link XContentType} of the template.
+     */
+    public XContentType getContentType() {
+        return contentType;
+    }
+
+    @Override
+    protected void doReadFrom(StreamInput in) throws IOException {
         if (in.readBoolean()) {
             this.contentType = XContentType.readFrom(in);
         }
@@ -91,15 +104,6 @@ public class Template extends Script {
         }
     }
 
-    /**
-     * Method for getting the {@link XContentType} of the template.
-     *
-     * @return The {@link XContentType} of the template.
-     */
-    public XContentType getContentType() {
-        return contentType;
-    }
-
     @Override
     protected XContentBuilder scriptFieldToXContent(String template, ScriptType type, XContentBuilder builder, Params builderParams)
             throws IOException {
@@ -109,6 +113,12 @@ public class Template extends Script {
             builder.field(type.getParseField().getPreferredName(), template);
         }
         return builder;
+    }
+
+    public static Template readTemplate(StreamInput in) throws IOException {
+        Template template = new Template();
+        template.readFrom(in);
+        return template;
     }
 
     public static Script parse(Map<String, Object> config, boolean removeMatchedEntries, ParseFieldMatcher parseFieldMatcher) {
@@ -139,11 +149,15 @@ public class Template extends Script {
 
     @Override
     public boolean equals(Object obj) {
-        if (this == obj) return true;
-        if (!super.equals(obj)) return false;
-        if (getClass() != obj.getClass()) return false;
+        if (this == obj)
+            return true;
+        if (!super.equals(obj))
+            return false;
+        if (getClass() != obj.getClass())
+            return false;
         Template other = (Template) obj;
-        if (contentType != other.contentType) return false;
+        if (contentType != other.contentType)
+            return false;
         return true;
     }
 

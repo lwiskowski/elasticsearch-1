@@ -19,12 +19,16 @@
 
 package org.elasticsearch.index.query;
 
-import org.apache.lucene.search.MatchNoDocsQuery;
+import org.apache.lucene.search.ConstantScoreQuery;
 import org.apache.lucene.search.Query;
-import org.apache.lucene.util.BytesRef;
+import org.apache.lucene.search.TermQuery;
 import org.elasticsearch.index.mapper.internal.TypeFieldMapper;
 
 import java.io.IOException;
+
+import static org.hamcrest.Matchers.either;
+import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.instanceOf;
 
 public class TypeQueryBuilderTests extends AbstractQueryTestCase<TypeQueryBuilder> {
 
@@ -35,11 +39,14 @@ public class TypeQueryBuilderTests extends AbstractQueryTestCase<TypeQueryBuilde
 
     @Override
     protected void doAssertLuceneQuery(TypeQueryBuilder queryBuilder, Query query, QueryShardContext context) throws IOException {
-        if (createShardContext().getMapperService().documentMapper(queryBuilder.type()) == null) {
-            assertEquals(new MatchNoDocsQuery(), query);
-        } else {
-            assertEquals(new TypeFieldMapper.TypeQuery(new BytesRef(queryBuilder.type())), query);
+        assertThat(query, either(instanceOf(TermQuery.class)).or(instanceOf(ConstantScoreQuery.class)));
+        if (query instanceof ConstantScoreQuery) {
+            query = ((ConstantScoreQuery) query).getQuery();
+            assertThat(query, instanceOf(TermQuery.class));
         }
+        TermQuery termQuery = (TermQuery) query;
+        assertThat(termQuery.getTerm().field(), equalTo(TypeFieldMapper.NAME));
+        assertThat(termQuery.getTerm().text(), equalTo(queryBuilder.type()));
     }
 
     public void testIllegalArgument() {
@@ -53,11 +60,11 @@ public class TypeQueryBuilderTests extends AbstractQueryTestCase<TypeQueryBuilde
 
     public void testFromJson() throws IOException {
         String json =
-                "{\n" +
-                "  \"type\" : {\n" +
-                "    \"value\" : \"my_type\",\n" +
-                "    \"boost\" : 1.0\n" +
-                "  }\n" +
+                "{\n" + 
+                "  \"type\" : {\n" + 
+                "    \"value\" : \"my_type\",\n" + 
+                "    \"boost\" : 1.0\n" + 
+                "  }\n" + 
                 "}";
 
         TypeQueryBuilder parsed = (TypeQueryBuilder) parseQuery(json);

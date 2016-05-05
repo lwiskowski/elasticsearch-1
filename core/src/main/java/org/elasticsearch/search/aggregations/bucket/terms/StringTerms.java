@@ -22,7 +22,6 @@ import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.xcontent.XContentBuilder;
-import org.elasticsearch.search.DocValueFormat;
 import org.elasticsearch.search.aggregations.AggregationStreams;
 import org.elasticsearch.search.aggregations.InternalAggregation;
 import org.elasticsearch.search.aggregations.InternalAggregations;
@@ -55,9 +54,7 @@ public class StringTerms extends InternalTerms<StringTerms, StringTerms.Bucket> 
     private final static BucketStreams.Stream<Bucket> BUCKET_STREAM = new BucketStreams.Stream<Bucket>() {
         @Override
         public Bucket readResult(StreamInput in, BucketStreamContext context) throws IOException {
-            Bucket buckets = new Bucket(
-                    context.format(),
-                    (boolean) context.attributes().get("showDocCountError"));
+            Bucket buckets = new Bucket((boolean) context.attributes().get("showDocCountError"));
             buckets.readFrom(in);
             return buckets;
         }
@@ -81,13 +78,12 @@ public class StringTerms extends InternalTerms<StringTerms, StringTerms.Bucket> 
 
         BytesRef termBytes;
 
-        public Bucket(DocValueFormat format, boolean showDocCountError) {
-            super(format, showDocCountError);
+        public Bucket(boolean showDocCountError) {
+            super(null, showDocCountError);
         }
 
-        public Bucket(BytesRef term, long docCount, InternalAggregations aggregations, boolean showDocCountError, long docCountError,
-                DocValueFormat format) {
-            super(docCount, aggregations, showDocCountError, docCountError, format);
+        public Bucket(BytesRef term, long docCount, InternalAggregations aggregations, boolean showDocCountError, long docCountError) {
+            super(docCount, aggregations, showDocCountError, docCountError, null);
             this.termBytes = term;
         }
 
@@ -104,17 +100,17 @@ public class StringTerms extends InternalTerms<StringTerms, StringTerms.Bucket> 
 
         @Override
         public String getKeyAsString() {
-            return format.format(termBytes);
+            return termBytes.utf8ToString();
         }
 
         @Override
         int compareTerm(Terms.Bucket other) {
-            return termBytes.compareTo(((Bucket) other).termBytes);
+            return BytesRef.getUTF8SortedAsUnicodeComparator().compare(termBytes, ((Bucket) other).termBytes);
         }
 
         @Override
         Bucket newBucket(long docCount, InternalAggregations aggs, long docCountError) {
-            return new Bucket(termBytes, docCount, aggs, showDocCountError, docCountError, format);
+            return new Bucket(termBytes, docCount, aggs, showDocCountError, docCountError);
         }
 
         @Override
@@ -155,10 +151,10 @@ public class StringTerms extends InternalTerms<StringTerms, StringTerms.Bucket> 
     StringTerms() {
     } // for serialization
 
-    public StringTerms(String name, Terms.Order order, DocValueFormat format, int requiredSize, int shardSize, long minDocCount,
+    public StringTerms(String name, Terms.Order order, int requiredSize, int shardSize, long minDocCount,
             List<? extends InternalTerms.Bucket> buckets, boolean showTermDocCountError, long docCountError, long otherDocCount,
             List<PipelineAggregator> pipelineAggregators, Map<String, Object> metaData) {
-        super(name, order, format, requiredSize, shardSize, minDocCount, buckets, showTermDocCountError, docCountError, otherDocCount, pipelineAggregators,
+        super(name, order, requiredSize, shardSize, minDocCount, buckets, showTermDocCountError, docCountError, otherDocCount, pipelineAggregators,
                 metaData);
     }
 
@@ -169,19 +165,19 @@ public class StringTerms extends InternalTerms<StringTerms, StringTerms.Bucket> 
 
     @Override
     public StringTerms create(List<Bucket> buckets) {
-        return new StringTerms(this.name, this.order, this.format, this.requiredSize, this.shardSize, this.minDocCount, buckets,
+        return new StringTerms(this.name, this.order, this.requiredSize, this.shardSize, this.minDocCount, buckets,
                 this.showTermDocCountError, this.docCountError, this.otherDocCount, this.pipelineAggregators(), this.metaData);
     }
 
     @Override
     public Bucket createBucket(InternalAggregations aggregations, Bucket prototype) {
-        return new Bucket(prototype.termBytes, prototype.docCount, aggregations, prototype.showDocCountError, prototype.docCountError, prototype.format);
+        return new Bucket(prototype.termBytes, prototype.docCount, aggregations, prototype.showDocCountError, prototype.docCountError);
     }
 
     @Override
     protected StringTerms create(String name, List<org.elasticsearch.search.aggregations.bucket.terms.InternalTerms.Bucket> buckets,
             long docCountError, long otherDocCount, InternalTerms prototype) {
-        return new StringTerms(name, prototype.order, prototype.format, prototype.requiredSize, prototype.shardSize, prototype.minDocCount, buckets,
+        return new StringTerms(name, prototype.order, prototype.requiredSize, prototype.shardSize, prototype.minDocCount, buckets,
                 prototype.showTermDocCountError, docCountError, otherDocCount, prototype.pipelineAggregators(), prototype.getMetaData());
     }
 
@@ -189,7 +185,6 @@ public class StringTerms extends InternalTerms<StringTerms, StringTerms.Bucket> 
     protected void doReadFrom(StreamInput in) throws IOException {
         this.docCountError = in.readLong();
         this.order = InternalOrder.Streams.readOrder(in);
-        this.format = in.readNamedWriteable(DocValueFormat.class);
         this.requiredSize = readSize(in);
         this.shardSize = readSize(in);
         this.showTermDocCountError = in.readBoolean();
@@ -198,7 +193,7 @@ public class StringTerms extends InternalTerms<StringTerms, StringTerms.Bucket> 
         int size = in.readVInt();
         List<InternalTerms.Bucket> buckets = new ArrayList<>(size);
         for (int i = 0; i < size; i++) {
-            Bucket bucket = new Bucket(format, showTermDocCountError);
+            Bucket bucket = new Bucket(showTermDocCountError);
             bucket.readFrom(in);
             buckets.add(bucket);
         }
@@ -210,7 +205,6 @@ public class StringTerms extends InternalTerms<StringTerms, StringTerms.Bucket> 
     protected void doWriteTo(StreamOutput out) throws IOException {
         out.writeLong(docCountError);
         InternalOrder.Streams.writeOrder(order, out);
-        out.writeNamedWriteable(format);
         writeSize(requiredSize, out);
         writeSize(shardSize, out);
         out.writeBoolean(showTermDocCountError);

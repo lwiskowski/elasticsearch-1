@@ -150,6 +150,14 @@ public class TermVectorsRequestBuilder extends ActionRequestBuilder<TermVectorsR
     }
 
     /**
+     * Sets whether to use distributed frequencies instead of shard statistics.
+     */
+    public TermVectorsRequestBuilder setDfs(boolean dfs) {
+        request.dfs(dfs);
+        return this;
+    }
+
+    /**
      * Sets whether to return only term vectors for special selected fields. Returns the term
      * vectors for all fields if selectedFields == null
      */
@@ -161,7 +169,7 @@ public class TermVectorsRequestBuilder extends ActionRequestBuilder<TermVectorsR
     /**
      * Sets whether term vectors are generated real-time.
      */
-    public TermVectorsRequestBuilder setRealtime(boolean realtime) {
+    public TermVectorsRequestBuilder setRealtime(Boolean realtime) {
         request.realtime(realtime);
         return this;
     }

@@ -39,7 +39,7 @@ public class RestDeleteIndexAction extends BaseRestHandler {
 
     @Inject
     public RestDeleteIndexAction(Settings settings, RestController controller, Client client) {
-        super(settings, client);
+        super(settings, controller, client);
         controller.registerHandler(RestRequest.Method.DELETE, "/", this);
         controller.registerHandler(RestRequest.Method.DELETE, "/{index}", this);
     }

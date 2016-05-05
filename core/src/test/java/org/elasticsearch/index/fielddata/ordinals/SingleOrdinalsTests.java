@@ -21,6 +21,7 @@ package org.elasticsearch.index.fielddata.ordinals;
 import org.apache.lucene.index.DocValues;
 import org.apache.lucene.index.RandomAccessOrds;
 import org.apache.lucene.index.SortedDocValues;
+import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.test.ESTestCase;
 
 import java.io.IOException;
@@ -48,7 +49,7 @@ public class SingleOrdinalsTests extends ESTestCase {
             builder.addDoc(doc);
         }
 
-        Ordinals ords = builder.build();
+        Ordinals ords = builder.build(Settings.EMPTY);
         assertThat(ords, instanceOf(SinglePackedOrdinals.class));
         RandomAccessOrds docs = ords.ordinals();
         final SortedDocValues singleOrds = DocValues.unwrapSingleton(docs);
@@ -67,12 +68,12 @@ public class SingleOrdinalsTests extends ESTestCase {
             builder.addDoc(doc);
         }
 
-        Ordinals ords = builder.build();
+        Ordinals ords = builder.build(Settings.EMPTY);
         assertThat(ords, instanceOf(SinglePackedOrdinals.class));
 
         builder.nextOrdinal();
         builder.addDoc(0);
-        ords = builder.build();
+        ords = builder.build(Settings.EMPTY);
         assertThat(ords, not(instanceOf(SinglePackedOrdinals.class)));
     }
 

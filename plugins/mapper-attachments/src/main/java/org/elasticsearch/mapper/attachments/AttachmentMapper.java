@@ -28,7 +28,6 @@ import org.elasticsearch.common.collect.Iterators;
 import org.elasticsearch.common.logging.ESLogger;
 import org.elasticsearch.common.logging.ESLoggerFactory;
 import org.elasticsearch.common.settings.Setting;
-import org.elasticsearch.common.settings.Setting.Property;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentParser;
@@ -38,10 +37,6 @@ import org.elasticsearch.index.mapper.MappedFieldType;
 import org.elasticsearch.index.mapper.Mapper;
 import org.elasticsearch.index.mapper.MapperParsingException;
 import org.elasticsearch.index.mapper.ParseContext;
-import org.elasticsearch.index.mapper.core.DateFieldMapper;
-import org.elasticsearch.index.mapper.core.NumberFieldMapper;
-import org.elasticsearch.index.mapper.core.NumberFieldMapper.NumberType;
-import org.elasticsearch.index.mapper.core.TextFieldMapper;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -49,6 +44,9 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
+import static org.elasticsearch.index.mapper.MapperBuilders.dateField;
+import static org.elasticsearch.index.mapper.MapperBuilders.integerField;
+import static org.elasticsearch.index.mapper.MapperBuilders.stringField;
 import static org.elasticsearch.index.mapper.core.TypeParsers.parseMultiField;
 
 /**
@@ -73,12 +71,9 @@ import static org.elasticsearch.index.mapper.core.TypeParsers.parseMultiField;
 public class AttachmentMapper extends FieldMapper {
 
     private static ESLogger logger = ESLoggerFactory.getLogger("mapper.attachment");
-    public static final Setting<Boolean> INDEX_ATTACHMENT_IGNORE_ERRORS_SETTING =
-        Setting.boolSetting("index.mapping.attachment.ignore_errors", true, Property.IndexScope);
-    public static final Setting<Boolean> INDEX_ATTACHMENT_DETECT_LANGUAGE_SETTING =
-        Setting.boolSetting("index.mapping.attachment.detect_language", false, Property.IndexScope);
-    public static final Setting<Integer> INDEX_ATTACHMENT_INDEXED_CHARS_SETTING =
-        Setting.intSetting("index.mapping.attachment.indexed_chars", 100000, Property.IndexScope);
+    public static final Setting<Boolean> INDEX_ATTACHMENT_IGNORE_ERRORS_SETTING = Setting.boolSetting("index.mapping.attachment.ignore_errors", true, false, Setting.Scope.INDEX);
+    public static final Setting<Boolean> INDEX_ATTACHMENT_DETECT_LANGUAGE_SETTING = Setting.boolSetting("index.mapping.attachment.detect_language", false, false, Setting.Scope.INDEX);
+    public static final Setting<Integer> INDEX_ATTACHMENT_INDEXED_CHARS_SETTING = Setting.intSetting("index.mapping.attachment.indexed_chars", 100000, false, Setting.Scope.INDEX);
 
     public static final String CONTENT_TYPE = "attachment";
 
@@ -118,6 +113,11 @@ public class AttachmentMapper extends FieldMapper {
         public String typeName() {
             return CONTENT_TYPE;
         }
+
+        @Override
+        public String value(Object value) {
+            return value == null?null:value.toString();
+        }
     }
 
     public static class Builder extends FieldMapper.Builder<Builder, AttachmentMapper> {
@@ -130,26 +130,26 @@ public class AttachmentMapper extends FieldMapper {
 
         private Mapper.Builder<?, ?> contentBuilder;
 
-        private Mapper.Builder<?, ?> titleBuilder = new TextFieldMapper.Builder(FieldNames.TITLE);
+        private Mapper.Builder<?, ?> titleBuilder = stringField(FieldNames.TITLE);
 
-        private Mapper.Builder<?, ?> nameBuilder = new TextFieldMapper.Builder(FieldNames.NAME);
+        private Mapper.Builder<?, ?> nameBuilder = stringField(FieldNames.NAME);
 
-        private Mapper.Builder<?, ?> authorBuilder = new TextFieldMapper.Builder(FieldNames.AUTHOR);
+        private Mapper.Builder<?, ?> authorBuilder = stringField(FieldNames.AUTHOR);
 
-        private Mapper.Builder<?, ?> keywordsBuilder = new TextFieldMapper.Builder(FieldNames.KEYWORDS);
+        private Mapper.Builder<?, ?> keywordsBuilder = stringField(FieldNames.KEYWORDS);
 
-        private Mapper.Builder<?, ?> dateBuilder = new DateFieldMapper.Builder(FieldNames.DATE);
+        private Mapper.Builder<?, ?> dateBuilder = dateField(FieldNames.DATE);
 
-        private Mapper.Builder<?, ?> contentTypeBuilder = new TextFieldMapper.Builder(FieldNames.CONTENT_TYPE);
+        private Mapper.Builder<?, ?> contentTypeBuilder = stringField(FieldNames.CONTENT_TYPE);
 
-        private Mapper.Builder<?, ?> contentLengthBuilder = new NumberFieldMapper.Builder(FieldNames.CONTENT_LENGTH, NumberType.INTEGER);
+        private Mapper.Builder<?, ?> contentLengthBuilder = integerField(FieldNames.CONTENT_LENGTH);
 
-        private Mapper.Builder<?, ?> languageBuilder = new TextFieldMapper.Builder(FieldNames.LANGUAGE);
+        private Mapper.Builder<?, ?> languageBuilder = stringField(FieldNames.LANGUAGE);
 
         public Builder(String name) {
             super(name, new AttachmentFieldType(), new AttachmentFieldType());
             this.builder = this;
-            this.contentBuilder = new TextFieldMapper.Builder(FieldNames.CONTENT);
+            this.contentBuilder = stringField(FieldNames.CONTENT);
         }
 
         public Builder content(Mapper.Builder<?, ?> content) {
@@ -295,7 +295,7 @@ public class AttachmentMapper extends FieldMapper {
             if (typeNode != null) {
                 type = typeNode.toString();
             } else {
-                type = "text";
+                type = "string";
             }
             Mapper.TypeParser typeParser = parserContext.typeParser(type);
             Mapper.Builder<?, ?> mapperBuilder = typeParser.parse(propName, propNode, parserContext);

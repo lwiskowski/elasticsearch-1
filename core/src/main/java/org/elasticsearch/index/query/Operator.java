@@ -28,8 +28,10 @@ import org.elasticsearch.common.util.CollectionUtils;
 import java.io.IOException;
 import java.util.Locale;
 
-public enum Operator implements Writeable {
+public enum Operator implements Writeable<Operator> {
     OR, AND;
+
+    private static final Operator PROTOTYPE = OR;
 
     public BooleanClause.Occur toBooleanClauseOccur() {
         switch (this) {
@@ -53,12 +55,17 @@ public enum Operator implements Writeable {
         }
     }
 
-    public static Operator readFromStream(StreamInput in) throws IOException {
+    @Override
+    public Operator readFrom(StreamInput in) throws IOException {
         int ordinal = in.readVInt();
         if (ordinal < 0 || ordinal >= values().length) {
             throw new IOException("Unknown Operator ordinal [" + ordinal + "]");
         }
         return values()[ordinal];
+    }
+
+    public static Operator readOperatorFrom(StreamInput in) throws IOException {
+        return PROTOTYPE.readFrom(in);
     }
 
     @Override
@@ -71,7 +78,6 @@ public enum Operator implements Writeable {
     }
 
     private static IllegalArgumentException newOperatorException(String op) {
-        return new IllegalArgumentException("operator needs to be either " +
-                CollectionUtils.arrayAsArrayList(values()) + ", but not [" + op + "]");
+        return new IllegalArgumentException("operator needs to be either " + CollectionUtils.arrayAsArrayList(values()) + ", but not [" + op + "]");
     }
 }

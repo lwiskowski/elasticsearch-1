@@ -26,6 +26,7 @@ import org.elasticsearch.common.Nullable;
 import org.elasticsearch.index.Index;
 import org.elasticsearch.index.IndexSettings;
 import org.elasticsearch.index.fielddata.AtomicGeoPointFieldData;
+import org.elasticsearch.index.fielddata.FieldDataType;
 import org.elasticsearch.index.fielddata.IndexFieldData;
 import org.elasticsearch.index.fielddata.IndexFieldData.XFieldComparatorSource.Nested;
 import org.elasticsearch.index.fielddata.IndexFieldDataCache;
@@ -39,8 +40,8 @@ import java.io.IOException;
 
 public abstract class AbstractGeoPointDVIndexFieldData extends DocValuesIndexFieldData implements IndexGeoPointFieldData {
 
-    AbstractGeoPointDVIndexFieldData(Index index, String fieldName) {
-        super(index, fieldName);
+    AbstractGeoPointDVIndexFieldData(Index index, String fieldName, FieldDataType fieldDataType) {
+        super(index, fieldName, fieldDataType);
     }
 
     @Override
@@ -54,8 +55,8 @@ public abstract class AbstractGeoPointDVIndexFieldData extends DocValuesIndexFie
     public static class GeoPointDVIndexFieldData extends AbstractGeoPointDVIndexFieldData {
         final boolean indexCreatedBefore2x;
 
-        public GeoPointDVIndexFieldData(Index index, String fieldName, final boolean indexCreatedBefore2x) {
-            super(index, fieldName);
+        public GeoPointDVIndexFieldData(Index index, String fieldName, FieldDataType fieldDataType, final boolean indexCreatedBefore2x) {
+            super(index, fieldName, fieldDataType);
             this.indexCreatedBefore2x = indexCreatedBefore2x;
         }
 
@@ -81,12 +82,8 @@ public abstract class AbstractGeoPointDVIndexFieldData extends DocValuesIndexFie
         @Override
         public IndexFieldData<?> build(IndexSettings indexSettings, MappedFieldType fieldType, IndexFieldDataCache cache,
                                        CircuitBreakerService breakerService, MapperService mapperService) {
-            if (indexSettings.getIndexVersionCreated().before(Version.V_2_2_0)
-                    && fieldType.hasDocValues() == false) {
-                return new GeoPointArrayIndexFieldData(indexSettings, fieldType.name(), cache, breakerService);
-            }
             // Ignore breaker
-            return new GeoPointDVIndexFieldData(indexSettings.getIndex(), fieldType.name(),
+            return new GeoPointDVIndexFieldData(indexSettings.getIndex(), fieldType.name(), fieldType.fieldDataType(),
                     indexSettings.getIndexVersionCreated().before(Version.V_2_2_0));
         }
     }

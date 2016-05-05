@@ -41,7 +41,7 @@ public class RestDeleteAction extends BaseRestHandler {
 
     @Inject
     public RestDeleteAction(Settings settings, RestController controller, Client client) {
-        super(settings, client);
+        super(settings, controller, client);
         controller.registerHandler(DELETE, "/{index}/{type}/{id}", this);
     }
 

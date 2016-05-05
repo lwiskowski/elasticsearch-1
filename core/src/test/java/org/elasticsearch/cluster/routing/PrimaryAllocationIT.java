@@ -29,6 +29,7 @@ import org.elasticsearch.common.collect.ImmutableOpenIntMap;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.gateway.GatewayAllocator;
 import org.elasticsearch.plugins.Plugin;
+import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.test.ESIntegTestCase;
 import org.elasticsearch.test.InternalTestCluster;
 import org.elasticsearch.test.disruption.NetworkDisconnectPartition;
@@ -77,11 +78,11 @@ public class PrimaryAllocationIT extends ESIntegTestCase {
         final String primaryNode;
         final String replicaNode;
         if (shards.get(0).primary()) {
-            primaryNode = state.getRoutingNodes().node(shards.get(0).currentNodeId()).node().getName();
-            replicaNode = state.getRoutingNodes().node(shards.get(1).currentNodeId()).node().getName();
+            primaryNode = state.getRoutingNodes().node(shards.get(0).currentNodeId()).node().name();
+            replicaNode = state.getRoutingNodes().node(shards.get(1).currentNodeId()).node().name();
         } else {
-            primaryNode = state.getRoutingNodes().node(shards.get(1).currentNodeId()).node().getName();
-            replicaNode = state.getRoutingNodes().node(shards.get(0).currentNodeId()).node().getName();
+            primaryNode = state.getRoutingNodes().node(shards.get(1).currentNodeId()).node().name();
+            replicaNode = state.getRoutingNodes().node(shards.get(0).currentNodeId()).node().name();
         }
 
         NetworkDisconnectPartition partition = new NetworkDisconnectPartition(
@@ -108,12 +109,7 @@ public class PrimaryAllocationIT extends ESIntegTestCase {
         logger.info("--> check that old primary shard does not get promoted to primary again");
         // kick reroute and wait for all shard states to be fetched
         client(master).admin().cluster().prepareReroute().get();
-        assertBusy(new Runnable() { 
-            @Override
-            public void run() {
-                assertThat(internalCluster().getInstance(GatewayAllocator.class, master).getNumberOfInFlightFetch(), equalTo(0));
-            }
-        });
+        assertBusy(() -> assertThat(internalCluster().getInstance(GatewayAllocator.class, master).getNumberOfInFlightFetch(), equalTo(0)));
         // kick reroute a second time and check that all shards are unassigned
         assertThat(client(master).admin().cluster().prepareReroute().get().getState().getRoutingNodes().unassigned().size(), equalTo(2));
     }
@@ -126,7 +122,7 @@ public class PrimaryAllocationIT extends ESIntegTestCase {
 
         logger.info("--> check that the up-to-date primary shard gets promoted and that documents are available");
         ensureYellow("test");
-        assertHitCount(client().prepareSearch().setSize(0).setQuery(matchAllQuery()).get(), 2L);
+        assertHitCount(client().prepareSearch().setSize(0).setQuery(matchAllQuery()).get(), 2l);
     }
 
     public void testFailedAllocationOfStalePrimaryToDataNodeWithNoData() throws Exception {
@@ -145,7 +141,7 @@ public class PrimaryAllocationIT extends ESIntegTestCase {
         assertThat(client().admin().cluster().prepareState().get().getState().getRoutingTable().index("test").getShards().get(0).primaryShard().unassignedInfo().getReason(), equalTo(UnassignedInfo.Reason.NODE_LEFT));
 
         logger.info("--> force allocation of stale copy to node that does not have shard copy");
-        client().admin().cluster().prepareReroute().add(new AllocateStalePrimaryAllocationCommand("test", 0, dataNodeWithNoShardCopy, true)).get();
+        client().admin().cluster().prepareReroute().add(new AllocateStalePrimaryAllocationCommand(new ShardId("test", 0), dataNodeWithNoShardCopy, true)).get();
 
         logger.info("--> wait until shard is failed and becomes unassigned again");
         assertBusy(() -> assertTrue(client().admin().cluster().prepareState().get().getState().getRoutingTable().index("test").allPrimaryShardsUnassigned()));
@@ -162,12 +158,12 @@ public class PrimaryAllocationIT extends ESIntegTestCase {
         for (IntObjectCursor<List<IndicesShardStoresResponse.StoreStatus>> shardStoreStatuses : storeStatuses) {
             int shardId = shardStoreStatuses.key;
             IndicesShardStoresResponse.StoreStatus storeStatus = randomFrom(shardStoreStatuses.value);
-            logger.info("--> adding allocation command for shard {}", shardId);
+            logger.info("--> adding allocation command for shard " + shardId);
             // force allocation based on node id
             if (useStaleReplica) {
-                rerouteBuilder.add(new AllocateStalePrimaryAllocationCommand("test", shardId, storeStatus.getNode().getId(), true));
+                rerouteBuilder.add(new AllocateStalePrimaryAllocationCommand(new ShardId("test", shardId), storeStatus.getNode().getId(), true));
             } else {
-                rerouteBuilder.add(new AllocateEmptyPrimaryAllocationCommand("test", shardId, storeStatus.getNode().getId(), true));
+                rerouteBuilder.add(new AllocateEmptyPrimaryAllocationCommand(new ShardId("test", shardId), storeStatus.getNode().getId(), true));
             }
         }
         rerouteBuilder.get();
@@ -175,7 +171,7 @@ public class PrimaryAllocationIT extends ESIntegTestCase {
         logger.info("--> check that the stale primary shard gets allocated and that documents are available");
         ensureYellow("test");
 
-        assertHitCount(client().prepareSearch("test").setSize(0).setQuery(matchAllQuery()).get(), useStaleReplica ? 1L : 0L);
+        assertHitCount(client().prepareSearch("test").setSize(0).setQuery(matchAllQuery()).get(), useStaleReplica ? 1l : 0l);
     }
 
     public void testForcePrimaryShardIfAllocationDecidersSayNoAfterIndexCreation() throws ExecutionException, InterruptedException {
@@ -186,7 +182,7 @@ public class PrimaryAllocationIT extends ESIntegTestCase {
 
         assertThat(client().admin().cluster().prepareState().get().getState().getRoutingTable().shardRoutingTable("test", 0).assignedShards(), empty());
 
-        client().admin().cluster().prepareReroute().add(new AllocateEmptyPrimaryAllocationCommand("test", 0, node, true)).get();
+        client().admin().cluster().prepareReroute().add(new AllocateEmptyPrimaryAllocationCommand(new ShardId("test", 0), node, true)).get();
         ensureGreen("test");
     }
 
@@ -204,6 +200,6 @@ public class PrimaryAllocationIT extends ESIntegTestCase {
         internalCluster().fullRestart();
         logger.info("--> checking that index still gets allocated with only 1 shard copy being available");
         ensureYellow("test");
-        assertHitCount(client().prepareSearch().setSize(0).setQuery(matchAllQuery()).get(), 1L);
+        assertHitCount(client().prepareSearch().setSize(0).setQuery(matchAllQuery()).get(), 1l);
     }
 }

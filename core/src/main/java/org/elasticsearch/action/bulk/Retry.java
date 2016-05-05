@@ -38,7 +38,7 @@ import java.util.function.Predicate;
 /**
  * Encapsulates synchronous and asynchronous retry logic.
  */
-public class Retry {
+class Retry {
     private final Class<? extends Throwable> retryOnThrowable;
 
     private BackoffPolicy backoffPolicy;

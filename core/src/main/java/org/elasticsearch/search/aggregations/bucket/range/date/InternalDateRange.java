@@ -19,7 +19,6 @@
 package org.elasticsearch.search.aggregations.bucket.range.date;
 
 import org.elasticsearch.common.io.stream.StreamInput;
-import org.elasticsearch.search.DocValueFormat;
 import org.elasticsearch.search.aggregations.AggregationStreams;
 import org.elasticsearch.search.aggregations.InternalAggregation;
 import org.elasticsearch.search.aggregations.InternalAggregations;
@@ -27,7 +26,7 @@ import org.elasticsearch.search.aggregations.bucket.BucketStreamContext;
 import org.elasticsearch.search.aggregations.bucket.BucketStreams;
 import org.elasticsearch.search.aggregations.bucket.range.InternalRange;
 import org.elasticsearch.search.aggregations.pipeline.PipelineAggregator;
-import org.elasticsearch.search.aggregations.support.ValueType;
+import org.elasticsearch.search.aggregations.support.format.ValueFormatter;
 import org.joda.time.DateTime;
 import org.joda.time.DateTimeZone;
 
@@ -54,7 +53,7 @@ public class InternalDateRange extends InternalRange<InternalDateRange.Bucket, I
     private final static BucketStreams.Stream<Bucket> BUCKET_STREAM = new BucketStreams.Stream<Bucket>() {
         @Override
         public Bucket readResult(StreamInput in, BucketStreamContext context) throws IOException {
-            Bucket buckets = new Bucket(context.keyed(), context.format());
+            Bucket buckets = new Bucket(context.keyed(), context.formatter());
             buckets.readFrom(in);
             return buckets;
         }
@@ -62,7 +61,7 @@ public class InternalDateRange extends InternalRange<InternalDateRange.Bucket, I
         @Override
         public BucketStreamContext getBucketStreamContext(Bucket bucket) {
             BucketStreamContext context = new BucketStreamContext();
-            context.format(bucket.format());
+            context.formatter(bucket.formatter());
             context.keyed(bucket.keyed());
             return context;
         }
@@ -77,15 +76,15 @@ public class InternalDateRange extends InternalRange<InternalDateRange.Bucket, I
 
     public static class Bucket extends InternalRange.Bucket {
 
-        public Bucket(boolean keyed, DocValueFormat formatter) {
+        public Bucket(boolean keyed, ValueFormatter formatter) {
             super(keyed, formatter);
         }
 
-        public Bucket(String key, double from, double to, long docCount, List<InternalAggregation> aggregations, boolean keyed, DocValueFormat formatter) {
+        public Bucket(String key, double from, double to, long docCount, List<InternalAggregation> aggregations, boolean keyed, ValueFormatter formatter) {
             super(key, from, to, docCount, new InternalAggregations(aggregations), keyed, formatter);
         }
 
-        public Bucket(String key, double from, double to, long docCount, InternalAggregations aggregations, boolean keyed, DocValueFormat formatter) {
+        public Bucket(String key, double from, double to, long docCount, InternalAggregations aggregations, boolean keyed, ValueFormatter formatter) {
             super(key, from, to, docCount, aggregations, keyed, formatter);
         }
 
@@ -108,50 +107,45 @@ public class InternalDateRange extends InternalRange<InternalDateRange.Bucket, I
             return keyed;
         }
 
-        DocValueFormat format() {
-            return format;
+        ValueFormatter formatter() {
+            return formatter;
         }
     }
 
     public static class Factory extends InternalRange.Factory<InternalDateRange.Bucket, InternalDateRange> {
 
         @Override
-        public Type type() {
-            return TYPE;
+        public String type() {
+            return TYPE.name();
         }
 
         @Override
-        public ValueType getValueType() {
-            return ValueType.DATE;
-        }
-
-        @Override
-        public InternalDateRange create(String name, List<InternalDateRange.Bucket> ranges, DocValueFormat formatter, boolean keyed,
+        public InternalDateRange create(String name, List<InternalDateRange.Bucket> ranges, ValueFormatter formatter, boolean keyed,
                 List<PipelineAggregator> pipelineAggregators, Map<String, Object> metaData) {
             return new InternalDateRange(name, ranges, formatter, keyed, pipelineAggregators, metaData);
         }
 
         @Override
         public InternalDateRange create(List<Bucket> ranges, InternalDateRange prototype) {
-            return new InternalDateRange(prototype.name, ranges, prototype.format, prototype.keyed, prototype.pipelineAggregators(),
+            return new InternalDateRange(prototype.name, ranges, prototype.formatter, prototype.keyed, prototype.pipelineAggregators(),
                     prototype.metaData);
         }
 
         @Override
-        public Bucket createBucket(String key, double from, double to, long docCount, InternalAggregations aggregations, boolean keyed, DocValueFormat formatter) {
+        public Bucket createBucket(String key, double from, double to, long docCount, InternalAggregations aggregations, boolean keyed, ValueFormatter formatter) {
             return new Bucket(key, from, to, docCount, aggregations, keyed, formatter);
         }
 
         @Override
         public Bucket createBucket(InternalAggregations aggregations, Bucket prototype) {
             return new Bucket(prototype.getKey(), ((Number) prototype.getFrom()).doubleValue(), ((Number) prototype.getTo()).doubleValue(),
-                    prototype.getDocCount(), aggregations, prototype.getKeyed(), prototype.getFormat());
+                    prototype.getDocCount(), aggregations, prototype.getKeyed(), prototype.getFormatter());
         }
     }
 
     InternalDateRange() {} // for serialization
 
-    InternalDateRange(String name, List<InternalDateRange.Bucket> ranges, DocValueFormat formatter, boolean keyed,
+    InternalDateRange(String name, List<InternalDateRange.Bucket> ranges, ValueFormatter formatter, boolean keyed,
             List<PipelineAggregator> pipelineAggregators, Map<String, Object> metaData) {
         super(name, ranges, formatter, keyed, pipelineAggregators, metaData);
     }

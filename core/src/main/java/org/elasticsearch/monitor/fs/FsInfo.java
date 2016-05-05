@@ -22,10 +22,11 @@ package org.elasticsearch.monitor.fs;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
-import org.elasticsearch.common.io.stream.Writeable;
+import org.elasticsearch.common.io.stream.Streamable;
 import org.elasticsearch.common.unit.ByteSizeValue;
 import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.common.xcontent.XContentBuilderString;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -33,9 +34,9 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Set;
 
-public class FsInfo implements Iterable<FsInfo.Path>, Writeable, ToXContent {
+public class FsInfo implements Iterable<FsInfo.Path>, Streamable, ToXContent {
 
-    public static class Path implements Writeable, ToXContent {
+    public static class Path implements Streamable, ToXContent {
 
         String path;
         @Nullable
@@ -62,10 +63,14 @@ public class FsInfo implements Iterable<FsInfo.Path>, Writeable, ToXContent {
             this.available = available;
         }
 
-        /**
-         * Read from a stream.
-         */
-        public Path(StreamInput in) throws IOException {
+        static public Path readInfoFrom(StreamInput in) throws IOException {
+            Path i = new Path();
+            i.readFrom(in);
+            return i;
+        }
+
+        @Override
+        public void readFrom(StreamInput in) throws IOException {
             path = in.readOptionalString();
             mount = in.readOptionalString();
             type = in.readOptionalString();
@@ -145,29 +150,29 @@ public class FsInfo implements Iterable<FsInfo.Path>, Writeable, ToXContent {
         }
 
         static final class Fields {
-            static final String PATH = "path";
-            static final String MOUNT = "mount";
-            static final String TYPE = "type";
-            static final String TOTAL = "total";
-            static final String TOTAL_IN_BYTES = "total_in_bytes";
-            static final String FREE = "free";
-            static final String FREE_IN_BYTES = "free_in_bytes";
-            static final String AVAILABLE = "available";
-            static final String AVAILABLE_IN_BYTES = "available_in_bytes";
-            static final String SPINS = "spins";
+            static final XContentBuilderString PATH = new XContentBuilderString("path");
+            static final XContentBuilderString MOUNT = new XContentBuilderString("mount");
+            static final XContentBuilderString TYPE = new XContentBuilderString("type");
+            static final XContentBuilderString TOTAL = new XContentBuilderString("total");
+            static final XContentBuilderString TOTAL_IN_BYTES = new XContentBuilderString("total_in_bytes");
+            static final XContentBuilderString FREE = new XContentBuilderString("free");
+            static final XContentBuilderString FREE_IN_BYTES = new XContentBuilderString("free_in_bytes");
+            static final XContentBuilderString AVAILABLE = new XContentBuilderString("available");
+            static final XContentBuilderString AVAILABLE_IN_BYTES = new XContentBuilderString("available_in_bytes");
+            static final XContentBuilderString SPINS = new XContentBuilderString("spins");
         }
 
         @Override
         public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
             builder.startObject();
             if (path != null) {
-                builder.field(Fields.PATH, path);
+                builder.field(Fields.PATH, path, XContentBuilder.FieldCaseConversion.NONE);
             }
             if (mount != null) {
-                builder.field(Fields.MOUNT, mount);
+                builder.field(Fields.MOUNT, mount, XContentBuilder.FieldCaseConversion.NONE);
             }
             if (type != null) {
-                builder.field(Fields.TYPE, type);
+                builder.field(Fields.TYPE, type, XContentBuilder.FieldCaseConversion.NONE);
             }
 
             if (total != -1) {
@@ -188,34 +193,18 @@ public class FsInfo implements Iterable<FsInfo.Path>, Writeable, ToXContent {
         }
     }
 
-    final long timestamp;
-    final Path[] paths;
+    long timestamp;
     Path total;
+    Path[] paths;
+
+    FsInfo() {
+
+    }
 
     public FsInfo(long timestamp, Path[] paths) {
         this.timestamp = timestamp;
         this.paths = paths;
         this.total = null;
-    }
-
-    /**
-     * Read from a stream.
-     */
-    public FsInfo(StreamInput in) throws IOException {
-        timestamp = in.readVLong();
-        paths = new Path[in.readVInt()];
-        for (int i = 0; i < paths.length; i++) {
-            paths[i] = new Path(in);
-        }
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeVLong(timestamp);
-        out.writeVInt(paths.length);
-        for (Path path : paths) {
-            path.writeTo(out);
-        }
     }
 
     public Path getTotal() {
@@ -249,11 +238,35 @@ public class FsInfo implements Iterable<FsInfo.Path>, Writeable, ToXContent {
         return Arrays.stream(paths).iterator();
     }
 
+    public static FsInfo readFsInfo(StreamInput in) throws IOException {
+        FsInfo stats = new FsInfo();
+        stats.readFrom(in);
+        return stats;
+    }
+
+    @Override
+    public void readFrom(StreamInput in) throws IOException {
+        timestamp = in.readVLong();
+        paths = new Path[in.readVInt()];
+        for (int i = 0; i < paths.length; i++) {
+            paths[i] = Path.readInfoFrom(in);
+        }
+    }
+
+    @Override
+    public void writeTo(StreamOutput out) throws IOException {
+        out.writeVLong(timestamp);
+        out.writeVInt(paths.length);
+        for (Path path : paths) {
+            path.writeTo(out);
+        }
+    }
+
     static final class Fields {
-        static final String FS = "fs";
-        static final String TIMESTAMP = "timestamp";
-        static final String DATA = "data";
-        static final String TOTAL = "total";
+        static final XContentBuilderString FS = new XContentBuilderString("fs");
+        static final XContentBuilderString TIMESTAMP = new XContentBuilderString("timestamp");
+        static final XContentBuilderString DATA = new XContentBuilderString("data");
+        static final XContentBuilderString TOTAL = new XContentBuilderString("total");
     }
 
     @Override

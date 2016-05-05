@@ -19,7 +19,6 @@
 package org.elasticsearch.snapshots;
 
 import org.elasticsearch.action.support.IndicesOptions;
-import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.common.regex.Regex;
 import org.elasticsearch.index.IndexNotFoundException;
 
@@ -44,7 +43,7 @@ public class SnapshotUtils {
      * @return filtered out indices
      */
     public static List<String> filterIndices(List<String> availableIndices, String[] selectedIndices, IndicesOptions indicesOptions) {
-        if (IndexNameExpressionResolver.isAllIndices(Arrays.asList(selectedIndices))) {
+        if (selectedIndices == null || selectedIndices.length == 0) {
             return availableIndices;
         }
         Set<String> result = null;
@@ -53,10 +52,9 @@ public class SnapshotUtils {
             boolean add = true;
             if (!indexOrPattern.isEmpty()) {
                 if (availableIndices.contains(indexOrPattern)) {
-                    if (result == null) {
-                        result = new HashSet<>();
+                    if (result != null) {
+                        result.add(indexOrPattern);
                     }
-                    result.add(indexOrPattern);
                     continue;
                 }
                 if (indexOrPattern.charAt(0) == '+') {

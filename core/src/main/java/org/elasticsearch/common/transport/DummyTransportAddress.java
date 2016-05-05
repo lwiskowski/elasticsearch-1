@@ -19,6 +19,7 @@
 
 package org.elasticsearch.common.transport;
 
+import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 
 import java.io.IOException;
@@ -44,11 +45,6 @@ public class DummyTransportAddress implements TransportAddress {
     }
 
     @Override
-    public boolean isLoopbackOrLinkLocalAddress() {
-        return false;
-    }
-
-    @Override
     public String getHost() {
         return "dummy";
     }
@@ -61,6 +57,11 @@ public class DummyTransportAddress implements TransportAddress {
     @Override
     public int getPort() {
         return 42;
+    }
+
+    @Override
+    public DummyTransportAddress readFrom(StreamInput in) throws IOException {
+        return INSTANCE;
     }
 
     @Override

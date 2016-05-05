@@ -44,7 +44,12 @@ public class ScriptQueryBuilderTests extends AbstractQueryTestCase<ScriptQueryBu
     }
 
     public void testIllegalConstructorArg() {
-        expectThrows(IllegalArgumentException.class, () -> new ScriptQueryBuilder((Script) null));
+        try {
+            new ScriptQueryBuilder(null);
+            fail("cannot be null");
+        } catch (IllegalArgumentException e) {
+            // expected
+        }
     }
 
     public void testFromJson() throws IOException {

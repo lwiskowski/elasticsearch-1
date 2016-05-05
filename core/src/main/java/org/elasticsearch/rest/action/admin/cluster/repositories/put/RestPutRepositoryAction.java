@@ -41,7 +41,7 @@ public class RestPutRepositoryAction extends BaseRestHandler {
 
     @Inject
     public RestPutRepositoryAction(Settings settings, RestController controller, Client client) {
-        super(settings, client);
+        super(settings, controller, client);
         controller.registerHandler(PUT, "/_snapshot/{repository}", this);
         controller.registerHandler(POST, "/_snapshot/{repository}", this);
     }

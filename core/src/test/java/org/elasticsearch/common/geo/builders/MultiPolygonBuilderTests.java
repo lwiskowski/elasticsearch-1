@@ -50,7 +50,7 @@ public class MultiPolygonBuilderTests extends AbstractShapeBuilderTestCase<Multi
                 int polyToChange = randomInt(mutation.polygons().size() - 1);
                 mutation.polygons().set(polyToChange, PolygonBuilderTests.mutatePolygonBuilder(mutation.polygons().get(polyToChange)));
             } else {
-                mutation.polygon((PolygonBuilder) RandomShapeGenerator.createShape(random(), ShapeType.POLYGON));
+                mutation.polygon((PolygonBuilder) RandomShapeGenerator.createShape(getRandom(), ShapeType.POLYGON));
             }
         }
         return mutation;
@@ -60,7 +60,7 @@ public class MultiPolygonBuilderTests extends AbstractShapeBuilderTestCase<Multi
         MultiPolygonBuilder mpb = new MultiPolygonBuilder(randomFrom(Orientation.values()));
         int polys = randomIntBetween(0, 10);
         for (int i = 0; i < polys; i++) {
-            PolygonBuilder pgb = (PolygonBuilder) RandomShapeGenerator.createShape(random(), ShapeType.POLYGON);
+            PolygonBuilder pgb = (PolygonBuilder) RandomShapeGenerator.createShape(getRandom(), ShapeType.POLYGON);
             mpb.polygon(pgb);
         }
         return mpb;

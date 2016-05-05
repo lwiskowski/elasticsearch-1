@@ -25,7 +25,7 @@ import org.elasticsearch.common.io.stream.Writeable;
 /**
  *
  */
-public interface TransportAddress extends Writeable {
+public interface TransportAddress extends Writeable<TransportAddress> {
 
     /**
      * Returns the host string for this transport address
@@ -45,8 +45,6 @@ public interface TransportAddress extends Writeable {
     short uniqueAddressTypeId();
 
     boolean sameHost(TransportAddress other);
-
-    boolean isLoopbackOrLinkLocalAddress();
 
     public String toString();
 }

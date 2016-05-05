@@ -207,7 +207,7 @@ public class QuerySearchResult extends QuerySearchResultProvider {
             this.pipelineAggregators = pipelineAggregators;
         }
         if (in.readBoolean()) {
-            suggest = Suggest.readSuggest(in);
+            suggest = Suggest.readSuggest(Suggest.Fields.SUGGEST, in);
         }
         searchTimedOut = in.readBoolean();
         terminatedEarly = in.readOptionalBoolean();

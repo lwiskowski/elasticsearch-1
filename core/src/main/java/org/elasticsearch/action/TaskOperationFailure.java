@@ -37,7 +37,7 @@ import static org.elasticsearch.ExceptionsHelper.detailedMessage;
  *
  * The class is final due to serialization limitations
  */
-public final class TaskOperationFailure implements Writeable, ToXContent {
+public final class TaskOperationFailure implements Writeable<TaskOperationFailure>, ToXContent {
 
     private final String nodeId;
 
@@ -47,16 +47,6 @@ public final class TaskOperationFailure implements Writeable, ToXContent {
 
     private final RestStatus status;
 
-    public TaskOperationFailure(String nodeId, long taskId, Throwable t) {
-        this.nodeId = nodeId;
-        this.taskId = taskId;
-        this.reason = t;
-        status = ExceptionsHelper.status(t);
-    }
-
-    /**
-     * Read from a stream.
-     */
     public TaskOperationFailure(StreamInput in) throws IOException {
         nodeId = in.readString();
         taskId = in.readLong();
@@ -64,12 +54,11 @@ public final class TaskOperationFailure implements Writeable, ToXContent {
         status = RestStatus.readFrom(in);
     }
 
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeString(nodeId);
-        out.writeLong(taskId);
-        out.writeThrowable(reason);
-        RestStatus.writeTo(out, status);
+    public TaskOperationFailure(String nodeId, long taskId, Throwable t) {
+        this.nodeId = nodeId;
+        this.taskId = taskId;
+        this.reason = t;
+        status = ExceptionsHelper.status(t);
     }
 
     public String getNodeId() {
@@ -90,6 +79,19 @@ public final class TaskOperationFailure implements Writeable, ToXContent {
 
     public Throwable getCause() {
         return reason;
+    }
+
+    @Override
+    public TaskOperationFailure readFrom(StreamInput in) throws IOException {
+        return new TaskOperationFailure(in);
+    }
+
+    @Override
+    public void writeTo(StreamOutput out) throws IOException {
+        out.writeString(nodeId);
+        out.writeLong(taskId);
+        out.writeThrowable(reason);
+        RestStatus.writeTo(out, status);
     }
 
     @Override

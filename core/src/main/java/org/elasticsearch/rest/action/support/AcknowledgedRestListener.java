@@ -20,6 +20,7 @@ package org.elasticsearch.rest.action.support;
 
 import org.elasticsearch.action.support.master.AcknowledgedResponse;
 import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.common.xcontent.XContentBuilderString;
 import org.elasticsearch.rest.BytesRestResponse;
 import org.elasticsearch.rest.RestChannel;
 import org.elasticsearch.rest.RestResponse;
@@ -54,6 +55,6 @@ public class AcknowledgedRestListener<T extends AcknowledgedResponse> extends Re
     }
 
     static final class Fields {
-        static final String ACKNOWLEDGED = "acknowledged";
+        static final XContentBuilderString ACKNOWLEDGED = new XContentBuilderString("acknowledged");
     }
 }

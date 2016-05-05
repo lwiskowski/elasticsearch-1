@@ -29,7 +29,6 @@ import org.elasticsearch.common.io.PathUtils;
 import org.elasticsearch.common.network.NetworkModule;
 import org.elasticsearch.common.regex.Regex;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.node.Node;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.test.junit.annotations.TestLogging;
 import org.elasticsearch.test.junit.listeners.LoggingListener;
@@ -104,7 +103,7 @@ public abstract class ESBackcompatTestCase extends ESIntegTestCase {
      */
     private static final String TESTS_COMPATIBILITY = "tests.compatibility";
 
-    private static final Version GLOBAL_COMPATIBILITY_VERSION = Version.fromString(compatibilityVersionProperty());
+    private static final Version GLOABL_COMPATIBILITY_VERSION = Version.fromString(compatibilityVersionProperty());
 
     private static Path backwardsCompatibilityPath() {
         String path = System.getProperty(TESTS_BACKWARDS_COMPATIBILITY_PATH);
@@ -155,7 +154,7 @@ public abstract class ESBackcompatTestCase extends ESIntegTestCase {
      * {@link #compatibilityVersion()}
      */
     public static Version globalCompatibilityVersion() {
-        return GLOBAL_COMPATIBILITY_VERSION;
+        return GLOABL_COMPATIBILITY_VERSION;
     }
 
     private static String compatibilityVersionProperty() {
@@ -195,7 +194,7 @@ public abstract class ESBackcompatTestCase extends ESIntegTestCase {
     private Settings addLoggerSettings(Settings externalNodesSettings) {
         TestLogging logging = getClass().getAnnotation(TestLogging.class);
         Map<String, String> loggingLevels = LoggingListener.getLoggersAndLevelsFromAnnotation(logging);
-        Settings.Builder finalSettings = Settings.builder();
+        Settings.Builder finalSettings = Settings.settingsBuilder();
         if (loggingLevels != null) {
             for (Map.Entry<String, String> level : loggingLevels.entrySet()) {
                 finalSettings.put("logger." + level.getKey(), level.getValue());
@@ -230,8 +229,8 @@ public abstract class ESBackcompatTestCase extends ESIntegTestCase {
         for (IndexRoutingTable indexRoutingTable : clusterState.routingTable()) {
             for (IndexShardRoutingTable indexShardRoutingTable : indexRoutingTable) {
                 for (ShardRouting shardRouting : indexShardRoutingTable) {
-                    if (shardRouting.currentNodeId() != null && index.equals(shardRouting.getIndexName())) {
-                        String name = clusterState.nodes().get(shardRouting.currentNodeId()).getName();
+                    if (shardRouting.currentNodeId() != null && index.equals(shardRouting.getIndex())) {
+                        String name = clusterState.nodes().get(shardRouting.currentNodeId()).name();
                         assertThat("Allocated on new node: " + name, Regex.simpleMatch(pattern, name), is(true));
                     }
                 }
@@ -242,7 +241,7 @@ public abstract class ESBackcompatTestCase extends ESIntegTestCase {
     protected Settings commonNodeSettings(int nodeOrdinal) {
         Settings.Builder builder = Settings.builder().put(requiredSettings());
         builder.put(NetworkModule.TRANSPORT_TYPE_KEY, "netty"); // run same transport  / disco as external
-        builder.put(Node.NODE_MODE_SETTING.getKey(), "network");
+        builder.put("node.mode", "network");
         return builder.build();
     }
 

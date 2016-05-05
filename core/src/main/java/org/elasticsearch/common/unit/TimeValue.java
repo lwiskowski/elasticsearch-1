@@ -250,12 +250,6 @@ public class TimeValue implements Streamable {
         }
     }
 
-    public static TimeValue parseTimeValue(String sValue, String settingName) {
-        Objects.requireNonNull(settingName);
-        Objects.requireNonNull(sValue);
-        return parseTimeValue(sValue, null, settingName);
-    }
-
     public static TimeValue parseTimeValue(String sValue, TimeValue defaultValue, String settingName) {
         settingName = Objects.requireNonNull(settingName);
         if (sValue == null) {
@@ -265,17 +259,17 @@ public class TimeValue implements Streamable {
             long millis;
             String lowerSValue = sValue.toLowerCase(Locale.ROOT).trim();
             if (lowerSValue.endsWith("ms")) {
-                millis = parse(lowerSValue, 2, 1);
+                millis = (long) (Double.parseDouble(lowerSValue.substring(0, lowerSValue.length() - 2)));
             } else if (lowerSValue.endsWith("s")) {
-                millis = parse(lowerSValue, 1, 1000);
+                millis = (long) Double.parseDouble(lowerSValue.substring(0, lowerSValue.length() - 1)) * 1000;
             } else if (lowerSValue.endsWith("m")) {
-                millis = parse(lowerSValue, 1, 60 * 1000);
+                millis = (long) (Double.parseDouble(lowerSValue.substring(0, lowerSValue.length() - 1)) * 60 * 1000);
             } else if (lowerSValue.endsWith("h")) {
-                millis = parse(lowerSValue, 1, 60 * 60 * 1000);
+                millis = (long) (Double.parseDouble(lowerSValue.substring(0, lowerSValue.length() - 1)) * 60 * 60 * 1000);
             } else if (lowerSValue.endsWith("d")) {
-                millis = parse(lowerSValue, 1, 24 * 60 * 60 * 1000);
+                millis = (long) (Double.parseDouble(lowerSValue.substring(0, lowerSValue.length() - 1)) * 24 * 60 * 60 * 1000);
             } else if (lowerSValue.endsWith("w")) {
-                millis = parse(lowerSValue, 1, 7 * 24 * 60 * 60 * 1000);
+                millis = (long) (Double.parseDouble(lowerSValue.substring(0, lowerSValue.length() - 1)) * 7 * 24 * 60 * 60 * 1000);
             } else if (lowerSValue.equals("-1")) {
                 // Allow this special value to be unit-less:
                 millis = -1;
@@ -290,10 +284,6 @@ public class TimeValue implements Streamable {
         } catch (NumberFormatException e) {
             throw new ElasticsearchParseException("Failed to parse [{}]", e, sValue);
         }
-    }
-
-    private static long parse(String s, int suffixLength, long scale) {
-        return (long) (Double.parseDouble(s.substring(0, s.length() - suffixLength)) * scale);
     }
 
     static final long C0 = 1L;

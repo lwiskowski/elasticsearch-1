@@ -23,8 +23,6 @@ import org.elasticsearch.common.blobstore.BlobPath;
 import org.elasticsearch.common.blobstore.BlobStore;
 import org.elasticsearch.common.blobstore.fs.FsBlobStore;
 import org.elasticsearch.common.inject.Inject;
-import org.elasticsearch.common.settings.Setting;
-import org.elasticsearch.common.settings.Setting.Property;
 import org.elasticsearch.common.unit.ByteSizeValue;
 import org.elasticsearch.env.Environment;
 import org.elasticsearch.index.snapshots.IndexShardRepository;
@@ -35,7 +33,6 @@ import org.elasticsearch.repositories.blobstore.BlobStoreRepository;
 
 import java.io.IOException;
 import java.nio.file.Path;
-import java.util.function.Function;
 
 /**
  * Shared file system implementation of the BlobStoreRepository
@@ -51,18 +48,6 @@ import java.util.function.Function;
 public class FsRepository extends BlobStoreRepository {
 
     public final static String TYPE = "fs";
-
-    public static final Setting<String> LOCATION_SETTING =
-        new Setting<>("location", "", Function.identity(), Property.NodeScope);
-    public static final Setting<String> REPOSITORIES_LOCATION_SETTING =
-        new Setting<>("repositories.fs.location", LOCATION_SETTING, Function.identity(), Property.NodeScope);
-    public static final Setting<ByteSizeValue> CHUNK_SIZE_SETTING =
-        Setting.byteSizeSetting("chunk_size", "-1", Property.NodeScope);
-    public static final Setting<ByteSizeValue> REPOSITORIES_CHUNK_SIZE_SETTING =
-        Setting.byteSizeSetting("repositories.fs.chunk_size", "-1", Property.NodeScope);
-    public static final Setting<Boolean> COMPRESS_SETTING = Setting.boolSetting("compress", false, Property.NodeScope);
-    public static final Setting<Boolean> REPOSITORIES_COMPRESS_SETTING =
-        Setting.boolSetting("repositories.fs.compress", false, Property.NodeScope);
 
     private final FsBlobStore blobStore;
 
@@ -83,8 +68,8 @@ public class FsRepository extends BlobStoreRepository {
     public FsRepository(RepositoryName name, RepositorySettings repositorySettings, IndexShardRepository indexShardRepository, Environment environment) throws IOException {
         super(name.getName(), repositorySettings, indexShardRepository);
         Path locationFile;
-        String location = REPOSITORIES_LOCATION_SETTING.get(repositorySettings.settings());
-        if (location.isEmpty()) {
+        String location = repositorySettings.settings().get("location", settings.get("repositories.fs.location"));
+        if (location == null) {
             logger.warn("the repository location is missing, it should point to a shared file system location that is available on all master and data nodes");
             throw new RepositoryException(name.name(), "missing location");
         }
@@ -100,14 +85,8 @@ public class FsRepository extends BlobStoreRepository {
         }
 
         blobStore = new FsBlobStore(settings, locationFile);
-        if (CHUNK_SIZE_SETTING.exists(repositorySettings.settings())) {
-            this.chunkSize = CHUNK_SIZE_SETTING.get(repositorySettings.settings());
-        } else if (REPOSITORIES_CHUNK_SIZE_SETTING.exists(settings)) {
-            this.chunkSize = REPOSITORIES_CHUNK_SIZE_SETTING.get(settings);
-        } else {
-            this.chunkSize = null;
-        }
-        this.compress = COMPRESS_SETTING.exists(repositorySettings.settings()) ? COMPRESS_SETTING.get(repositorySettings.settings()) : REPOSITORIES_COMPRESS_SETTING.get(settings);
+        this.chunkSize = repositorySettings.settings().getAsBytesSize("chunk_size", settings.getAsBytesSize("repositories.fs.chunk_size", null));
+        this.compress = repositorySettings.settings().getAsBoolean("compress", settings.getAsBoolean("repositories.fs.compress", false));
         this.basePath = BlobPath.cleanPath();
     }
 

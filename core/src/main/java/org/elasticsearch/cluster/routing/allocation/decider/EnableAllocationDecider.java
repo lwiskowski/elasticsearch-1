@@ -26,15 +26,13 @@ import org.elasticsearch.cluster.routing.allocation.RoutingAllocation;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.ClusterSettings;
 import org.elasticsearch.common.settings.Setting;
-import org.elasticsearch.common.settings.Setting.Property;
 import org.elasticsearch.common.settings.Settings;
 
 import java.util.Locale;
 
 /**
- * This allocation decider allows shard allocations / rebalancing via the cluster wide settings
- * {@link #CLUSTER_ROUTING_ALLOCATION_ENABLE_SETTING} / {@link #CLUSTER_ROUTING_REBALANCE_ENABLE_SETTING} and the per index setting
- * {@link #INDEX_ROUTING_ALLOCATION_ENABLE_SETTING} / {@link #INDEX_ROUTING_REBALANCE_ENABLE_SETTING}.
+ * This allocation decider allows shard allocations / rebalancing via the cluster wide settings {@link #CLUSTER_ROUTING_ALLOCATION_ENABLE_SETTING} /
+ * {@link #CLUSTER_ROUTING_REBALANCE_ENABLE_SETTING} and the per index setting {@link #INDEX_ROUTING_ALLOCATION_ENABLE_SETTING} / {@link #INDEX_ROUTING_REBALANCE_ENABLE_SETTING}.
  * The per index settings overrides the cluster wide setting.
  *
  * <p>
@@ -62,19 +60,11 @@ public class EnableAllocationDecider extends AllocationDecider {
 
     public static final String NAME = "enable";
 
-    public static final Setting<Allocation> CLUSTER_ROUTING_ALLOCATION_ENABLE_SETTING =
-        new Setting<>("cluster.routing.allocation.enable", Allocation.ALL.name(), Allocation::parse,
-            Property.Dynamic, Property.NodeScope);
-    public static final Setting<Allocation> INDEX_ROUTING_ALLOCATION_ENABLE_SETTING =
-        new Setting<>("index.routing.allocation.enable", Allocation.ALL.name(), Allocation::parse,
-            Property.Dynamic, Property.IndexScope);
+    public static final Setting<Allocation> CLUSTER_ROUTING_ALLOCATION_ENABLE_SETTING = new Setting<>("cluster.routing.allocation.enable", Allocation.ALL.name(), Allocation::parse, true, Setting.Scope.CLUSTER);
+    public static final Setting<Allocation> INDEX_ROUTING_ALLOCATION_ENABLE_SETTING = new Setting<>("index.routing.allocation.enable", Allocation.ALL.name(), Allocation::parse, true, Setting.Scope.INDEX);
 
-    public static final Setting<Rebalance> CLUSTER_ROUTING_REBALANCE_ENABLE_SETTING =
-        new Setting<>("cluster.routing.rebalance.enable", Rebalance.ALL.name(), Rebalance::parse,
-            Property.Dynamic, Property.NodeScope);
-    public static final Setting<Rebalance> INDEX_ROUTING_REBALANCE_ENABLE_SETTING =
-        new Setting<>("index.routing.rebalance.enable", Rebalance.ALL.name(), Rebalance::parse,
-            Property.Dynamic, Property.IndexScope);
+    public static final Setting<Rebalance> CLUSTER_ROUTING_REBALANCE_ENABLE_SETTING = new Setting<>("cluster.routing.rebalance.enable", Rebalance.ALL.name(), Rebalance::parse, true, Setting.Scope.CLUSTER);
+    public static final Setting<Rebalance> INDEX_ROUTING_REBALANCE_ENABLE_SETTING = new Setting<>("index.routing.rebalance.enable", Rebalance.ALL.name(), Rebalance::parse, true, Setting.Scope.INDEX);
 
     private volatile Rebalance enableRebalance;
     private volatile Allocation enableAllocation;
@@ -99,10 +89,10 @@ public class EnableAllocationDecider extends AllocationDecider {
     @Override
     public Decision canAllocate(ShardRouting shardRouting, RoutingNode node, RoutingAllocation allocation) {
         if (allocation.ignoreDisable()) {
-            return allocation.decision(Decision.YES, NAME, "allocation is explicitly ignoring any disabling of allocation");
+            return allocation.decision(Decision.YES, NAME, "allocation disabling is ignored");
         }
 
-        final IndexMetaData indexMetaData = allocation.metaData().getIndexSafe(shardRouting.index());
+        final IndexMetaData indexMetaData = allocation.metaData().index(shardRouting.getIndex());
         final Allocation enable;
         if (INDEX_ROUTING_ALLOCATION_ENABLE_SETTING.exists(indexMetaData.getSettings())) {
             enable = INDEX_ROUTING_ALLOCATION_ENABLE_SETTING.get(indexMetaData.getSettings());
@@ -134,10 +124,10 @@ public class EnableAllocationDecider extends AllocationDecider {
     @Override
     public Decision canRebalance(ShardRouting shardRouting, RoutingAllocation allocation) {
         if (allocation.ignoreDisable()) {
-            return allocation.decision(Decision.YES, NAME, "allocation is explicitly ignoring any disabling of relocation");
+            return allocation.decision(Decision.YES, NAME, "rebalance disabling is ignored");
         }
 
-        Settings indexSettings = allocation.routingNodes().metaData().getIndexSafe(shardRouting.index()).getSettings();
+        Settings indexSettings = allocation.routingNodes().metaData().index(shardRouting.index()).getSettings();
         final Rebalance enable;
         if (INDEX_ROUTING_REBALANCE_ENABLE_SETTING.exists(indexSettings)) {
             enable = INDEX_ROUTING_REBALANCE_ENABLE_SETTING.get(indexSettings);
@@ -168,8 +158,7 @@ public class EnableAllocationDecider extends AllocationDecider {
 
     /**
      * Allocation values or rather their string representation to be used used with
-     * {@link EnableAllocationDecider#CLUSTER_ROUTING_ALLOCATION_ENABLE_SETTING} /
-     * {@link EnableAllocationDecider#INDEX_ROUTING_ALLOCATION_ENABLE_SETTING}
+     * {@link EnableAllocationDecider#CLUSTER_ROUTING_ALLOCATION_ENABLE_SETTING} / {@link EnableAllocationDecider#INDEX_ROUTING_ALLOCATION_ENABLE_SETTING}
      * via cluster / index settings.
      */
     public enum Allocation {
@@ -195,8 +184,7 @@ public class EnableAllocationDecider extends AllocationDecider {
 
     /**
      * Rebalance values or rather their string representation to be used used with
-     * {@link EnableAllocationDecider#CLUSTER_ROUTING_REBALANCE_ENABLE_SETTING} /
-     * {@link EnableAllocationDecider#INDEX_ROUTING_REBALANCE_ENABLE_SETTING}
+     * {@link EnableAllocationDecider#CLUSTER_ROUTING_REBALANCE_ENABLE_SETTING} / {@link EnableAllocationDecider#INDEX_ROUTING_REBALANCE_ENABLE_SETTING}
      * via cluster / index settings.
      */
     public enum Rebalance {

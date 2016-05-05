@@ -71,7 +71,7 @@ final class BigDoubleArray extends AbstractBigArray implements DoubleArray {
 
     @Override
     protected int numBytesPerElement() {
-        return Integer.BYTES;
+        return RamUsageEstimator.NUM_BYTES_INT;
     }
 
     /** Change the size of this array. Content between indexes <code>0</code> and <code>min(size(), newSize)</code> will be preserved. */

@@ -33,6 +33,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.elasticsearch.cluster.ClusterName.readClusterName;
+import static org.elasticsearch.cluster.node.DiscoveryNode.readNode;
 
 /**
  *
@@ -119,9 +120,9 @@ public interface ZenPing extends LifecycleComponent<ZenPing> {
         @Override
         public void readFrom(StreamInput in) throws IOException {
             clusterName = readClusterName(in);
-            node = new DiscoveryNode(in);
+            node = readNode(in);
             if (in.readBoolean()) {
-                master = new DiscoveryNode(in);
+                master = readNode(in);
             }
             this.hasJoinedOnce = in.readBoolean();
             this.id = in.readLong();

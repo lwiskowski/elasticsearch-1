@@ -13,7 +13,7 @@
               doc:
                 properties:
                   text:
-                     type : "text"
+                     type : "string"
                      term_vector : "with_positions_offsets"
 
   - do:

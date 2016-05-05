@@ -23,6 +23,7 @@ import org.elasticsearch.action.DocWriteResponse;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.common.xcontent.XContentBuilderString;
 import org.elasticsearch.index.get.GetResult;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.rest.RestStatus;
@@ -100,7 +101,7 @@ public class UpdateResponse extends DocWriteResponse {
 
 
     static final class Fields {
-        static final String GET = "get";
+        static final XContentBuilderString GET = new XContentBuilderString("get");
     }
 
     @Override

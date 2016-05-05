@@ -26,11 +26,8 @@ import org.elasticsearch.common.unit.TimeValue;
 /**
  * Builder for task-based requests
  */
-public class TasksRequestBuilder<
-            Request extends BaseTasksRequest<Request>,
-            Response extends BaseTasksResponse,
-            RequestBuilder extends TasksRequestBuilder<Request, Response, RequestBuilder>
-        > extends ActionRequestBuilder<Request, Response, RequestBuilder> {
+public class TasksRequestBuilder <Request extends BaseTasksRequest<Request>, Response extends BaseTasksResponse, RequestBuilder extends TasksRequestBuilder<Request, Response, RequestBuilder>>
+        extends ActionRequestBuilder<Request, Response, RequestBuilder> {
 
     protected TasksRequestBuilder(ElasticsearchClient client, Action<Request, Response, RequestBuilder> action, Request request) {
         super(client, action, request);
@@ -38,19 +35,19 @@ public class TasksRequestBuilder<
 
     @SuppressWarnings("unchecked")
     public final RequestBuilder setNodesIds(String... nodesIds) {
-        request.setNodesIds(nodesIds);
+        request.nodesIds(nodesIds);
         return (RequestBuilder) this;
     }
 
     @SuppressWarnings("unchecked")
     public final RequestBuilder setActions(String... actions) {
-        request.setActions(actions);
+        request.actions(actions);
         return (RequestBuilder) this;
     }
 
     @SuppressWarnings("unchecked")
     public final RequestBuilder setTimeout(TimeValue timeout) {
-        request.setTimeout(timeout);
+        request.timeout(timeout);
         return (RequestBuilder) this;
     }
 }

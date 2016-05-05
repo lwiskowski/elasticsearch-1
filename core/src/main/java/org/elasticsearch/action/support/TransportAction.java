@@ -30,7 +30,6 @@ import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.logging.ESLogger;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.tasks.Task;
-import org.elasticsearch.tasks.TaskListener;
 import org.elasticsearch.tasks.TaskManager;
 import org.elasticsearch.threadpool.ThreadPool;
 
@@ -67,19 +66,7 @@ public abstract class TransportAction<Request extends ActionRequest<Request>, Re
         return future;
     }
 
-    /**
-     * Use this method when the transport action call should result in creation of a new task associated with the call.
-     *
-     * This is a typical behavior.
-     */
     public final Task execute(Request request, ActionListener<Response> listener) {
-        /*
-         * While this version of execute could delegate to the TaskListener
-         * version of execute that'd add yet another layer of wrapping on the
-         * listener and prevent us from using the listener bare if there isn't a
-         * task. That just seems like too many objects. Thus the two versions of
-         * this method.
-         */
         Task task = taskManager.register("transport", actionName, request);
         if (task == null) {
             execute(null, request, listener);
@@ -101,32 +88,8 @@ public abstract class TransportAction<Request extends ActionRequest<Request>, Re
         return task;
     }
 
-    public final Task execute(Request request, TaskListener<Response> listener) {
-        Task task = taskManager.register("transport", actionName, request);
-        execute(task, request, new ActionListener<Response>() {
-            @Override
-            public void onResponse(Response response) {
-                if (task != null) {
-                    taskManager.unregister(task);
-                }
-                listener.onResponse(task, response);
-            }
+    private final void execute(Task task, Request request, ActionListener<Response> listener) {
 
-            @Override
-            public void onFailure(Throwable e) {
-                if (task != null) {
-                    taskManager.unregister(task);
-                }
-                listener.onFailure(task, e);
-            }
-        });
-        return task;
-    }
-
-    /**
-     * Use this method when the transport action should continue to run in the context of the current task
-     */
-    public final void execute(Task task, Request request, ActionListener<Response> listener) {
         ActionRequestValidationException validationException = request.validate();
         if (validationException != null) {
             listener.onFailure(validationException);
@@ -141,7 +104,7 @@ public abstract class TransportAction<Request extends ActionRequest<Request>, Re
                 listener.onFailure(t);
             }
         } else {
-            RequestFilterChain<Request, Response> requestFilterChain = new RequestFilterChain<>(this, logger);
+            RequestFilterChain requestFilterChain = new RequestFilterChain<>(this, logger);
             requestFilterChain.proceed(task, actionName, request, listener);
         }
     }
@@ -152,8 +115,7 @@ public abstract class TransportAction<Request extends ActionRequest<Request>, Re
 
     protected abstract void doExecute(Request request, ActionListener<Response> listener);
 
-    private static class RequestFilterChain<Request extends ActionRequest<Request>, Response extends ActionResponse>
-            implements ActionFilterChain<Request, Response> {
+    private static class RequestFilterChain<Request extends ActionRequest<Request>, Response extends ActionResponse> implements ActionFilterChain {
 
         private final TransportAction<Request, Response> action;
         private final AtomicInteger index = new AtomicInteger();
@@ -164,15 +126,14 @@ public abstract class TransportAction<Request extends ActionRequest<Request>, Re
             this.logger = logger;
         }
 
-        @Override
-        public void proceed(Task task, String actionName, Request request, ActionListener<Response> listener) {
+        @Override @SuppressWarnings("unchecked")
+        public void proceed(Task task, String actionName, ActionRequest request, ActionListener listener) {
             int i = index.getAndIncrement();
             try {
                 if (i < this.action.filters.length) {
                     this.action.filters[i].apply(task, actionName, request, listener, this);
                 } else if (i == this.action.filters.length) {
-                    this.action.doExecute(task, request, new FilteredActionListener<Response>(actionName, listener,
-                            new ResponseFilterChain<>(this.action.filters, logger)));
+                    this.action.doExecute(task, (Request) request, new FilteredActionListener<Response>(actionName, listener, new ResponseFilterChain(this.action.filters, logger)));
                 } else {
                     listener.onFailure(new IllegalStateException("proceed was called too many times"));
                 }
@@ -183,13 +144,12 @@ public abstract class TransportAction<Request extends ActionRequest<Request>, Re
         }
 
         @Override
-        public void proceed(String action, Response response, ActionListener<Response> listener) {
+        public void proceed(String action, ActionResponse response, ActionListener listener) {
             assert false : "request filter chain should never be called on the response side";
         }
     }
 
-    private static class ResponseFilterChain<Request extends ActionRequest<Request>, Response extends ActionResponse>
-            implements ActionFilterChain<Request, Response> {
+    private static class ResponseFilterChain implements ActionFilterChain {
 
         private final ActionFilter[] filters;
         private final AtomicInteger index;
@@ -202,12 +162,12 @@ public abstract class TransportAction<Request extends ActionRequest<Request>, Re
         }
 
         @Override
-        public void proceed(Task task, String action, Request request, ActionListener<Response> listener) {
+        public void proceed(Task task, String action, ActionRequest request, ActionListener listener) {
             assert false : "response filter chain should never be called on the request side";
         }
 
-        @Override
-        public void proceed(String action, Response response, ActionListener<Response> listener) {
+        @Override @SuppressWarnings("unchecked")
+        public void proceed(String action, ActionResponse response, ActionListener listener) {
             int i = index.decrementAndGet();
             try {
                 if (i >= 0) {
@@ -227,10 +187,10 @@ public abstract class TransportAction<Request extends ActionRequest<Request>, Re
     private static class FilteredActionListener<Response extends ActionResponse> implements ActionListener<Response> {
 
         private final String actionName;
-        private final ActionListener<Response> listener;
-        private final ResponseFilterChain<?, Response> chain;
+        private final ActionListener listener;
+        private final ResponseFilterChain chain;
 
-        private FilteredActionListener(String actionName, ActionListener<Response> listener, ResponseFilterChain<?, Response> chain) {
+        private FilteredActionListener(String actionName, ActionListener listener, ResponseFilterChain chain) {
             this.actionName = actionName;
             this.listener = listener;
             this.chain = chain;

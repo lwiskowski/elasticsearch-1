@@ -19,9 +19,9 @@
 
 package org.elasticsearch.action.admin.cluster.node.info;
 
+import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
 import org.elasticsearch.action.support.nodes.BaseNodesResponse;
 import org.elasticsearch.cluster.ClusterName;
-import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.settings.Settings;
@@ -64,39 +64,34 @@ public class NodesInfoResponse extends BaseNodesResponse<NodeInfo> implements To
 
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.field("cluster_name", getClusterName().value());
+        builder.field("cluster_name", getClusterName().value(), XContentBuilder.FieldCaseConversion.NONE);
 
         builder.startObject("nodes");
         for (NodeInfo nodeInfo : this) {
-            builder.startObject(nodeInfo.getNode().getId());
+            builder.startObject(nodeInfo.getNode().id(), XContentBuilder.FieldCaseConversion.NONE);
 
-            builder.field("name", nodeInfo.getNode().getName());
-            builder.field("transport_address", nodeInfo.getNode().getAddress().toString());
-            builder.field("host", nodeInfo.getNode().getHostName());
-            builder.field("ip", nodeInfo.getNode().getHostAddress());
+            builder.field("name", nodeInfo.getNode().name(), XContentBuilder.FieldCaseConversion.NONE);
+            builder.field("transport_address", nodeInfo.getNode().address().toString());
+            builder.field("host", nodeInfo.getNode().getHostName(), XContentBuilder.FieldCaseConversion.NONE);
+            builder.field("ip", nodeInfo.getNode().getHostAddress(), XContentBuilder.FieldCaseConversion.NONE);
 
             builder.field("version", nodeInfo.getVersion());
             builder.field("build_hash", nodeInfo.getBuild().shortHash());
 
             if (nodeInfo.getServiceAttributes() != null) {
                 for (Map.Entry<String, String> nodeAttribute : nodeInfo.getServiceAttributes().entrySet()) {
-                    builder.field(nodeAttribute.getKey(), nodeAttribute.getValue());
+                    builder.field(nodeAttribute.getKey(), nodeAttribute.getValue(), XContentBuilder.FieldCaseConversion.NONE);
                 }
             }
 
-            builder.startArray("roles");
-            for (DiscoveryNode.Role role : nodeInfo.getNode().getRoles()) {
-                builder.value(role.getRoleName());
-            }
-            builder.endArray();
-
-            if (!nodeInfo.getNode().getAttributes().isEmpty()) {
+            if (!nodeInfo.getNode().attributes().isEmpty()) {
                 builder.startObject("attributes");
-                for (Map.Entry<String, String> entry : nodeInfo.getNode().getAttributes().entrySet()) {
-                    builder.field(entry.getKey(), entry.getValue());
+                for (ObjectObjectCursor<String, String> attr : nodeInfo.getNode().attributes()) {
+                    builder.field(attr.key, attr.value, XContentBuilder.FieldCaseConversion.NONE);
                 }
                 builder.endObject();
             }
+
 
             if (nodeInfo.getSettings() != null) {
                 builder.startObject("settings");
@@ -125,9 +120,6 @@ public class NodesInfoResponse extends BaseNodesResponse<NodeInfo> implements To
             }
             if (nodeInfo.getPlugins() != null) {
                 nodeInfo.getPlugins().toXContent(builder, params);
-            }
-            if (nodeInfo.getIngest() != null) {
-                nodeInfo.getIngest().toXContent(builder, params);
             }
 
             builder.endObject();

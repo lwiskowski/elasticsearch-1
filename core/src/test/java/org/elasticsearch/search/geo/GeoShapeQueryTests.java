@@ -19,7 +19,7 @@
 
 package org.elasticsearch.search.geo;
 
-import org.locationtech.spatial4j.shape.Rectangle;
+import com.spatial4j.core.shape.Rectangle;
 import com.vividsolutions.jts.geom.Coordinate;
 
 import org.elasticsearch.action.get.GetResponse;
@@ -104,7 +104,7 @@ public class GeoShapeQueryTests extends ESSingleNodeTestCase {
                 .execute().actionGet();
 
         assertSearchResponse(searchResponse);
-        assertThat(searchResponse.getHits().getTotalHits(), equalTo(1L));
+        assertThat(searchResponse.getHits().getTotalHits(), equalTo(1l));
         assertThat(searchResponse.getHits().hits().length, equalTo(1));
         assertThat(searchResponse.getHits().getAt(0).id(), equalTo("1"));
 
@@ -113,7 +113,7 @@ public class GeoShapeQueryTests extends ESSingleNodeTestCase {
                 .execute().actionGet();
 
         assertSearchResponse(searchResponse);
-        assertThat(searchResponse.getHits().getTotalHits(), equalTo(1L));
+        assertThat(searchResponse.getHits().getTotalHits(), equalTo(1l));
         assertThat(searchResponse.getHits().hits().length, equalTo(1));
         assertThat(searchResponse.getHits().getAt(0).id(), equalTo("1"));
     }
@@ -150,7 +150,7 @@ public class GeoShapeQueryTests extends ESSingleNodeTestCase {
                 .execute().actionGet();
 
         assertSearchResponse(searchResponse);
-        assertThat(searchResponse.getHits().getTotalHits(), equalTo(1L));
+        assertThat(searchResponse.getHits().getTotalHits(), equalTo(1l));
         assertThat(searchResponse.getHits().hits().length, equalTo(1));
         assertThat(searchResponse.getHits().getAt(0).id(), equalTo("blakely"));
     }
@@ -183,7 +183,7 @@ public class GeoShapeQueryTests extends ESSingleNodeTestCase {
                 .execute().actionGet();
 
         assertSearchResponse(searchResponse);
-        assertThat(searchResponse.getHits().getTotalHits(), equalTo(1L));
+        assertThat(searchResponse.getHits().getTotalHits(), equalTo(1l));
         assertThat(searchResponse.getHits().hits().length, equalTo(1));
         assertThat(searchResponse.getHits().getAt(0).id(), equalTo("1"));
 
@@ -192,7 +192,7 @@ public class GeoShapeQueryTests extends ESSingleNodeTestCase {
                 .execute().actionGet();
 
         assertSearchResponse(searchResponse);
-        assertThat(searchResponse.getHits().getTotalHits(), equalTo(1L));
+        assertThat(searchResponse.getHits().getTotalHits(), equalTo(1l));
         assertThat(searchResponse.getHits().hits().length, equalTo(1));
         assertThat(searchResponse.getHits().getAt(0).id(), equalTo("1"));
     }
@@ -297,9 +297,9 @@ public class GeoShapeQueryTests extends ESSingleNodeTestCase {
 
     public void testShapeFilterWithRandomGeoCollection() throws Exception {
         // Create a random geometry collection.
-        GeometryCollectionBuilder gcb = RandomShapeGenerator.createGeometryCollection(random());
+        GeometryCollectionBuilder gcb = RandomShapeGenerator.createGeometryCollection(getRandom());
 
-        logger.info("Created Random GeometryCollection containing {} shapes", gcb.numShapes());
+        logger.info("Created Random GeometryCollection containing " + gcb.numShapes() + " shapes");
 
         client().admin().indices().prepareCreate("test").addMapping("type", "location", "type=geo_shape,tree=quadtree")
                 .execute().actionGet();
@@ -319,8 +319,8 @@ public class GeoShapeQueryTests extends ESSingleNodeTestCase {
 
     public void testContainsShapeQuery() throws Exception {
         // Create a random geometry collection.
-        Rectangle mbr = xRandomRectangle(random(), xRandomPoint(random()), true);
-        GeometryCollectionBuilder gcb = createGeometryCollectionWithin(random(), mbr);
+        Rectangle mbr = xRandomRectangle(getRandom(), xRandomPoint(getRandom()), true);
+        GeometryCollectionBuilder gcb = createGeometryCollectionWithin(getRandom(), mbr);
 
         client().admin().indices().prepareCreate("test").addMapping("type", "location", "type=geo_shape,tree=quadtree" )
                 .execute().actionGet();

@@ -32,8 +32,6 @@ import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.transport.InetSocketTransportAddress;
 import org.elasticsearch.common.transport.TransportAddress;
-import org.elasticsearch.env.Environment;
-import org.elasticsearch.node.Node;
 import org.elasticsearch.node.internal.InternalSettingsPreparer;
 import org.elasticsearch.plugins.Plugin;
 
@@ -42,6 +40,7 @@ import java.net.InetSocketAddress;
 import java.nio.file.Path;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.hamcrest.Matchers.equalTo;
@@ -70,13 +69,13 @@ public final class ExternalTestCluster extends TestCluster {
 
     public ExternalTestCluster(Path tempDir, Settings additionalSettings, Collection<Class<? extends Plugin>> pluginClasses, TransportAddress... transportAddresses) {
         super(0);
-        Settings clientSettings = Settings.builder()
+        Settings clientSettings = Settings.settingsBuilder()
                 .put(additionalSettings)
-                .put("node.name", InternalTestCluster.TRANSPORT_CLIENT_PREFIX + EXTERNAL_CLUSTER_PREFIX + counter.getAndIncrement())
-                .put(InternalSettingsPreparer.IGNORE_SYSTEM_PROPERTIES_SETTING.getKey(), true) // prevents any settings to be replaced by system properties.
+                .put("name", InternalTestCluster.TRANSPORT_CLIENT_PREFIX + EXTERNAL_CLUSTER_PREFIX + counter.getAndIncrement())
+                .put(InternalSettingsPreparer.IGNORE_SYSTEM_PROPERTIES_SETTING, true) // prevents any settings to be replaced by system properties.
                 .put("client.transport.ignore_cluster_name", true)
-                .put(Environment.PATH_HOME_SETTING.getKey(), tempDir)
-                .put(Node.NODE_MODE_SETTING.getKey(), "network").build(); // we require network here!
+                .put("path.home", tempDir)
+                .put("node.mode", "network").build(); // we require network here!
 
         TransportClient.Builder transportClientBuilder = TransportClient.builder().settings(clientSettings);
         for (Class<? extends Plugin> pluginClass : pluginClasses) {
@@ -94,10 +93,10 @@ public final class ExternalTestCluster extends TestCluster {
             for (int i = 0; i < nodeInfos.getNodes().length; i++) {
                 NodeInfo nodeInfo = nodeInfos.getNodes()[i];
                 httpAddresses[i] = ((InetSocketTransportAddress) nodeInfo.getHttp().address().publishAddress()).address();
-                if (DiscoveryNode.isDataNode(nodeInfo.getSettings())) {
+                if (DiscoveryNode.dataNode(nodeInfo.getSettings())) {
                     dataNodes++;
                     masterAndDataNodes++;
-                } else if (DiscoveryNode.isMasterNode(nodeInfo.getSettings())) {
+                } else if (DiscoveryNode.masterNode(nodeInfo.getSettings())) {
                     masterAndDataNodes++;
                 }
             }
@@ -158,16 +157,16 @@ public final class ExternalTestCluster extends TestCluster {
                 // because checking it requires a network request, which in
                 // turn increments the breaker, making it non-0
 
-                assertThat("Fielddata size must be 0 on node: " + stats.getNode(), stats.getIndices().getFieldData().getMemorySizeInBytes(), equalTo(0L));
-                assertThat("Query cache size must be 0 on node: " + stats.getNode(), stats.getIndices().getQueryCache().getMemorySizeInBytes(), equalTo(0L));
-                assertThat("FixedBitSet cache size must be 0 on node: " + stats.getNode(), stats.getIndices().getSegments().getBitsetMemoryInBytes(), equalTo(0L));
+                assertThat("Fielddata size must be 0 on node: " + stats.getNode(), stats.getIndices().getFieldData().getMemorySizeInBytes(), equalTo(0l));
+                assertThat("Query cache size must be 0 on node: " + stats.getNode(), stats.getIndices().getQueryCache().getMemorySizeInBytes(), equalTo(0l));
+                assertThat("FixedBitSet cache size must be 0 on node: " + stats.getNode(), stats.getIndices().getSegments().getBitsetMemoryInBytes(), equalTo(0l));
             }
         }
     }
 
     @Override
-    public Iterable<Client> getClients() {
-        return Collections.singleton(client);
+    public Iterator<Client> iterator() {
+        return Collections.singleton(client).iterator();
     }
 
     @Override

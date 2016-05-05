@@ -22,7 +22,6 @@ import org.apache.lucene.analysis.hunspell.Dictionary;
 import org.elasticsearch.ElasticsearchException;
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.env.Environment;
 import org.elasticsearch.indices.analysis.HunspellService;
 import org.elasticsearch.test.ESIntegTestCase;
 import org.elasticsearch.test.ESIntegTestCase.ClusterScope;
@@ -39,10 +38,10 @@ import static org.hamcrest.Matchers.notNullValue;
 @ClusterScope(scope= Scope.TEST, numDataNodes=0)
 public class HunspellServiceIT extends ESIntegTestCase {
     public void testLocaleDirectoryWithNodeLevelConfig() throws Exception {
-        Settings settings = Settings.builder()
-                .put(Environment.PATH_CONF_SETTING.getKey(), getDataPath("/indices/analyze/conf_dir"))
-                .put(HUNSPELL_LAZY_LOAD.getKey(), randomBoolean())
-                .put(HUNSPELL_IGNORE_CASE.getKey(), true)
+        Settings settings = Settings.settingsBuilder()
+                .put("path.conf", getDataPath("/indices/analyze/conf_dir"))
+                .put(HUNSPELL_LAZY_LOAD, randomBoolean())
+                .put(HUNSPELL_IGNORE_CASE, true)
                 .build();
 
         internalCluster().startNode(settings);
@@ -52,10 +51,10 @@ public class HunspellServiceIT extends ESIntegTestCase {
     }
 
     public void testLocaleDirectoryWithLocaleSpecificConfig() throws Exception {
-        Settings settings = Settings.builder()
-                .put(Environment.PATH_CONF_SETTING.getKey(), getDataPath("/indices/analyze/conf_dir"))
-                .put(HUNSPELL_LAZY_LOAD.getKey(), randomBoolean())
-                .put(HUNSPELL_IGNORE_CASE.getKey(), true)
+        Settings settings = Settings.settingsBuilder()
+                .put("path.conf", getDataPath("/indices/analyze/conf_dir"))
+                .put(HUNSPELL_LAZY_LOAD, randomBoolean())
+                .put(HUNSPELL_IGNORE_CASE, true)
                 .put("indices.analysis.hunspell.dictionary.en_US.strict_affix_parsing", false)
                 .put("indices.analysis.hunspell.dictionary.en_US.ignore_case", false)
                 .build();
@@ -74,9 +73,9 @@ public class HunspellServiceIT extends ESIntegTestCase {
     }
 
     public void testDicWithNoAff() throws Exception {
-        Settings settings = Settings.builder()
-                .put(Environment.PATH_CONF_SETTING.getKey(), getDataPath("/indices/analyze/no_aff_conf_dir"))
-                .put(HUNSPELL_LAZY_LOAD.getKey(), randomBoolean())
+        Settings settings = Settings.settingsBuilder()
+                .put("path.conf", getDataPath("/indices/analyze/no_aff_conf_dir"))
+                .put(HUNSPELL_LAZY_LOAD, randomBoolean())
                 .build();
 
         Dictionary dictionary = null;
@@ -92,9 +91,9 @@ public class HunspellServiceIT extends ESIntegTestCase {
     }
 
     public void testDicWithTwoAffs() throws Exception {
-        Settings settings = Settings.builder()
-                .put(Environment.PATH_CONF_SETTING.getKey(), getDataPath("/indices/analyze/two_aff_conf_dir"))
-                .put(HUNSPELL_LAZY_LOAD.getKey(), randomBoolean())
+        Settings settings = Settings.settingsBuilder()
+                .put("path.conf", getDataPath("/indices/analyze/two_aff_conf_dir"))
+                .put(HUNSPELL_LAZY_LOAD, randomBoolean())
                 .build();
 
         Dictionary dictionary = null;

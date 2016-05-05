@@ -27,13 +27,14 @@ import org.elasticsearch.index.query.TermQueryBuilder;
 import org.elasticsearch.search.aggregations.bucket.significant.SignificantTerms;
 import org.elasticsearch.search.aggregations.bucket.significant.SignificantTerms.Bucket;
 import org.elasticsearch.search.aggregations.bucket.significant.SignificantTermsAggregatorFactory.ExecutionMode;
+import org.elasticsearch.search.aggregations.bucket.significant.SignificantTermsBuilder;
 import org.elasticsearch.search.aggregations.bucket.significant.heuristics.ChiSquare;
 import org.elasticsearch.search.aggregations.bucket.significant.heuristics.GND;
 import org.elasticsearch.search.aggregations.bucket.significant.heuristics.JLHScore;
 import org.elasticsearch.search.aggregations.bucket.significant.heuristics.MutualInformation;
 import org.elasticsearch.search.aggregations.bucket.significant.heuristics.PercentageScore;
 import org.elasticsearch.search.aggregations.bucket.terms.Terms;
-import org.elasticsearch.search.aggregations.bucket.terms.support.IncludeExclude;
+import org.elasticsearch.search.aggregations.bucket.terms.TermsBuilder;
 import org.elasticsearch.test.ESIntegTestCase;
 
 import java.util.Arrays;
@@ -45,8 +46,6 @@ import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_NUMBER_OF
 import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_NUMBER_OF_SHARDS;
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertSearchResponse;
-import static org.elasticsearch.search.aggregations.AggregationBuilders.significantTerms;
-import static org.elasticsearch.search.aggregations.AggregationBuilders.terms;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
@@ -69,15 +68,15 @@ public class SignificantTermsIT extends ESIntegTestCase {
                 .build();
     }
 
-    public static final String MUSIC_CATEGORY="1";
-    public static final String OTHER_CATEGORY="2";
-    public static final String SNOWBOARDING_CATEGORY="3";
+    public static final int MUSIC_CATEGORY=1;
+    public static final int OTHER_CATEGORY=2;
+    public static final int SNOWBOARDING_CATEGORY=3;
 
     @Override
     public void setupSuiteScopeCluster() throws Exception {
         assertAcked(prepareCreate("test").setSettings(SETTING_NUMBER_OF_SHARDS, 5, SETTING_NUMBER_OF_REPLICAS, 0).addMapping("fact",
-                "_routing", "required=true", "routing_id", "type=keyword", "fact_category",
-                "type=keyword,index=true", "description", "type=text,fielddata=true"));
+                "_routing", "required=true", "routing_id", "type=string,index=not_analyzed", "fact_category",
+                "type=integer,index=not_analyzed", "description", "type=string,index=analyzed"));
         createIndex("idx_unmapped");
 
         ensureGreen();
@@ -117,37 +116,37 @@ public class SignificantTermsIT extends ESIntegTestCase {
                 .setSearchType(SearchType.QUERY_AND_FETCH)
                 .setQuery(new TermQueryBuilder("_all", "terje"))
                 .setFrom(0).setSize(60).setExplain(true)
-                .addAggregation(significantTerms("mySignificantTerms").field("fact_category").executionHint(randomExecutionHint())
+                .addAggregation(new SignificantTermsBuilder("mySignificantTerms").field("fact_category").executionHint(randomExecutionHint())
                            .minDocCount(2))
                 .execute()
                 .actionGet();
         assertSearchResponse(response);
         SignificantTerms topTerms = response.getAggregations().get("mySignificantTerms");
-        String topCategory = (String) topTerms.getBuckets().iterator().next().getKey();
-        assertTrue(topCategory.equals(SNOWBOARDING_CATEGORY));
+        Number topCategory = (Number) topTerms.getBuckets().iterator().next().getKey();
+        assertTrue(topCategory.equals(new Long(SNOWBOARDING_CATEGORY)));
     }
 
     public void testStructuredAnalysisWithIncludeExclude() throws Exception {
-        String[] excludeTerms = { MUSIC_CATEGORY };
+        long[] excludeTerms = { MUSIC_CATEGORY };
         SearchResponse response = client().prepareSearch("test")
                 .setSearchType(SearchType.QUERY_AND_FETCH)
                 .setQuery(new TermQueryBuilder("_all", "paul"))
                 .setFrom(0).setSize(60).setExplain(true)
-                .addAggregation(significantTerms("mySignificantTerms").field("fact_category").executionHint(randomExecutionHint())
-                           .minDocCount(1).includeExclude(new IncludeExclude(null, excludeTerms)))
+                .addAggregation(new SignificantTermsBuilder("mySignificantTerms").field("fact_category").executionHint(randomExecutionHint())
+                           .minDocCount(1).exclude(excludeTerms))
                 .execute()
                 .actionGet();
         assertSearchResponse(response);
         SignificantTerms topTerms = response.getAggregations().get("mySignificantTerms");
-        String topCategory = topTerms.getBuckets().iterator().next().getKeyAsString();
-        assertTrue(topCategory.equals(OTHER_CATEGORY));
+        Number topCategory = (Number) topTerms.getBuckets().iterator().next().getKey();
+        assertTrue(topCategory.equals(new Long(OTHER_CATEGORY)));
     }
 
     public void testIncludeExclude() throws Exception {
         SearchResponse response = client().prepareSearch("test")
                 .setQuery(new TermQueryBuilder("_all", "weller"))
-                .addAggregation(significantTerms("mySignificantTerms").field("description").executionHint(randomExecutionHint())
-                        .includeExclude(new IncludeExclude(null, "weller")))
+                .addAggregation(new SignificantTermsBuilder("mySignificantTerms").field("description").executionHint(randomExecutionHint())
+                        .exclude("weller"))
                 .get();
         assertSearchResponse(response);
         SignificantTerms topTerms = response.getAggregations().get("mySignificantTerms");
@@ -165,8 +164,8 @@ public class SignificantTermsIT extends ESIntegTestCase {
 
         response = client().prepareSearch("test")
                 .setQuery(new TermQueryBuilder("_all", "weller"))
-                .addAggregation(significantTerms("mySignificantTerms").field("description").executionHint(randomExecutionHint())
-                        .includeExclude(new IncludeExclude("weller", null)))
+                .addAggregation(new SignificantTermsBuilder("mySignificantTerms").field("description").executionHint(randomExecutionHint())
+                        .include("weller"))
                 .get();
         assertSearchResponse(response);
         topTerms = response.getAggregations().get("mySignificantTerms");
@@ -182,8 +181,8 @@ public class SignificantTermsIT extends ESIntegTestCase {
         String []incExcTerms={"weller","nosuchterm"};
         SearchResponse response = client().prepareSearch("test")
                 .setQuery(new TermQueryBuilder("_all", "weller"))
-                .addAggregation(significantTerms("mySignificantTerms").field("description").executionHint(randomExecutionHint())
-                        .includeExclude(new IncludeExclude(null, incExcTerms)))
+                .addAggregation(new SignificantTermsBuilder("mySignificantTerms").field("description").executionHint(randomExecutionHint())
+                        .exclude(incExcTerms))
                 .get();
         assertSearchResponse(response);
         SignificantTerms topTerms = response.getAggregations().get("mySignificantTerms");
@@ -195,8 +194,8 @@ public class SignificantTermsIT extends ESIntegTestCase {
 
         response = client().prepareSearch("test")
                 .setQuery(new TermQueryBuilder("_all", "weller"))
-                .addAggregation(significantTerms("mySignificantTerms").field("description").executionHint(randomExecutionHint())
-                        .includeExclude(new IncludeExclude(incExcTerms, null)))
+                .addAggregation(new SignificantTermsBuilder("mySignificantTerms").field("description").executionHint(randomExecutionHint())
+                        .include(incExcTerms))
                 .get();
         assertSearchResponse(response);
         topTerms = response.getAggregations().get("mySignificantTerms");
@@ -213,7 +212,7 @@ public class SignificantTermsIT extends ESIntegTestCase {
                 .setSearchType(SearchType.QUERY_AND_FETCH)
                 .setQuery(new TermQueryBuilder("_all", "terje"))
                 .setFrom(0).setSize(60).setExplain(true)
-                .addAggregation(significantTerms("mySignificantTerms").field("fact_category").executionHint(randomExecutionHint())
+                .addAggregation(new SignificantTermsBuilder("mySignificantTerms").field("fact_category").executionHint(randomExecutionHint())
                         .minDocCount(2))
                 .execute()
                 .actionGet();
@@ -227,7 +226,7 @@ public class SignificantTermsIT extends ESIntegTestCase {
                 .setSearchType(SearchType.QUERY_AND_FETCH)
                 .setQuery(new TermQueryBuilder("_all", "terje"))
                 .setFrom(0).setSize(60).setExplain(true)
-                .addAggregation(significantTerms("mySignificantTerms").field("description").executionHint(randomExecutionHint())
+                .addAggregation(new SignificantTermsBuilder("mySignificantTerms").field("description").executionHint(randomExecutionHint())
                            .minDocCount(2))
                 .execute()
                 .actionGet();
@@ -241,7 +240,7 @@ public class SignificantTermsIT extends ESIntegTestCase {
                 .setSearchType(SearchType.QUERY_AND_FETCH)
                 .setQuery(new TermQueryBuilder("_all", "terje"))
                 .setFrom(0).setSize(60).setExplain(true)
-                .addAggregation(significantTerms("mySignificantTerms").field("description").executionHint(randomExecutionHint()).significanceHeuristic(new GND(true))
+                .addAggregation(new SignificantTermsBuilder("mySignificantTerms").field("description").executionHint(randomExecutionHint()).significanceHeuristic(new GND.GNDBuilder(true))
                         .minDocCount(2))
                 .execute()
                 .actionGet();
@@ -255,7 +254,7 @@ public class SignificantTermsIT extends ESIntegTestCase {
                 .setSearchType(SearchType.QUERY_AND_FETCH)
                 .setQuery(new TermQueryBuilder("_all", "terje"))
                 .setFrom(0).setSize(60).setExplain(true)
-                .addAggregation(significantTerms("mySignificantTerms").field("description").executionHint(randomExecutionHint()).significanceHeuristic(new ChiSquare(false,true))
+                .addAggregation(new SignificantTermsBuilder("mySignificantTerms").field("description").executionHint(randomExecutionHint()).significanceHeuristic(new ChiSquare.ChiSquareBuilder(false,true))
                         .minDocCount(2))
                 .execute()
                 .actionGet();
@@ -273,8 +272,8 @@ public class SignificantTermsIT extends ESIntegTestCase {
                 .setSize(60)
                 .setExplain(true)
                 .addAggregation(
-                        significantTerms("mySignificantTerms").field("description").executionHint(randomExecutionHint())
-                                .significanceHeuristic(new PercentageScore()).minDocCount(2)).execute().actionGet();
+                        new SignificantTermsBuilder("mySignificantTerms").field("description").executionHint(randomExecutionHint())
+                                .significanceHeuristic(new PercentageScore.PercentageScoreBuilder()).minDocCount(2)).execute().actionGet();
         assertSearchResponse(response);
         SignificantTerms topTerms = response.getAggregations().get("mySignificantTerms");
         checkExpectedStringTermsFound(topTerms);
@@ -289,7 +288,7 @@ public class SignificantTermsIT extends ESIntegTestCase {
                 .setSearchType(SearchType.QUERY_AND_FETCH)
                 .setQuery(new TermQueryBuilder("_all", "terje"))
                 .setFrom(0).setSize(60).setExplain(true)
-                .addAggregation(significantTerms("mySignificantTerms").field("description")
+                .addAggregation(new SignificantTermsBuilder("mySignificantTerms").field("description")
                            .minDocCount(2).backgroundFilter(QueryBuilders.termQuery("fact_category", 1)))
                 .execute()
                 .actionGet();
@@ -313,7 +312,7 @@ public class SignificantTermsIT extends ESIntegTestCase {
                 .setSearchType(SearchType.QUERY_AND_FETCH)
                 .setQuery(new TermQueryBuilder("_all", "weller"))
                 .setFrom(0).setSize(60).setExplain(true)
-                .addAggregation(significantTerms("mySignificantTerms").field("description")
+                .addAggregation(new SignificantTermsBuilder("mySignificantTerms").field("description")
                            .minDocCount(1).backgroundFilter(QueryBuilders.termsQuery("description",  "paul")))
                 .execute()
                 .actionGet();
@@ -336,9 +335,9 @@ public class SignificantTermsIT extends ESIntegTestCase {
                 { "craig", "kelly", "terje", "haakonsen", "burton" }};
         SearchResponse response = client().prepareSearch("test")
                 .setSearchType(SearchType.QUERY_AND_FETCH)
-                .addAggregation(terms("myCategories").field("fact_category").minDocCount(2)
+                .addAggregation(new TermsBuilder("myCategories").field("fact_category").minDocCount(2)
                         .subAggregation(
-                                   significantTerms("mySignificantTerms").field("description")
+                                   new SignificantTermsBuilder("mySignificantTerms").field("description")
                                    .executionHint(randomExecutionHint())
                                    .minDocCount(2)))
                 .execute()
@@ -363,7 +362,7 @@ public class SignificantTermsIT extends ESIntegTestCase {
                 .setSearchType(SearchType.QUERY_AND_FETCH)
                 .setQuery(new TermQueryBuilder("_all", "terje"))
                 .setFrom(0).setSize(60).setExplain(true)
-                .addAggregation(significantTerms("mySignificantTerms").field("description")
+                .addAggregation(new SignificantTermsBuilder("mySignificantTerms").field("description")
                             .executionHint(randomExecutionHint())
                            .minDocCount(2))
                 .execute()
@@ -394,10 +393,10 @@ public class SignificantTermsIT extends ESIntegTestCase {
                 .setSearchType(SearchType.QUERY_AND_FETCH)
                 .setQuery(new TermQueryBuilder("_all", "terje"))
                 .setFrom(0).setSize(60).setExplain(true)
-                .addAggregation(significantTerms("mySignificantTerms")
+                .addAggregation(new SignificantTermsBuilder("mySignificantTerms")
                         .field("description")
                         .executionHint(randomExecutionHint())
-                        .significanceHeuristic(new JLHScore())
+                        .significanceHeuristic(new JLHScore.JLHScoreBuilder())
                         .minDocCount(2))
                 .execute()
                 .actionGet();
@@ -411,10 +410,10 @@ public class SignificantTermsIT extends ESIntegTestCase {
                 .setSearchType(SearchType.QUERY_AND_FETCH)
                 .setQuery(new TermQueryBuilder("_all", "terje"))
                 .setFrom(0).setSize(60).setExplain(true)
-                .addAggregation(significantTerms("mySignificantTerms")
+                .addAggregation(new SignificantTermsBuilder("mySignificantTerms")
                         .field("description")
                         .executionHint(randomExecutionHint())
-                        .significanceHeuristic(new MutualInformation(false, true))
+                        .significanceHeuristic(new MutualInformation.MutualInformationBuilder(false, true))
                         .minDocCount(1))
                 .execute()
                 .actionGet();

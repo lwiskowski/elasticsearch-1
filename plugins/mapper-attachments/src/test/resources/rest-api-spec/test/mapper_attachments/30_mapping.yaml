@@ -29,9 +29,9 @@
                       "type": "attachment"
                       "fields":
                         "content_type":
-                          "store": true
+                          "store": "yes"
                         "name":
-                          "store": true
+                          "store": "yes"
     - do:
         cluster.health:
           wait_for_status: yellow

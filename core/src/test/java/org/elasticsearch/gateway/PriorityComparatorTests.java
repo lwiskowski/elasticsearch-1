@@ -25,7 +25,6 @@ import org.elasticsearch.cluster.routing.ShardRoutingState;
 import org.elasticsearch.cluster.routing.TestShardRouting;
 import org.elasticsearch.cluster.routing.UnassignedInfo;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.index.Index;
 import org.elasticsearch.test.ESTestCase;
 
 import java.util.Arrays;
@@ -38,21 +37,21 @@ import java.util.Map;
 public class PriorityComparatorTests extends ESTestCase {
 
     public void testPreferNewIndices() {
-        RoutingNodes.UnassignedShards shards = new RoutingNodes.UnassignedShards(null);
+        RoutingNodes.UnassignedShards shards = new RoutingNodes.UnassignedShards((RoutingNodes) null);
         List<ShardRouting> shardRoutings = Arrays.asList(TestShardRouting.newShardRouting("oldest", 0, null, null, null,
-                randomBoolean(), ShardRoutingState.UNASSIGNED, new UnassignedInfo(randomFrom(UnassignedInfo.Reason.values()), "foobar")), TestShardRouting.newShardRouting("newest", 0, null, null, null,
-                randomBoolean(), ShardRoutingState.UNASSIGNED, new UnassignedInfo(randomFrom(UnassignedInfo.Reason.values()), "foobar")));
+                randomBoolean(), ShardRoutingState.UNASSIGNED, 0, new UnassignedInfo(randomFrom(UnassignedInfo.Reason.values()), "foobar")), TestShardRouting.newShardRouting("newest", 0, null, null, null,
+                randomBoolean(), ShardRoutingState.UNASSIGNED, 0, new UnassignedInfo(randomFrom(UnassignedInfo.Reason.values()), "foobar")));
         Collections.shuffle(shardRoutings, random());
         for (ShardRouting routing : shardRoutings) {
             shards.add(routing);
         }
         shards.sort(new PriorityComparator() {
             @Override
-            protected Settings getIndexSettings(Index index) {
-                if ("oldest".equals(index.getName())) {
+            protected Settings getIndexSettings(String index) {
+                if ("oldest".equals(index)) {
                     return Settings.builder().put(IndexMetaData.SETTING_CREATION_DATE, 10)
                             .put(IndexMetaData.SETTING_PRIORITY, 1).build();
-                } else if ("newest".equals(index.getName())) {
+                } else if ("newest".equals(index)) {
                     return Settings.builder().put(IndexMetaData.SETTING_CREATION_DATE, 100)
                             .put(IndexMetaData.SETTING_PRIORITY, 1).build();
                 }
@@ -61,28 +60,28 @@ public class PriorityComparatorTests extends ESTestCase {
         });
         RoutingNodes.UnassignedShards.UnassignedIterator iterator = shards.iterator();
         ShardRouting next = iterator.next();
-        assertEquals("newest", next.getIndexName());
+        assertEquals("newest", next.index());
         next = iterator.next();
-        assertEquals("oldest", next.getIndexName());
+        assertEquals("oldest", next.index());
         assertFalse(iterator.hasNext());
     }
 
     public void testPreferPriorityIndices() {
         RoutingNodes.UnassignedShards shards = new RoutingNodes.UnassignedShards((RoutingNodes) null);
         List<ShardRouting> shardRoutings = Arrays.asList(TestShardRouting.newShardRouting("oldest", 0, null, null, null,
-                randomBoolean(), ShardRoutingState.UNASSIGNED, new UnassignedInfo(randomFrom(UnassignedInfo.Reason.values()), "foobar")), TestShardRouting.newShardRouting("newest", 0, null, null, null,
-                randomBoolean(), ShardRoutingState.UNASSIGNED, new UnassignedInfo(randomFrom(UnassignedInfo.Reason.values()), "foobar")));
+                randomBoolean(), ShardRoutingState.UNASSIGNED, 0, new UnassignedInfo(randomFrom(UnassignedInfo.Reason.values()), "foobar")), TestShardRouting.newShardRouting("newest", 0, null, null, null,
+                randomBoolean(), ShardRoutingState.UNASSIGNED, 0, new UnassignedInfo(randomFrom(UnassignedInfo.Reason.values()), "foobar")));
         Collections.shuffle(shardRoutings, random());
         for (ShardRouting routing : shardRoutings) {
             shards.add(routing);
         }
         shards.sort(new PriorityComparator() {
             @Override
-            protected Settings getIndexSettings(Index index) {
-                if ("oldest".equals(index.getName())) {
+            protected Settings getIndexSettings(String index) {
+                if ("oldest".equals(index)) {
                     return Settings.builder().put(IndexMetaData.SETTING_CREATION_DATE, 10)
                             .put(IndexMetaData.SETTING_PRIORITY, 100).build();
-                } else if ("newest".equals(index.getName())) {
+                } else if ("newest".equals(index)) {
                     return Settings.builder().put(IndexMetaData.SETTING_CREATION_DATE, 100)
                             .put(IndexMetaData.SETTING_PRIORITY, 1).build();
                 }
@@ -91,9 +90,9 @@ public class PriorityComparatorTests extends ESTestCase {
         });
         RoutingNodes.UnassignedShards.UnassignedIterator iterator = shards.iterator();
         ShardRouting next = iterator.next();
-        assertEquals("oldest", next.getIndexName());
+        assertEquals("oldest", next.index());
         next = iterator.next();
-        assertEquals("newest", next.getIndexName());
+        assertEquals("newest", next.index());
         assertFalse(iterator.hasNext());
     }
 
@@ -115,20 +114,20 @@ public class PriorityComparatorTests extends ESTestCase {
         for (int i = 0; i < numShards; i++) {
             IndexMeta indexMeta = randomFrom(indices);
             shards.add(TestShardRouting.newShardRouting(indexMeta.name, randomIntBetween(1, 5), null, null, null,
-                    randomBoolean(), ShardRoutingState.UNASSIGNED, new UnassignedInfo(randomFrom(UnassignedInfo.Reason.values()), "foobar")));
+                    randomBoolean(), ShardRoutingState.UNASSIGNED, randomIntBetween(0, 100), new UnassignedInfo(randomFrom(UnassignedInfo.Reason.values()), "foobar")));
         }
         shards.sort(new PriorityComparator() {
             @Override
-            protected Settings getIndexSettings(Index index) {
-                IndexMeta indexMeta = map.get(index.getName());
+            protected Settings getIndexSettings(String index) {
+                IndexMeta indexMeta = map.get(index);
                 return indexMeta.settings;
             }
         });
         ShardRouting previous = null;
         for (ShardRouting routing : shards) {
             if (previous != null) {
-                IndexMeta prevMeta = map.get(previous.getIndexName());
-                IndexMeta currentMeta = map.get(routing.getIndexName());
+                IndexMeta prevMeta = map.get(previous.getIndex());
+                IndexMeta currentMeta = map.get(routing.getIndex());
                 if (prevMeta.priority == currentMeta.priority) {
                     if (prevMeta.creationDate == currentMeta.creationDate) {
                         if (prevMeta.name.equals(currentMeta.name) == false) {

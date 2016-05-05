@@ -21,12 +21,13 @@ package org.elasticsearch.search.aggregations.bucket.terms;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.xcontent.XContentBuilder;
-import org.elasticsearch.search.DocValueFormat;
 import org.elasticsearch.search.aggregations.AggregationStreams;
 import org.elasticsearch.search.aggregations.InternalAggregations;
 import org.elasticsearch.search.aggregations.bucket.BucketStreamContext;
 import org.elasticsearch.search.aggregations.bucket.BucketStreams;
 import org.elasticsearch.search.aggregations.pipeline.PipelineAggregator;
+import org.elasticsearch.search.aggregations.support.format.ValueFormatter;
+import org.elasticsearch.search.aggregations.support.format.ValueFormatterStreams;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -53,7 +54,7 @@ public class LongTerms extends InternalTerms<LongTerms, LongTerms.Bucket> {
     private final static BucketStreams.Stream<Bucket> BUCKET_STREAM = new BucketStreams.Stream<Bucket>() {
         @Override
         public Bucket readResult(StreamInput in, BucketStreamContext context) throws IOException {
-            Bucket buckets = new Bucket(context.format(), (boolean) context.attributes().get("showDocCountError"));
+            Bucket buckets = new Bucket(context.formatter(), (boolean) context.attributes().get("showDocCountError"));
             buckets.readFrom(in);
             return buckets;
         }
@@ -64,7 +65,7 @@ public class LongTerms extends InternalTerms<LongTerms, LongTerms.Bucket> {
             Map<String, Object> attributes = new HashMap<>();
             attributes.put("showDocCountError", bucket.showDocCountError);
             context.attributes(attributes);
-            context.format(bucket.format);
+            context.formatter(bucket.formatter);
             return context;
         }
     };
@@ -78,19 +79,19 @@ public class LongTerms extends InternalTerms<LongTerms, LongTerms.Bucket> {
 
         long term;
 
-        public Bucket(DocValueFormat format, boolean showDocCountError) {
-            super(format, showDocCountError);
+        public Bucket(ValueFormatter formatter, boolean showDocCountError) {
+            super(formatter, showDocCountError);
         }
 
         public Bucket(long term, long docCount, InternalAggregations aggregations, boolean showDocCountError, long docCountError,
-                DocValueFormat format) {
-            super(docCount, aggregations, showDocCountError, docCountError, format);
+                ValueFormatter formatter) {
+            super(docCount, aggregations, showDocCountError, docCountError, formatter);
             this.term = term;
         }
 
         @Override
         public String getKeyAsString() {
-            return format.format(term);
+            return formatter.format(term);
         }
 
         @Override
@@ -110,7 +111,7 @@ public class LongTerms extends InternalTerms<LongTerms, LongTerms.Bucket> {
 
         @Override
         Bucket newBucket(long docCount, InternalAggregations aggs, long docCountError) {
-            return new Bucket(term, docCount, aggs, showDocCountError, docCountError, format);
+            return new Bucket(term, docCount, aggs, showDocCountError, docCountError, formatter);
         }
 
         @Override
@@ -138,8 +139,8 @@ public class LongTerms extends InternalTerms<LongTerms, LongTerms.Bucket> {
         public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
             builder.startObject();
             builder.field(CommonFields.KEY, term);
-            if (format != DocValueFormat.RAW) {
-                builder.field(CommonFields.KEY_AS_STRING, format.format(term));
+            if (formatter != ValueFormatter.RAW) {
+                builder.field(CommonFields.KEY_AS_STRING, formatter.format(term));
             }
             builder.field(CommonFields.DOC_COUNT, getDocCount());
             if (showDocCountError) {
@@ -151,13 +152,16 @@ public class LongTerms extends InternalTerms<LongTerms, LongTerms.Bucket> {
         }
     }
 
+    ValueFormatter formatter;
+
     LongTerms() {} // for serialization
 
-    public LongTerms(String name, Terms.Order order, DocValueFormat format, int requiredSize, int shardSize, long minDocCount,
+    public LongTerms(String name, Terms.Order order, ValueFormatter formatter, int requiredSize, int shardSize, long minDocCount,
             List<? extends InternalTerms.Bucket> buckets, boolean showTermDocCountError, long docCountError, long otherDocCount,
             List<PipelineAggregator> pipelineAggregators, Map<String, Object> metaData) {
-        super(name, order, format, requiredSize, shardSize, minDocCount, buckets, showTermDocCountError, docCountError, otherDocCount,
-                pipelineAggregators, metaData);
+        super(name, order, requiredSize, shardSize, minDocCount, buckets, showTermDocCountError, docCountError, otherDocCount, pipelineAggregators,
+                metaData);
+        this.formatter = formatter;
     }
 
     @Override
@@ -167,20 +171,20 @@ public class LongTerms extends InternalTerms<LongTerms, LongTerms.Bucket> {
 
     @Override
     public LongTerms create(List<Bucket> buckets) {
-        return new LongTerms(this.name, this.order, this.format, this.requiredSize, this.shardSize, this.minDocCount, buckets,
+        return new LongTerms(this.name, this.order, this.formatter, this.requiredSize, this.shardSize, this.minDocCount, buckets,
                 this.showTermDocCountError, this.docCountError, this.otherDocCount, this.pipelineAggregators(), this.metaData);
     }
 
     @Override
     public Bucket createBucket(InternalAggregations aggregations, Bucket prototype) {
         return new Bucket(prototype.term, prototype.docCount, aggregations, prototype.showDocCountError, prototype.docCountError,
-                prototype.format);
+                prototype.formatter);
     }
 
     @Override
     protected LongTerms create(String name, List<org.elasticsearch.search.aggregations.bucket.terms.InternalTerms.Bucket> buckets,
             long docCountError, long otherDocCount, InternalTerms prototype) {
-        return new LongTerms(name, prototype.order, ((LongTerms) prototype).format, prototype.requiredSize, prototype.shardSize,
+        return new LongTerms(name, prototype.order, ((LongTerms) prototype).formatter, prototype.requiredSize, prototype.shardSize,
                 prototype.minDocCount, buckets, prototype.showTermDocCountError, docCountError, otherDocCount, prototype.pipelineAggregators(),
                 prototype.getMetaData());
     }
@@ -189,7 +193,7 @@ public class LongTerms extends InternalTerms<LongTerms, LongTerms.Bucket> {
     protected void doReadFrom(StreamInput in) throws IOException {
         this.docCountError = in.readLong();
         this.order = InternalOrder.Streams.readOrder(in);
-        this.format = in.readNamedWriteable(DocValueFormat.class);
+        this.formatter = ValueFormatterStreams.readOptional(in);
         this.requiredSize = readSize(in);
         this.shardSize = readSize(in);
         this.showTermDocCountError = in.readBoolean();
@@ -198,7 +202,7 @@ public class LongTerms extends InternalTerms<LongTerms, LongTerms.Bucket> {
         int size = in.readVInt();
         List<InternalTerms.Bucket> buckets = new ArrayList<>(size);
         for (int i = 0; i < size; i++) {
-            Bucket bucket = new Bucket(format, showTermDocCountError);
+            Bucket bucket = new Bucket(formatter, showTermDocCountError);
             bucket.readFrom(in);
             buckets.add(bucket);
         }
@@ -210,7 +214,7 @@ public class LongTerms extends InternalTerms<LongTerms, LongTerms.Bucket> {
     protected void doWriteTo(StreamOutput out) throws IOException {
         out.writeLong(docCountError);
         InternalOrder.Streams.writeOrder(order, out);
-        out.writeNamedWriteable(format);
+        ValueFormatterStreams.writeOptional(formatter, out);
         writeSize(requiredSize, out);
         writeSize(shardSize, out);
         out.writeBoolean(showTermDocCountError);

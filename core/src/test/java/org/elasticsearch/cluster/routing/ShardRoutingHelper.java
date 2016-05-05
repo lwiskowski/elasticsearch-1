@@ -25,7 +25,7 @@ package org.elasticsearch.cluster.routing;
 public class ShardRoutingHelper {
 
     public static void relocate(ShardRouting routing, String nodeId) {
-        relocate(routing, nodeId, ShardRouting.UNAVAILABLE_EXPECTED_SHARD_SIZE);
+        relocate(routing, nodeId, -1);
     }
 
     public static void relocate(ShardRouting routing, String nodeId, long expectedByteSize) {
@@ -37,20 +37,15 @@ public class ShardRoutingHelper {
     }
 
     public static void initialize(ShardRouting routing, String nodeId) {
-        initialize(routing, nodeId, ShardRouting.UNAVAILABLE_EXPECTED_SHARD_SIZE);
+        initialize(routing, nodeId, -1);
     }
 
     public static void initialize(ShardRouting routing, String nodeId, long expectedSize) {
-        routing.initialize(nodeId, null, expectedSize);
+        routing.initialize(nodeId, expectedSize);
     }
 
     public static void reinit(ShardRouting routing) {
         routing.reinitializeShard();
-    }
-
-    public static void reinit(ShardRouting routing, UnassignedInfo.Reason reason) {
-        routing.reinitializeShard();
-        routing.updateUnassignedInfo(new UnassignedInfo(reason, "test_reinit"));
     }
 
     public static void moveToUnassigned(ShardRouting routing, UnassignedInfo info) {
@@ -58,6 +53,6 @@ public class ShardRoutingHelper {
     }
 
     public static ShardRouting newWithRestoreSource(ShardRouting routing, RestoreSource restoreSource) {
-        return new ShardRouting(routing.index(), routing.shardId().id(), routing.currentNodeId(), routing.relocatingNodeId(), restoreSource, routing.primary(), routing.state(), routing.unassignedInfo(), routing.allocationId(), true, routing.getExpectedShardSize());
+        return new ShardRouting(routing.index(), routing.shardId().id(), routing.currentNodeId(), routing.relocatingNodeId(), restoreSource, routing.primary(), routing.state(), routing.version(), routing.unassignedInfo(), routing.allocationId(), true, routing.getExpectedShardSize());
     }
 }

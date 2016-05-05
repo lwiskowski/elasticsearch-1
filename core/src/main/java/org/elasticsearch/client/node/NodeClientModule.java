@@ -20,6 +20,7 @@
 package org.elasticsearch.client.node;
 
 import org.elasticsearch.client.Client;
+import org.elasticsearch.client.support.Headers;
 import org.elasticsearch.common.inject.AbstractModule;
 
 /**
@@ -29,6 +30,7 @@ public class NodeClientModule extends AbstractModule {
 
     @Override
     protected void configure() {
+        bind(Headers.class).asEagerSingleton();
         bind(Client.class).to(NodeClient.class).asEagerSingleton();
     }
 }

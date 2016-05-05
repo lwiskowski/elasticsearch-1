@@ -29,27 +29,18 @@ import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.index.query.QueryShardException;
+import org.elasticsearch.search.internal.SearchContext;
 
 import java.io.IOException;
 
 public class GND extends NXYSignificanceHeuristic {
-    public static final ParseField NAMES_FIELD = new ParseField("gnd");
+
+    protected static final ParseField NAMES_FIELD = new ParseField("gnd");
 
     public GND(boolean backgroundIsSuperset) {
         super(true, backgroundIsSuperset);
     }
 
-    /**
-     * Read from a stream.
-     */
-    public GND(StreamInput in) throws IOException {
-        super(true, in.readBoolean());
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        out.writeBoolean(backgroundIsSuperset);
-    }
 
     @Override
     public boolean equals(Object other) {
@@ -65,6 +56,18 @@ public class GND extends NXYSignificanceHeuristic {
         result = 31 * result + super.hashCode();
         return result;
     }
+
+    public static final SignificanceHeuristicStreams.Stream STREAM = new SignificanceHeuristicStreams.Stream() {
+        @Override
+        public SignificanceHeuristic readResult(StreamInput in) throws IOException {
+            return new GND(in.readBoolean());
+        }
+
+        @Override
+        public String getName() {
+            return NAMES_FIELD.getPreferredName();
+        }
+    };
 
     /**
      * Calculates Google Normalized Distance, as described in "The Google Similarity Distance", Cilibrasi and Vitanyi, 2007
@@ -95,26 +98,25 @@ public class GND extends NXYSignificanceHeuristic {
     }
 
     @Override
-    public String getWriteableName() {
-        return NAMES_FIELD.getPreferredName();
+    public void writeTo(StreamOutput out) throws IOException {
+        out.writeString(STREAM.getName());
+        out.writeBoolean(backgroundIsSuperset);
     }
 
-    @Override
-    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.startObject(NAMES_FIELD.getPreferredName());
-        builder.field(BACKGROUND_IS_SUPERSET.getPreferredName(), backgroundIsSuperset);
-        builder.endObject();
-        return builder;
-    }
+    public static class GNDParser extends NXYParser {
 
-    public static final SignificanceHeuristicParser PARSER = new NXYParser() {
+        @Override
+        public String[] getNames() {
+            return NAMES_FIELD.getAllNamesIncludedDeprecated();
+        }
+
         @Override
         protected SignificanceHeuristic newHeuristic(boolean includeNegatives, boolean backgroundIsSuperset) {
             return new GND(backgroundIsSuperset);
         }
 
         @Override
-        public SignificanceHeuristic parse(XContentParser parser, ParseFieldMatcher parseFieldMatcher)
+        public SignificanceHeuristic parse(XContentParser parser, ParseFieldMatcher parseFieldMatcher, SearchContext context)
                 throws IOException, QueryShardException {
             String givenName = parser.currentName();
             boolean backgroundIsSuperset = true;
@@ -130,7 +132,8 @@ public class GND extends NXYSignificanceHeuristic {
             }
             return newHeuristic(true, backgroundIsSuperset);
         }
-    };
+
+    }
 
     public static class GNDBuilder extends NXYBuilder {
 
@@ -140,7 +143,7 @@ public class GND extends NXYSignificanceHeuristic {
 
         @Override
         public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.startObject(NAMES_FIELD.getPreferredName());
+            builder.startObject(STREAM.getName());
             builder.field(BACKGROUND_IS_SUPERSET.getPreferredName(), backgroundIsSuperset);
             builder.endObject();
             return builder;

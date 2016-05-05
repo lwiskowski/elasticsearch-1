@@ -24,6 +24,7 @@ import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Streamable;
 import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.common.xcontent.XContentBuilderString;
 
 import java.io.IOException;
 
@@ -95,6 +96,6 @@ public class AllCircuitBreakerStats implements Streamable, ToXContent {
     }
 
     static final class Fields {
-        static final String BREAKERS = "breakers";
+        static final XContentBuilderString BREAKERS = new XContentBuilderString("breakers");
     }
 }

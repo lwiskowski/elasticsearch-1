@@ -31,7 +31,6 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.ByteSizeUnit;
 import org.elasticsearch.common.unit.ByteSizeValue;
 import org.elasticsearch.common.unit.TimeValue;
-import org.elasticsearch.env.Environment;
 import org.elasticsearch.test.ESIntegTestCase;
 
 import java.util.Arrays;
@@ -153,11 +152,11 @@ public class BulkProcessorIT extends ESIntegTestCase {
         assertMultiGetResponse(multiGetRequestBuilder.get(), numDocs);
     }
 
-    //https://github.com/elastic/elasticsearch/issues/5038
+    //https://github.com/elasticsearch/elasticsearch/issues/5038
     public void testBulkProcessorConcurrentRequestsNoNodeAvailableException() throws Exception {
         //we create a transport client with no nodes to make sure it throws NoNodeAvailableException
         Settings settings = Settings.builder()
-                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
+                .put("path.home", createTempDir().toString())
                 .build();
         Client transportClient = TransportClient.builder().settings(settings).build();
 
@@ -203,7 +202,7 @@ public class BulkProcessorIT extends ESIntegTestCase {
                 //let's make sure that the bulk action limit trips, one single execution will index all the documents
                 .setConcurrentRequests(randomIntBetween(0, 1)).setBulkActions(numDocs)
                 .setFlushInterval(TimeValue.timeValueHours(24)).setBulkSize(new ByteSizeValue(randomIntBetween(1, 10),
-                        RandomPicks.randomFrom(random(), ByteSizeUnit.values())))
+                        RandomPicks.randomFrom(getRandom(), ByteSizeUnit.values())))
                 .build();
 
         MultiGetRequestBuilder multiGetRequestBuilder = indexDocs(client(), processor, numDocs);

@@ -48,7 +48,7 @@ public class BytesRestResponse extends RestResponse {
      * Creates a new response based on {@link XContentBuilder}.
      */
     public BytesRestResponse(RestStatus status, XContentBuilder builder) {
-        this(status, builder.contentType().mediaType(), builder.bytes());
+        this(status, builder.contentType().restContentType(), builder.bytes());
     }
 
     /**
@@ -93,7 +93,7 @@ public class BytesRestResponse extends RestResponse {
         } else {
             XContentBuilder builder = convert(channel, status, t);
             this.content = builder.bytes();
-            this.contentType = builder.contentType().mediaType();
+            this.contentType = builder.contentType().restContentType();
         }
         if (t instanceof ElasticsearchException) {
             copyHeaders(((ElasticsearchException) t));
@@ -126,11 +126,7 @@ public class BytesRestResponse extends RestResponse {
             if (channel.request().paramAsBoolean("error_trace", !ElasticsearchException.REST_EXCEPTION_SKIP_STACK_TRACE_DEFAULT)) {
                 params =  new ToXContent.DelegatingMapParams(Collections.singletonMap(ElasticsearchException.REST_EXCEPTION_SKIP_STACK_TRACE, "false"), channel.request());
             } else {
-                if (status.getStatus() < 500) {
-                    SUPPRESSED_ERROR_LOGGER.debug("{} Params: {}", t, channel.request().path(), channel.request().params());
-                } else {
-                    SUPPRESSED_ERROR_LOGGER.warn("{} Params: {}", t, channel.request().path(), channel.request().params());
-                }
+                SUPPRESSED_ERROR_LOGGER.info("{} Params: {}", t, channel.request().path(), channel.request().params());
                 params = channel.request();
             }
             builder.field("error");

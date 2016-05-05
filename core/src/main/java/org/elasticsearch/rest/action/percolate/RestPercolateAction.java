@@ -44,7 +44,7 @@ public class RestPercolateAction extends BaseRestHandler {
 
     @Inject
     public RestPercolateAction(Settings settings, RestController controller, Client client) {
-        super(settings, client);
+        super(settings, controller, client);
         controller.registerHandler(GET, "/{index}/{type}/_percolate", this);
         controller.registerHandler(POST, "/{index}/{type}/_percolate", this);
 
@@ -83,7 +83,7 @@ public class RestPercolateAction extends BaseRestHandler {
         getRequest.routing(restRequest.param("routing"));
         getRequest.preference(restRequest.param("preference"));
         getRequest.refresh(restRequest.paramAsBoolean("refresh", getRequest.refresh()));
-        getRequest.realtime(restRequest.paramAsBoolean("realtime", getRequest.realtime()));
+        getRequest.realtime(restRequest.paramAsBoolean("realtime", null));
         getRequest.version(RestActions.parseVersion(restRequest));
         getRequest.versionType(VersionType.fromString(restRequest.param("version_type"), getRequest.versionType()));
 
@@ -109,7 +109,7 @@ public class RestPercolateAction extends BaseRestHandler {
     final class RestCountPercolateDocHandler extends BaseRestHandler {
 
         private RestCountPercolateDocHandler(Settings settings, final RestController controller, Client client) {
-            super(settings, client);
+            super(settings, controller, client);
         }
 
         @Override
@@ -123,7 +123,7 @@ public class RestPercolateAction extends BaseRestHandler {
     final class RestPercolateExistingDocHandler extends BaseRestHandler {
 
         protected RestPercolateExistingDocHandler(Settings settings, final RestController controller, Client client) {
-            super(settings, client);
+            super(settings, controller, client);
         }
 
         @Override
@@ -136,7 +136,7 @@ public class RestPercolateAction extends BaseRestHandler {
     final class RestCountPercolateExistingDocHandler extends BaseRestHandler {
 
         protected RestCountPercolateExistingDocHandler(Settings settings, final RestController controller, Client client) {
-            super(settings, client);
+            super(settings, controller, client);
         }
 
         @Override

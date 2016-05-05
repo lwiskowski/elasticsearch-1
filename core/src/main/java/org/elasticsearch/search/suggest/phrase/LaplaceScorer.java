@@ -25,20 +25,24 @@ import org.elasticsearch.search.suggest.SuggestUtils;
 import org.elasticsearch.search.suggest.phrase.DirectCandidateGenerator.Candidate;
 
 import java.io.IOException;
-
-final class LaplaceScorer extends WordScorer {
+//TODO public for tests
+public final class LaplaceScorer extends WordScorer {
+    
+    public static final WordScorerFactory FACTORY = new WordScorer.WordScorerFactory() {
+        @Override
+        public WordScorer newScorer(IndexReader reader, Terms terms, String field, double realWordLikelyhood, BytesRef separator) throws IOException {
+            return new LaplaceScorer(reader, terms, field, realWordLikelyhood, separator, 0.5);
+        }
+    };
+    
     private double alpha;
 
-    LaplaceScorer(IndexReader reader, Terms terms, String field,
+    public LaplaceScorer(IndexReader reader, Terms terms, String field,
             double realWordLikelyhood, BytesRef separator, double alpha) throws IOException {
         super(reader, terms, field, realWordLikelyhood, separator);
         this.alpha = alpha;
     }
-
-    double alpha() {
-        return this.alpha;
-    }
-
+    
     @Override
     protected double scoreBigram(Candidate word, Candidate w_1) throws IOException {
         SuggestUtils.join(separator, spare, w_1.term, word.term);

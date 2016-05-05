@@ -35,14 +35,11 @@ import org.apache.lucene.search.TopFieldDocs;
 import org.apache.lucene.util.BytesRef;
 import org.elasticsearch.action.admin.indices.mapping.put.PutMappingRequest;
 import org.elasticsearch.common.compress.CompressedXContent;
-import org.elasticsearch.common.lucene.index.ElasticsearchDirectoryReader;
-import org.elasticsearch.index.Index;
 import org.elasticsearch.index.fielddata.plain.ParentChildIndexFieldData;
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.index.mapper.Uid;
 import org.elasticsearch.index.mapper.internal.ParentFieldMapper;
 import org.elasticsearch.index.mapper.internal.UidFieldMapper;
-import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.search.MultiValueMode;
 import org.junit.Before;
 
@@ -167,11 +164,11 @@ public class ParentChildFieldDataTests extends AbstractFieldDataTestCase {
     }
 
     public void testSorting() throws Exception {
-        IndexFieldData indexFieldData = getForField(parentType);
-        IndexSearcher searcher = new IndexSearcher(DirectoryReader.open(writer));
+        IndexFieldData indexFieldData = getForField(childType);
+        IndexSearcher searcher = new IndexSearcher(DirectoryReader.open(writer, true));
         IndexFieldData.XFieldComparatorSource comparator = indexFieldData.comparatorSource("_last", MultiValueMode.MIN, null);
 
-        TopFieldDocs topDocs = searcher.search(new MatchAllDocsQuery(), 10, new Sort(new SortField(ParentFieldMapper.joinField(parentType), comparator, false)));
+        TopFieldDocs topDocs = searcher.search(new MatchAllDocsQuery(), 10, new Sort(new SortField(ParentFieldMapper.NAME, comparator, false)));
         assertThat(topDocs.totalHits, equalTo(8));
         assertThat(topDocs.scoreDocs.length, equalTo(8));
         assertThat(topDocs.scoreDocs[0].doc, equalTo(0));
@@ -191,7 +188,7 @@ public class ParentChildFieldDataTests extends AbstractFieldDataTestCase {
         assertThat(topDocs.scoreDocs[7].doc, equalTo(7));
         assertThat(((BytesRef) ((FieldDoc) topDocs.scoreDocs[7]).fields[0]), equalTo(null));
 
-        topDocs = searcher.search(new MatchAllDocsQuery(), 10, new Sort(new SortField(ParentFieldMapper.joinField(parentType), comparator, true)));
+        topDocs = searcher.search(new MatchAllDocsQuery(), 10, new Sort(new SortField(ParentFieldMapper.NAME, comparator, true)));
         assertThat(topDocs.totalHits, equalTo(8));
         assertThat(topDocs.scoreDocs.length, equalTo(8));
         assertThat(topDocs.scoreDocs[0].doc, equalTo(3));
@@ -214,8 +211,7 @@ public class ParentChildFieldDataTests extends AbstractFieldDataTestCase {
 
     public void testThreads() throws Exception {
         final ParentChildIndexFieldData indexFieldData = getForField(childType);
-        final DirectoryReader reader = ElasticsearchDirectoryReader.wrap(
-                DirectoryReader.open(writer), new ShardId(new Index("test", ""), 0));
+        final DirectoryReader reader = DirectoryReader.open(writer, true);
         final IndexParentChildFieldData global = indexFieldData.loadGlobal(reader);
         final AtomicReference<Exception> error = new AtomicReference<>();
         final int numThreads = scaledRandomIntBetween(3, 8);
@@ -270,7 +266,7 @@ public class ParentChildFieldDataTests extends AbstractFieldDataTestCase {
     }
 
     @Override
-    protected String getFieldDataType() {
-        return "_parent";
+    protected FieldDataType getFieldDataType() {
+        return new FieldDataType("_parent");
     }
 }

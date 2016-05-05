@@ -20,16 +20,15 @@
 package org.elasticsearch.search.aggregations.pipeline.serialdiff;
 
 import org.elasticsearch.action.index.IndexRequestBuilder;
+import org.elasticsearch.action.search.SearchPhaseExecutionException;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.common.collect.EvictingQueue;
-import org.elasticsearch.search.aggregations.bucket.histogram.ExtendedBounds;
 import org.elasticsearch.search.aggregations.bucket.histogram.Histogram;
 import org.elasticsearch.search.aggregations.bucket.histogram.InternalHistogram;
+import org.elasticsearch.search.aggregations.metrics.ValuesSourceMetricsAggregationBuilder;
 import org.elasticsearch.search.aggregations.pipeline.BucketHelpers;
 import org.elasticsearch.search.aggregations.pipeline.PipelineAggregationHelperTests;
 import org.elasticsearch.search.aggregations.pipeline.SimpleValue;
-import org.elasticsearch.search.aggregations.support.ValuesSource;
-import org.elasticsearch.search.aggregations.support.ValuesSourceAggregatorBuilder;
 import org.elasticsearch.test.ESIntegTestCase;
 import org.hamcrest.Matchers;
 
@@ -61,7 +60,7 @@ public class SerialDiffIT extends ESIntegTestCase {
     static int numBuckets;
     static int lag;
     static BucketHelpers.GapPolicy gapPolicy;
-    static ValuesSourceAggregatorBuilder<? extends ValuesSource, ? extends ValuesSourceAggregatorBuilder<?, ?>> metric;
+    static ValuesSourceMetricsAggregationBuilder<?> metric;
     static List<PipelineAggregationHelperTests.MockBucket> mockHisto;
 
     static Map<String, ArrayList<Double>> testValues;
@@ -81,7 +80,7 @@ public class SerialDiffIT extends ESIntegTestCase {
         }
     }
 
-    private ValuesSourceAggregatorBuilder<? extends ValuesSource, ? extends ValuesSourceAggregatorBuilder<?, ?>> randomMetric(String name, String field) {
+    private ValuesSourceMetricsAggregationBuilder<?> randomMetric(String name, String field) {
         int rand = randomIntBetween(0,3);
 
         switch (rand) {
@@ -96,7 +95,7 @@ public class SerialDiffIT extends ESIntegTestCase {
         }
     }
 
-    private void assertValidIterators(Iterator expectedBucketIter, Iterator expectedCountsIter, Iterator expectedValuesIter) {
+    private void assertValidIterators(Iterator<?> expectedBucketIter, Iterator<?> expectedCountsIter, Iterator<?> expectedValuesIter) {
         if (!expectedBucketIter.hasNext()) {
             fail("`expectedBucketIter` iterator ended before `actual` iterator, size mismatch");
         }
@@ -232,14 +231,16 @@ public class SerialDiffIT extends ESIntegTestCase {
                 .prepareSearch("idx").setTypes("type")
                 .addAggregation(
                         histogram("histo").field(INTERVAL_FIELD).interval(interval)
-                                .extendedBounds(new ExtendedBounds(0L, (long) (interval * (numBuckets - 1))))
+                                .extendedBounds(0L, (long) (interval * (numBuckets - 1)))
                                 .subAggregation(metric)
-                                .subAggregation(diff("diff_counts", "_count")
+                                .subAggregation(diff("diff_counts")
                                         .lag(lag)
-                                        .gapPolicy(gapPolicy))
-                                .subAggregation(diff("diff_values", "the_metric")
+                                        .gapPolicy(gapPolicy)
+                                        .setBucketsPaths("_count"))
+                                .subAggregation(diff("diff_values")
                                         .lag(lag)
-                                        .gapPolicy(gapPolicy))
+                                        .gapPolicy(gapPolicy)
+                                        .setBucketsPaths("the_metric"))
                 ).execute().actionGet();
 
         assertSearchResponse(response);
@@ -279,14 +280,15 @@ public class SerialDiffIT extends ESIntegTestCase {
                 .prepareSearch("idx").setTypes("type")
                 .addAggregation(
                         histogram("histo").field(INTERVAL_FIELD).interval(interval)
-                                .extendedBounds(new ExtendedBounds(0L, (long) (interval * (numBuckets - 1))))
+                                .extendedBounds(0L, (long) (interval * (numBuckets - 1)))
                                 .subAggregation(metric)
-                                .subAggregation(diff("diff_counts", "_count")
+                                .subAggregation(diff("diff_counts")
                                         .lag(-1)
-                                        .gapPolicy(gapPolicy))
+                                        .gapPolicy(gapPolicy)
+                                        .setBucketsPaths("_count"))
                 ).execute().actionGet();
-        } catch (IllegalArgumentException e) {
-            assertThat(e.getMessage(), is("[lag] must be a positive integer: [diff_counts]"));
+        } catch (SearchPhaseExecutionException e) {
+            assertThat(e.getMessage(), is("all shards failed"));
         }
     }
 }

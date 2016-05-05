@@ -19,74 +19,40 @@
 
 package org.elasticsearch.transport;
 
-import org.elasticsearch.common.io.stream.StreamInput;
-import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.tasks.Task;
-import org.elasticsearch.tasks.TaskId;
-
-import java.io.IOException;
 
 /**
  */
-public abstract class TransportRequest extends TransportMessage {
-    public static class Empty extends TransportRequest {
-        public static final Empty INSTANCE = new Empty();
-    }
+public abstract class TransportRequest extends TransportMessage<TransportRequest> {
 
-    /**
-     * Parent of this request. Defaults to {@link TaskId#EMPTY_TASK_ID}, meaning "no parent".
-     */
-    private TaskId parentTaskId = TaskId.EMPTY_TASK_ID;
+    public static class Empty extends TransportRequest {
+
+        public static final Empty INSTANCE = new Empty();
+
+        public Empty() {
+            super();
+        }
+
+        public Empty(TransportRequest request) {
+            super(request);
+        }
+    }
 
     public TransportRequest() {
     }
 
-    /**
-     * Set a reference to task that caused this task to be run.
-     */
-    public void setParentTask(String parentTaskNode, long parentTaskId) {
-        setParentTask(new TaskId(parentTaskNode, parentTaskId));
+    protected TransportRequest(TransportRequest request) {
+        super(request);
     }
 
-    /**
-     * Set a reference to task that created this request.
-     */
-    public void setParentTask(TaskId taskId) {
-        this.parentTaskId = taskId;
+    public Task createTask(long id, String type, String action) {
+        return new Task(id, type, action, this::getDescription);
     }
-
-    /**
-     * Get a reference to the task that created this request. Defaults to {@link TaskId#EMPTY_TASK_ID}, meaning "there is no parent".
-     */
-    public TaskId getParentTask() {
-        return parentTaskId;
-    }
-
-    /**
-     * Returns the task object that should be used to keep track of the processing of the request.
-     *
-     * A request can override this method and return null to avoid being tracked by the task manager.
-     */
-    public Task createTask(long id, String type, String action, TaskId parentTaskId) {
-        return new Task(id, type, action, getDescription(), parentTaskId);
-    }
-
     /**
      * Returns optional description of the request to be displayed by the task manager
      */
     public String getDescription() {
-        return "";
+        return this.toString();
     }
 
-    @Override
-    public void readFrom(StreamInput in) throws IOException {
-        super.readFrom(in);
-        parentTaskId = TaskId.readFromStream(in);
-    }
-
-    @Override
-    public void writeTo(StreamOutput out) throws IOException {
-        super.writeTo(out);
-        parentTaskId.writeTo(out);
-    }
 }

@@ -20,6 +20,7 @@
 package org.elasticsearch.index.analysis;
 
 import org.apache.lucene.analysis.cn.smart.SmartChineseAnalyzer;
+import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.env.Environment;
 import org.elasticsearch.index.IndexSettings;
@@ -30,6 +31,7 @@ public class SmartChineseAnalyzerProvider extends AbstractIndexAnalyzerProvider<
 
     private final SmartChineseAnalyzer analyzer;
 
+    @Inject
     public SmartChineseAnalyzerProvider(IndexSettings indexSettings, Environment environment, String name, Settings settings) {
         super(indexSettings, name, settings);
 

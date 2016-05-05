@@ -44,7 +44,7 @@ public class RestTypesExistsAction extends BaseRestHandler {
 
     @Inject
     public RestTypesExistsAction(Settings settings, RestController controller, Client client) {
-        super(settings, client);
+        super(settings, controller, client);
         controller.registerHandler(HEAD, "/{index}/{type}", this);
     }
 

@@ -40,14 +40,14 @@ public class SpanWithinQueryBuilderTests extends AbstractQueryTestCase<SpanWithi
 
     public void testIllegalArguments() {
         try {
-            new SpanWithinQueryBuilder(null, new SpanTermQueryBuilder("field", "value"));
+            new SpanWithinQueryBuilder(null, SpanTermQueryBuilder.PROTOTYPE);
             fail("cannot be null");
         } catch (IllegalArgumentException e) {
             // expected
         }
 
         try {
-            new SpanWithinQueryBuilder(new SpanTermQueryBuilder("field", "value"), null);
+            new SpanWithinQueryBuilder(SpanTermQueryBuilder.PROTOTYPE, null);
             fail("cannot be null");
         } catch (IllegalArgumentException e) {
             // expected

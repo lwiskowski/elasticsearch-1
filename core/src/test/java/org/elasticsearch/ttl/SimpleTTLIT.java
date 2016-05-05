@@ -38,6 +38,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
+import static org.elasticsearch.common.settings.Settings.settingsBuilder;
 import static org.elasticsearch.common.xcontent.XContentFactory.jsonBuilder;
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.both;
@@ -61,9 +62,11 @@ public class SimpleTTLIT extends ESIntegTestCase {
 
     @Override
     protected Settings nodeSettings(int nodeOrdinal) {
-        return Settings.builder()
+        return settingsBuilder()
                 .put(super.nodeSettings(nodeOrdinal))
                 .put("indices.ttl.interval", PURGE_INTERVAL, TimeUnit.MILLISECONDS)
+                .put("cluster.routing.operation.use_type", false) // make sure we control the shard computation
+                .put("cluster.routing.operation.hash.type", "djb")
                 .build();
     }
 
@@ -110,7 +113,7 @@ public class SimpleTTLIT extends ESIntegTestCase {
             ttl0 = ((Number) getResponse.getField("_ttl").getValue()).longValue();
             assertThat(ttl0, lessThanOrEqualTo(providedTTLValue - (currentTime - now)));
         } else {
-            assertThat(providedTTLValue - (currentTime - now), lessThanOrEqualTo(0L));
+            assertThat(providedTTLValue - (currentTime - now), lessThanOrEqualTo(0l));
         }
         // verify the ttl is still decreasing when going to the replica
         currentTime = System.currentTimeMillis();
@@ -119,7 +122,7 @@ public class SimpleTTLIT extends ESIntegTestCase {
             ttl0 = ((Number) getResponse.getField("_ttl").getValue()).longValue();
             assertThat(ttl0, lessThanOrEqualTo(providedTTLValue - (currentTime - now)));
         } else {
-            assertThat(providedTTLValue - (currentTime - now), lessThanOrEqualTo(0L));
+            assertThat(providedTTLValue - (currentTime - now), lessThanOrEqualTo(0l));
         }
         // non realtime get (stored)
         currentTime = System.currentTimeMillis();
@@ -128,7 +131,7 @@ public class SimpleTTLIT extends ESIntegTestCase {
             ttl0 = ((Number) getResponse.getField("_ttl").getValue()).longValue();
             assertThat(ttl0, lessThanOrEqualTo(providedTTLValue - (currentTime - now)));
         } else {
-            assertThat(providedTTLValue - (currentTime - now), lessThanOrEqualTo(0L));
+            assertThat(providedTTLValue - (currentTime - now), lessThanOrEqualTo(0l));
         }
         // non realtime get going the replica
         currentTime = System.currentTimeMillis();
@@ -137,7 +140,7 @@ public class SimpleTTLIT extends ESIntegTestCase {
             ttl0 = ((Number) getResponse.getField("_ttl").getValue()).longValue();
             assertThat(ttl0, lessThanOrEqualTo(providedTTLValue - (currentTime - now)));
         } else {
-            assertThat(providedTTLValue - (currentTime - now), lessThanOrEqualTo(0L));
+            assertThat(providedTTLValue - (currentTime - now), lessThanOrEqualTo(0l));
         }
 
         // no TTL provided so no TTL fetched
@@ -214,7 +217,7 @@ public class SimpleTTLIT extends ESIntegTestCase {
         assertTTLMappingEnabled(index, type);
 
         // update some field in the mapping
-        XContentBuilder updateMappingBuilder = jsonBuilder().startObject().startObject("properties").startObject("otherField").field("type", "text").endObject().endObject();
+        XContentBuilder updateMappingBuilder = jsonBuilder().startObject().startObject("properties").startObject("otherField").field("type", "string").endObject().endObject();
         PutMappingResponse putMappingResponse = client().admin().indices().preparePutMapping(index).setType(type).setSource(updateMappingBuilder).get();
         assertAcked(putMappingResponse);
 

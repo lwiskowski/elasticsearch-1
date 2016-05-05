@@ -26,17 +26,20 @@ import org.elasticsearch.search.suggest.phrase.DirectCandidateGenerator.Candidat
 
 import java.io.IOException;
 
-class StupidBackoffScorer extends WordScorer {
+public class StupidBackoffScorer extends WordScorer {
+    public static final WordScorerFactory FACTORY = new WordScorer.WordScorerFactory() {
+        @Override
+        public WordScorer newScorer(IndexReader reader, Terms terms, String field, double realWordLikelyhood, BytesRef separator) throws IOException {
+            return new StupidBackoffScorer(reader, terms, field, realWordLikelyhood, separator, 0.4f);
+        }
+    };
+
     private final double discount;
 
     public StupidBackoffScorer(IndexReader reader, Terms terms,String field, double realWordLikelyhood, BytesRef separator, double discount)
             throws IOException {
         super(reader, terms, field, realWordLikelyhood, separator);
         this.discount = discount;
-    }
-
-    double discount() {
-        return this.discount;
     }
 
     @Override

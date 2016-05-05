@@ -20,14 +20,12 @@
 "Test cat nodes attrs output":
   - do:
       cat.nodeattrs: {}
-  # All attributes look good
-  - match:
+  - match: # All attributes look good
       $body: |
                /^#  node\s+         host\s+ ip\s+                   attr\s+     value\s* \n
                     (((\S+\s?){1,10})\s+(\S+)\s+(\d{1,3}\.){3}\d{1,3}\s+(\S+)\s+    (\S+)\s* \n)+
                $/
-  # A specific planted attribute is present and looks good
-  - match:
+  - match: # A specific planted attribute is present and looks good
       $body: |
                /#   node\s+              host\s+  ip\s+                   attr\s+     value\s* \n
                     (\S+(\s\S+){0,7})\s+ (\S+)\s+ (\d{1,3}\.){3}\d{1,3}\s+testattr\s+ test \s* \n
@@ -39,14 +37,12 @@
   - do:
       cat.nodeattrs:
         v: true
-  # All attributes look good including the heading
-  - match:
+  - match: # All attributes look good including the heading
       $body: |
                /^   node\s+        host\s+ ip\s+                   attr\s+     value\s* \n
                     (((\S+\s?){1,10})\s+(\S+)\s+(\d{1,3}\.){3}\d{1,3}\s+(\S+)\s+    (\S+)\s* \n)+
                $/
-  # A specific planted attribute is present and looks good
-  - match:
+  - match: # A specific planted attribute is present and looks good
       $body: |
                /#   node\s+              host\s+  ip\s+                    attr\s+     value\s* \n
                     (\S+(\s\S+){0,7})\s+ (\S+)\s+ (\d{1,3}\.){3}\d{1,3}\s+ testattr\s+ test \s* \n
@@ -56,14 +52,12 @@
       cat.nodeattrs:
           h: attr,value
           v: true
-  # All attributes look good
-  - match:
+  - match: # All attributes look good
       $body: |
                /^   attr\s+     value\s*\n
                     ((\S+)\s+   (\S+)\s*)+
                $/
-  # A specific planted attribute is present and looks good
-  - match:
+  - match: # A specific planted attribute is present and looks good
       $body: |
                /#   attr\s+     value\s*\n
                     testattr\s+ test\s*\n

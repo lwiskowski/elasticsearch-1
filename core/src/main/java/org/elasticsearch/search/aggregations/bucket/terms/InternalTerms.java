@@ -20,7 +20,6 @@ package org.elasticsearch.search.aggregations.bucket.terms;
 
 import org.elasticsearch.common.io.stream.Streamable;
 import org.elasticsearch.common.xcontent.ToXContent;
-import org.elasticsearch.search.DocValueFormat;
 import org.elasticsearch.search.aggregations.AggregationExecutionException;
 import org.elasticsearch.search.aggregations.Aggregations;
 import org.elasticsearch.search.aggregations.InternalAggregation;
@@ -28,6 +27,7 @@ import org.elasticsearch.search.aggregations.InternalAggregations;
 import org.elasticsearch.search.aggregations.InternalMultiBucketAggregation;
 import org.elasticsearch.search.aggregations.bucket.terms.support.BucketPriorityQueue;
 import org.elasticsearch.search.aggregations.pipeline.PipelineAggregator;
+import org.elasticsearch.search.aggregations.support.format.ValueFormatter;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -52,16 +52,16 @@ public abstract class InternalTerms<A extends InternalTerms, B extends InternalT
         protected long docCountError;
         protected InternalAggregations aggregations;
         protected boolean showDocCountError;
-        transient final DocValueFormat format;
+        transient final ValueFormatter formatter;
 
-        protected Bucket(DocValueFormat formatter, boolean showDocCountError) {
+        protected Bucket(ValueFormatter formatter, boolean showDocCountError) {
             // for serialization
             this.showDocCountError = showDocCountError;
-            this.format = formatter;
+            this.formatter = formatter;
         }
 
         protected Bucket(long docCount, InternalAggregations aggregations, boolean showDocCountError, long docCountError,
-                DocValueFormat formatter) {
+                ValueFormatter formatter) {
             this(formatter, showDocCountError);
             this.docCount = docCount;
             this.aggregations = aggregations;
@@ -110,7 +110,6 @@ public abstract class InternalTerms<A extends InternalTerms, B extends InternalT
 
     protected Terms.Order order;
     protected int requiredSize;
-    protected DocValueFormat format;
     protected int shardSize;
     protected long minDocCount;
     protected List<? extends Bucket> buckets;
@@ -121,12 +120,11 @@ public abstract class InternalTerms<A extends InternalTerms, B extends InternalT
 
     protected InternalTerms() {} // for serialization
 
-    protected InternalTerms(String name, Terms.Order order, DocValueFormat format, int requiredSize, int shardSize, long minDocCount,
+    protected InternalTerms(String name, Terms.Order order, int requiredSize, int shardSize, long minDocCount,
             List<? extends Bucket> buckets, boolean showTermDocCountError, long docCountError, long otherDocCount, List<PipelineAggregator> pipelineAggregators,
             Map<String, Object> metaData) {
         super(name, pipelineAggregators, metaData);
         this.order = order;
-        this.format = format;
         this.requiredSize = requiredSize;
         this.shardSize = shardSize;
         this.minDocCount = minDocCount;
@@ -190,7 +188,7 @@ public abstract class InternalTerms<A extends InternalTerms, B extends InternalT
             }
             otherDocCount += terms.getSumOfOtherDocCounts();
             final long thisAggDocCountError;
-            if (terms.buckets.size() < this.shardSize || InternalOrder.isTermOrder(order)) {
+            if (terms.buckets.size() < this.shardSize || this.order == InternalOrder.TERM_ASC || this.order == InternalOrder.TERM_DESC) {
                 thisAggDocCountError = 0;
             } else if (InternalOrder.isCountDesc(this.order)) {
                 thisAggDocCountError = terms.buckets.get(terms.buckets.size() - 1).docCount;

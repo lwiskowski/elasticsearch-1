@@ -49,11 +49,11 @@ public class IndexSettingsModule extends AbstractModule {
     }
 
     public static IndexSettings newIndexSettings(String index, Settings settings, Setting<?>... setting) {
-        return newIndexSettings(new Index(index, settings.get(IndexMetaData.SETTING_INDEX_UUID, IndexMetaData.INDEX_UUID_NA_VALUE)), settings, setting);
+        return newIndexSettings(new Index(index), settings, setting);
     }
 
     public static IndexSettings newIndexSettings(Index index, Settings settings, Setting<?>... setting) {
-        Settings build = Settings.builder().put(IndexMetaData.SETTING_VERSION_CREATED, Version.CURRENT)
+        Settings build = Settings.settingsBuilder().put(IndexMetaData.SETTING_VERSION_CREATED, Version.CURRENT)
             .put(IndexMetaData.SETTING_NUMBER_OF_REPLICAS, 1)
             .put(IndexMetaData.SETTING_NUMBER_OF_SHARDS, 1)
             .put(settings)
@@ -63,15 +63,6 @@ public class IndexSettingsModule extends AbstractModule {
         if (setting.length > 0) {
             settingSet.addAll(Arrays.asList(setting));
         }
-        return new IndexSettings(metaData, Settings.EMPTY, (idx) -> Regex.simpleMatch(idx, metaData.getIndex().getName()), new IndexScopedSettings(Settings.EMPTY, settingSet));
-    }
-
-    public static IndexSettings newIndexSettings(final IndexMetaData indexMetaData, Setting<?>... setting) {
-        Set<Setting<?>> settingSet = new HashSet<>(IndexScopedSettings.BUILT_IN_INDEX_SETTINGS);
-        if (setting.length > 0) {
-            settingSet.addAll(Arrays.asList(setting));
-        }
-        return new IndexSettings(indexMetaData, Settings.EMPTY, (idx) -> Regex.simpleMatch(idx, indexMetaData.getIndex().getName()),
-                                 new IndexScopedSettings(Settings.EMPTY, settingSet));
+        return new IndexSettings(metaData, Settings.EMPTY, (idx) -> Regex.simpleMatch(idx, metaData.getIndex()), new IndexScopedSettings(Settings.EMPTY, settingSet));
     }
 }

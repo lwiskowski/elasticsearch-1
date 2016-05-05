@@ -37,11 +37,6 @@ public class TypeMissingException extends ElasticsearchException {
         setIndex(index);
     }
 
-    public TypeMissingException(String index, String... types) {
-        super("type[" + Arrays.toString(types) + "] missing");
-        setIndex(index);
-    }
-
     public TypeMissingException(StreamInput in) throws IOException{
         super(in);
     }

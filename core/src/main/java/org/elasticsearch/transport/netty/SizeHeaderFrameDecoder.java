@@ -41,8 +41,7 @@ public class SizeHeaderFrameDecoder extends FrameDecoder {
 
     @Override
     protected Object decode(ChannelHandlerContext ctx, Channel channel, ChannelBuffer buffer) throws Exception {
-        final int sizeHeaderLength = NettyHeader.MARKER_BYTES_SIZE + NettyHeader.MESSAGE_LENGTH_SIZE;
-        if (buffer.readableBytes() < sizeHeaderLength) {
+        if (buffer.readableBytes() < 6) {
             return null;
         }
 
@@ -69,11 +68,11 @@ public class SizeHeaderFrameDecoder extends FrameDecoder {
                     + Integer.toHexString(buffer.getByte(readerIndex + 3) & 0xFF) + ")");
         }
 
-        int dataLen = buffer.getInt(buffer.readerIndex() + NettyHeader.MARKER_BYTES_SIZE);
+        int dataLen = buffer.getInt(buffer.readerIndex() + 2);
         if (dataLen == NettyHeader.PING_DATA_SIZE) {
             // discard the messages we read and continue, this is achieved by skipping the bytes
             // and returning null
-            buffer.skipBytes(sizeHeaderLength);
+            buffer.skipBytes(6);
             return null;
         }
         if (dataLen <= 0) {
@@ -81,14 +80,14 @@ public class SizeHeaderFrameDecoder extends FrameDecoder {
         }
         // safety against too large frames being sent
         if (dataLen > NINETY_PER_HEAP_SIZE) {
-            throw new TooLongFrameException("transport content length received [" + new ByteSizeValue(dataLen) + "] exceeded ["
-                    + new ByteSizeValue(NINETY_PER_HEAP_SIZE) + "]");
+            throw new TooLongFrameException(
+                    "transport content length received [" + new ByteSizeValue(dataLen) + "] exceeded [" + new ByteSizeValue(NINETY_PER_HEAP_SIZE) + "]");
         }
 
-        if (buffer.readableBytes() < dataLen + sizeHeaderLength) {
+        if (buffer.readableBytes() < dataLen + 6) {
             return null;
         }
-        buffer.skipBytes(sizeHeaderLength);
+        buffer.skipBytes(6);
         return buffer;
     }
 

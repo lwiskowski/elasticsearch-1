@@ -27,7 +27,7 @@ import org.elasticsearch.common.io.stream.Writeable;
 import java.io.IOException;
 import java.util.Locale;
 
-public enum CombineFunction implements Writeable {
+public enum CombineFunction implements Writeable<CombineFunction> {
     MULTIPLY {
         @Override
         public float combine(double queryScore, double funcScore, double maxBoost) {
@@ -146,12 +146,17 @@ public enum CombineFunction implements Writeable {
         out.writeVInt(this.ordinal());
     }
 
-    public static CombineFunction readFromStream(StreamInput in) throws IOException {
+    @Override
+    public CombineFunction readFrom(StreamInput in) throws IOException {
         int ordinal = in.readVInt();
         if (ordinal < 0 || ordinal >= values().length) {
             throw new IOException("Unknown CombineFunction ordinal [" + ordinal + "]");
         }
         return values()[ordinal];
+    }
+
+    public static CombineFunction readCombineFunctionFrom(StreamInput in) throws IOException {
+        return CombineFunction.MULTIPLY.readFrom(in);
     }
 
     public static CombineFunction fromString(String combineFunction) {

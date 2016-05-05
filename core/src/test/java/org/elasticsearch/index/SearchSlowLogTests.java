@@ -20,129 +20,16 @@
 package org.elasticsearch.index;
 
 import org.elasticsearch.Version;
-import org.elasticsearch.action.search.SearchType;
-import org.elasticsearch.cache.recycler.PageCacheRecycler;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
-import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
-import org.elasticsearch.common.util.BigArrays;
-import org.elasticsearch.index.query.QueryShardContext;
-import org.elasticsearch.index.shard.ShardId;
-import org.elasticsearch.script.ScriptService;
-import org.elasticsearch.script.Template;
-import org.elasticsearch.search.Scroll;
-import org.elasticsearch.search.builder.SearchSourceBuilder;
-import org.elasticsearch.search.internal.SearchContext;
-import org.elasticsearch.search.internal.ShardSearchRequest;
-import org.elasticsearch.test.ESSingleNodeTestCase;
-import org.elasticsearch.test.TestSearchContext;
-import org.elasticsearch.threadpool.ThreadPool;
-
-import java.io.IOException;
-
-import static org.hamcrest.Matchers.startsWith;
+import org.elasticsearch.test.ESTestCase;
 
 
-public class SearchSlowLogTests extends ESSingleNodeTestCase {
-    @Override
-    protected SearchContext createSearchContext(IndexService indexService) {
-        BigArrays bigArrays = indexService.getBigArrays();
-        ThreadPool threadPool = indexService.getThreadPool();
-        PageCacheRecycler pageCacheRecycler = node().injector().getInstance(PageCacheRecycler.class);
-        ScriptService scriptService = node().injector().getInstance(ScriptService.class);
-        return new TestSearchContext(threadPool, pageCacheRecycler, bigArrays, scriptService, indexService) {
-            @Override
-            public ShardSearchRequest request() {
-                return new ShardSearchRequest() {
-                    @Override
-                    public ShardId shardId() {
-                        return null;
-                    }
-
-                    @Override
-                    public String[] types() {
-                        return new String[0];
-                    }
-
-                    @Override
-                    public SearchSourceBuilder source() {
-                        return null;
-                    }
-
-                    @Override
-                    public void source(SearchSourceBuilder source) {
-
-                    }
-
-                    @Override
-                    public int numberOfShards() {
-                        return 0;
-                    }
-
-                    @Override
-                    public SearchType searchType() {
-                        return null;
-                    }
-
-                    @Override
-                    public String[] filteringAliases() {
-                        return new String[0];
-                    }
-
-                    @Override
-                    public long nowInMillis() {
-                        return 0;
-                    }
-
-                    @Override
-                    public Template template() {
-                        return null;
-                    }
-
-                    @Override
-                    public Boolean requestCache() {
-                        return null;
-                    }
-
-                    @Override
-                    public Scroll scroll() {
-                        return null;
-                    }
-
-                    @Override
-                    public void setProfile(boolean profile) {
-
-                    }
-
-                    @Override
-                    public boolean isProfile() {
-                        return false;
-                    }
-
-                    @Override
-                    public BytesReference cacheKey() throws IOException {
-                        return null;
-                    }
-
-                    @Override
-                    public void rewrite(QueryShardContext context) throws IOException {
-                    }
-                };
-            }
-        };
-    }
-
-    public void testSlowLogSearchContextPrinterToLog() throws IOException {
-        IndexService index = createIndex("foo");
-        // Turning off document logging doesn't log source[]
-        SearchContext searchContext = createSearchContext(index);
-        SearchSlowLog.SlowLogSearchContextPrinter p = new SearchSlowLog.SlowLogSearchContextPrinter(index.index(), searchContext, 10, true);
-        assertThat(p.toString(), startsWith(index.index().toString()));
-    }
+public class SearchSlowLogTests extends ESTestCase {
 
     public void testReformatSetting() {
-        IndexMetaData metaData = newIndexMeta("index", Settings.builder()
+        IndexMetaData metaData = newIndexMeta("index", Settings.settingsBuilder()
             .put(IndexMetaData.SETTING_VERSION_CREATED, Version.CURRENT)
             .put(SearchSlowLog.INDEX_SEARCH_SLOWLOG_REFORMAT.getKey(), false)
             .build());
@@ -158,7 +45,7 @@ public class SearchSlowLogTests extends ESSingleNodeTestCase {
         settings.updateIndexMetaData(newIndexMeta("index", Settings.EMPTY));
         assertTrue(log.isReformat());
 
-        metaData = newIndexMeta("index", Settings.builder()
+        metaData = newIndexMeta("index", Settings.settingsBuilder()
             .put(IndexMetaData.SETTING_VERSION_CREATED, Version.CURRENT)
             .build());
         settings = new IndexSettings(metaData, Settings.EMPTY);
@@ -175,7 +62,7 @@ public class SearchSlowLogTests extends ESSingleNodeTestCase {
 
     public void testLevelSetting() {
         SlowLogLevel level = randomFrom(SlowLogLevel.values());
-        IndexMetaData metaData = newIndexMeta("index", Settings.builder()
+        IndexMetaData metaData = newIndexMeta("index", Settings.settingsBuilder()
             .put(IndexMetaData.SETTING_VERSION_CREATED, Version.CURRENT)
             .put(SearchSlowLog.INDEX_SEARCH_SLOWLOG_LEVEL.getKey(), level)
             .build());
@@ -196,7 +83,7 @@ public class SearchSlowLogTests extends ESSingleNodeTestCase {
         settings.updateIndexMetaData(newIndexMeta("index", Settings.EMPTY));
         assertEquals(SlowLogLevel.TRACE, log.getLevel());
 
-        metaData = newIndexMeta("index", Settings.builder()
+        metaData = newIndexMeta("index", Settings.settingsBuilder()
             .put(IndexMetaData.SETTING_VERSION_CREATED, Version.CURRENT)
             .build());
         settings = new IndexSettings(metaData, Settings.EMPTY);
@@ -212,7 +99,7 @@ public class SearchSlowLogTests extends ESSingleNodeTestCase {
     }
 
     public void testSetQueryLevels() {
-        IndexMetaData metaData = newIndexMeta("index", Settings.builder()
+        IndexMetaData metaData = newIndexMeta("index", Settings.settingsBuilder()
             .put(IndexMetaData.SETTING_VERSION_CREATED, Version.CURRENT)
             .put(SearchSlowLog.INDEX_SEARCH_SLOWLOG_THRESHOLD_QUERY_TRACE_SETTING.getKey(), "100ms")
             .put(SearchSlowLog.INDEX_SEARCH_SLOWLOG_THRESHOLD_QUERY_DEBUG_SETTING.getKey(), "200ms")
@@ -237,7 +124,7 @@ public class SearchSlowLogTests extends ESSingleNodeTestCase {
         assertEquals(TimeValue.timeValueMillis(320).nanos(), log.getQueryInfoThreshold());
         assertEquals(TimeValue.timeValueMillis(420).nanos(), log.getQueryWarnThreshold());
 
-        metaData = newIndexMeta("index", Settings.builder()
+        metaData = newIndexMeta("index", Settings.settingsBuilder()
             .put(IndexMetaData.SETTING_VERSION_CREATED, Version.CURRENT)
             .build());
         settings.updateIndexMetaData(metaData);
@@ -283,7 +170,7 @@ public class SearchSlowLogTests extends ESSingleNodeTestCase {
     }
 
     public void testSetFetchLevels() {
-        IndexMetaData metaData = newIndexMeta("index", Settings.builder()
+        IndexMetaData metaData = newIndexMeta("index", Settings.settingsBuilder()
             .put(IndexMetaData.SETTING_VERSION_CREATED, Version.CURRENT)
             .put(SearchSlowLog.INDEX_SEARCH_SLOWLOG_THRESHOLD_FETCH_TRACE_SETTING.getKey(), "100ms")
             .put(SearchSlowLog.INDEX_SEARCH_SLOWLOG_THRESHOLD_FETCH_DEBUG_SETTING.getKey(), "200ms")
@@ -308,7 +195,7 @@ public class SearchSlowLogTests extends ESSingleNodeTestCase {
         assertEquals(TimeValue.timeValueMillis(320).nanos(), log.getFetchInfoThreshold());
         assertEquals(TimeValue.timeValueMillis(420).nanos(), log.getFetchWarnThreshold());
 
-        metaData = newIndexMeta("index", Settings.builder()
+        metaData = newIndexMeta("index", Settings.settingsBuilder()
             .put(IndexMetaData.SETTING_VERSION_CREATED, Version.CURRENT)
             .build());
         settings.updateIndexMetaData(metaData);
@@ -355,7 +242,7 @@ public class SearchSlowLogTests extends ESSingleNodeTestCase {
 
 
     private IndexMetaData newIndexMeta(String name, Settings indexSettings) {
-        Settings build = Settings.builder().put(IndexMetaData.SETTING_VERSION_CREATED, Version.CURRENT)
+        Settings build = Settings.settingsBuilder().put(IndexMetaData.SETTING_VERSION_CREATED, Version.CURRENT)
             .put(IndexMetaData.SETTING_NUMBER_OF_REPLICAS, 1)
             .put(IndexMetaData.SETTING_NUMBER_OF_SHARDS, 1)
             .put(indexSettings)

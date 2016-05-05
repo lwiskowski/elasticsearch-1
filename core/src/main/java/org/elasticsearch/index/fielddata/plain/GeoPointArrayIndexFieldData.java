@@ -23,10 +23,9 @@ import org.apache.lucene.index.LeafReader;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.RandomAccessOrds;
 import org.apache.lucene.index.Terms;
-import org.apache.lucene.index.TermsEnum;
-import org.apache.lucene.spatial.geopoint.document.GeoPointField;
 import org.apache.lucene.util.BitSet;
 import org.elasticsearch.Version;
+import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.common.breaker.CircuitBreaker;
 import org.elasticsearch.common.geo.GeoPoint;
 import org.elasticsearch.common.util.BigArrays;
@@ -35,6 +34,7 @@ import org.elasticsearch.common.util.LongArray;
 import org.elasticsearch.index.IndexSettings;
 import org.elasticsearch.index.fielddata.AtomicGeoPointFieldData;
 import org.elasticsearch.index.fielddata.FieldData;
+import org.elasticsearch.index.fielddata.FieldDataType;
 import org.elasticsearch.index.fielddata.IndexFieldData;
 import org.elasticsearch.index.fielddata.IndexFieldDataCache;
 import org.elasticsearch.index.fielddata.ordinals.Ordinals;
@@ -48,11 +48,25 @@ import org.elasticsearch.indices.breaker.CircuitBreakerService;
  */
 public class GeoPointArrayIndexFieldData extends AbstractIndexGeoPointFieldData {
     private final CircuitBreakerService breakerService;
+    private final boolean indexCreatedBefore22;
+
+    public static class Builder implements IndexFieldData.Builder {
+        @Override
+        public IndexFieldData<?> build(IndexSettings indexSettings, MappedFieldType fieldType, IndexFieldDataCache cache,
+                                       CircuitBreakerService breakerService, MapperService mapperService) {
+            return new GeoPointArrayIndexFieldData(indexSettings, fieldType.name(), fieldType.fieldDataType(), cache,
+                    breakerService, fieldType.fieldDataType().getSettings()
+                    .getAsVersion(IndexMetaData.SETTING_VERSION_CREATED, Version.CURRENT).before(Version.V_2_2_0) ||
+                    indexSettings.getIndexVersionCreated().before(Version.V_2_2_0));
+        }
+    }
 
     public GeoPointArrayIndexFieldData(IndexSettings indexSettings, String fieldName,
-                                       IndexFieldDataCache cache, CircuitBreakerService breakerService) {
-        super(indexSettings, fieldName, cache);
+                                       FieldDataType fieldDataType, IndexFieldDataCache cache, CircuitBreakerService breakerService,
+                                       final boolean indexCreatedBefore22) {
+        super(indexSettings, fieldName, fieldDataType, cache);
         this.breakerService = breakerService;
+        this.indexCreatedBefore22 = indexCreatedBefore22;
     }
 
     @Override
@@ -68,8 +82,7 @@ public class GeoPointArrayIndexFieldData extends AbstractIndexGeoPointFieldData 
             estimator.afterLoad(null, data.ramBytesUsed());
             return data;
         }
-        return (indexSettings.getIndexVersionCreated().before(Version.V_2_2_0) == true) ?
-            loadLegacyFieldData(reader, estimator, terms, data) : loadFieldData22(reader, estimator, terms, data);
+        return (indexCreatedBefore22 == true) ? loadLegacyFieldData(reader, estimator, terms, data) : loadFieldData22(reader, estimator, terms, data);
     }
 
     /**
@@ -78,21 +91,11 @@ public class GeoPointArrayIndexFieldData extends AbstractIndexGeoPointFieldData 
     private AtomicGeoPointFieldData loadFieldData22(LeafReader reader, NonEstimatingEstimator estimator, Terms terms,
                                                     AtomicGeoPointFieldData data) throws Exception {
         LongArray indexedPoints = BigArrays.NON_RECYCLING_INSTANCE.newLongArray(128);
-        final float acceptableTransientOverheadRatio = OrdinalsBuilder.DEFAULT_ACCEPTABLE_OVERHEAD_RATIO;
+        final float acceptableTransientOverheadRatio = fieldDataType.getSettings().getAsFloat("acceptable_transient_overhead_ratio",
+                OrdinalsBuilder.DEFAULT_ACCEPTABLE_OVERHEAD_RATIO);
         boolean success = false;
         try (OrdinalsBuilder builder = new OrdinalsBuilder(reader.maxDoc(), acceptableTransientOverheadRatio)) {
-            final TermsEnum termsEnum;
-            final GeoPointField.TermEncoding termEncoding;
-            if (indexSettings.getIndexVersionCreated().onOrAfter(Version.V_2_3_0)) {
-                termEncoding = GeoPointField.TermEncoding.PREFIX;
-                termsEnum = OrdinalsBuilder.wrapGeoPointTerms(terms.iterator());
-            } else {
-                termEncoding = GeoPointField.TermEncoding.NUMERIC;
-                termsEnum = OrdinalsBuilder.wrapNumeric64Bit(terms.iterator());
-            }
-
-            final GeoPointTermsEnum iter = new GeoPointTermsEnum(builder.buildFromTerms(termsEnum), termEncoding);
-
+            final GeoPointTermsEnum iter = new GeoPointTermsEnum(builder.buildFromTerms(OrdinalsBuilder.wrapNumeric64Bit(terms.iterator())));
             Long hashedPoint;
             long numTerms = 0;
             while ((hashedPoint = iter.next()) != null) {
@@ -101,9 +104,10 @@ public class GeoPointArrayIndexFieldData extends AbstractIndexGeoPointFieldData 
             }
             indexedPoints = BigArrays.NON_RECYCLING_INSTANCE.resize(indexedPoints, numTerms);
 
-            Ordinals build = builder.build();
+            Ordinals build = builder.build(fieldDataType.getSettings());
             RandomAccessOrds ordinals = build.ordinals();
-            if (FieldData.isMultiValued(ordinals) == false) {
+            if (!(FieldData.isMultiValued(ordinals) || CommonSettings.getMemoryStorageHint(fieldDataType) == CommonSettings
+                    .MemoryStorageFormat.ORDINALS)) {
                 int maxDoc = reader.maxDoc();
                 LongArray sIndexedPoint = BigArrays.NON_RECYCLING_INSTANCE.newLongArray(reader.maxDoc());
                 for (int i=0; i<maxDoc; ++i) {
@@ -134,9 +138,9 @@ public class GeoPointArrayIndexFieldData extends AbstractIndexGeoPointFieldData 
                                                         AtomicGeoPointFieldData data) throws Exception {
         DoubleArray lat = BigArrays.NON_RECYCLING_INSTANCE.newDoubleArray(128);
         DoubleArray lon = BigArrays.NON_RECYCLING_INSTANCE.newDoubleArray(128);
-        final float acceptableTransientOverheadRatio = OrdinalsBuilder.DEFAULT_ACCEPTABLE_OVERHEAD_RATIO;
+        final float acceptableTransientOverheadRatio = fieldDataType.getSettings().getAsFloat("acceptable_transient_overhead_ratio", OrdinalsBuilder.DEFAULT_ACCEPTABLE_OVERHEAD_RATIO);
         boolean success = false;
-        try (OrdinalsBuilder builder = new OrdinalsBuilder(reader.maxDoc(), acceptableTransientOverheadRatio)) {
+        try (OrdinalsBuilder builder = new OrdinalsBuilder(terms.size(), reader.maxDoc(), acceptableTransientOverheadRatio)) {
             final GeoPointTermsEnumLegacy iter = new GeoPointTermsEnumLegacy(builder.buildFromTerms(terms.iterator()));
             GeoPoint point;
             long numTerms = 0;
@@ -150,9 +154,9 @@ public class GeoPointArrayIndexFieldData extends AbstractIndexGeoPointFieldData 
             lat = BigArrays.NON_RECYCLING_INSTANCE.resize(lat, numTerms);
             lon = BigArrays.NON_RECYCLING_INSTANCE.resize(lon, numTerms);
 
-            Ordinals build = builder.build();
+            Ordinals build = builder.build(fieldDataType.getSettings());
             RandomAccessOrds ordinals = build.ordinals();
-            if (FieldData.isMultiValued(ordinals) == false) {
+            if (!(FieldData.isMultiValued(ordinals) || CommonSettings.getMemoryStorageHint(fieldDataType) == CommonSettings.MemoryStorageFormat.ORDINALS)) {
                 int maxDoc = reader.maxDoc();
                 DoubleArray sLat = BigArrays.NON_RECYCLING_INSTANCE.newDoubleArray(reader.maxDoc());
                 DoubleArray sLon = BigArrays.NON_RECYCLING_INSTANCE.newDoubleArray(reader.maxDoc());

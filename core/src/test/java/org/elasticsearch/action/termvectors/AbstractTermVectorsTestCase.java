@@ -82,7 +82,7 @@ public abstract class AbstractTermVectorsTestCase extends ESIntegTestCase {
 
         public void addToMappings(XContentBuilder mappingsBuilder) throws IOException {
             mappingsBuilder.startObject(name);
-            mappingsBuilder.field("type", "text");
+            mappingsBuilder.field("type", "string");
             String tv_settings;
             if (storedPositions && storedOffset && storedPayloads) {
                 tv_settings = "with_positions_offsets_payloads";
@@ -208,7 +208,7 @@ public abstract class AbstractTermVectorsTestCase extends ESIntegTestCase {
             field.addToMappings(mappingBuilder);
         }
         mappingBuilder.endObject().endObject().endObject();
-        Settings.Builder settings = Settings.builder()
+        Settings.Builder settings = Settings.settingsBuilder()
                 .put(indexSettings())
                 .put("index.analysis.analyzer.tv_test.tokenizer", "standard")
                 .putArray("index.analysis.analyzer.tv_test.filter", "type_as_payload", "lowercase");

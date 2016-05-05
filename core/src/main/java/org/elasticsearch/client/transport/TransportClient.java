@@ -19,6 +19,10 @@
 
 package org.elasticsearch.client.transport;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+
 import org.elasticsearch.Version;
 import org.elasticsearch.action.Action;
 import org.elasticsearch.action.ActionListener;
@@ -28,6 +32,7 @@ import org.elasticsearch.action.ActionRequestBuilder;
 import org.elasticsearch.action.ActionResponse;
 import org.elasticsearch.cache.recycler.PageCacheRecycler;
 import org.elasticsearch.client.support.AbstractClient;
+import org.elasticsearch.client.support.Headers;
 import org.elasticsearch.client.transport.support.TransportProxyClient;
 import org.elasticsearch.cluster.ClusterNameModule;
 import org.elasticsearch.cluster.node.DiscoveryNode;
@@ -39,6 +44,7 @@ import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
 import org.elasticsearch.common.network.NetworkModule;
 import org.elasticsearch.common.network.NetworkService;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.settings.SettingsFilter;
 import org.elasticsearch.common.settings.SettingsModule;
 import org.elasticsearch.common.transport.TransportAddress;
 import org.elasticsearch.indices.breaker.CircuitBreakerModule;
@@ -53,9 +59,7 @@ import org.elasticsearch.threadpool.ThreadPoolModule;
 import org.elasticsearch.transport.TransportService;
 import org.elasticsearch.transport.netty.NettyTransport;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.TimeUnit;
+import static org.elasticsearch.common.settings.Settings.settingsBuilder;
 
 /**
  * The transport client allows to create a client that is not part of the cluster, but simply connects to one
@@ -105,13 +109,14 @@ public class TransportClient extends AbstractClient {
         }
 
         private PluginsService newPluginService(final Settings settings) {
-            final Settings.Builder settingsBuilder = Settings.builder()
-                    .put(NettyTransport.PING_SCHEDULE.getKey(), "5s") // enable by default the transport schedule ping interval
-                    .put(InternalSettingsPreparer.prepareSettings(settings))
-                    .put(NetworkService.NETWORK_SERVER.getKey(), false)
-                    .put(CLIENT_TYPE_SETTING_S.getKey(), CLIENT_TYPE);
+            final Settings.Builder settingsBuilder = settingsBuilder()
+                .put(NettyTransport.PING_SCHEDULE, "5s") // enable by default the transport schedule ping interval
+                .put( InternalSettingsPreparer.prepareSettings(settings))
+                .put("network.server", false)
+                .put("node.client", true)
+                .put(CLIENT_TYPE_SETTING, CLIENT_TYPE);
             return new PluginsService(settingsBuilder.build(), null, null, pluginClasses);
-        }
+        };
 
         /**
          * Builds a new instance of the transport client.
@@ -124,6 +129,7 @@ public class TransportClient extends AbstractClient {
 
             final ThreadPool threadPool = new ThreadPool(settings);
             final NetworkService networkService = new NetworkService(settings);
+            final SettingsFilter settingsFilter = new SettingsFilter(settings);
             NamedWriteableRegistry namedWriteableRegistry = new NamedWriteableRegistry();
             boolean success = false;
             try {
@@ -134,7 +140,7 @@ public class TransportClient extends AbstractClient {
                     modules.add(pluginModule);
                 }
                 modules.add(new PluginsModule(pluginsService));
-                modules.add(new SettingsModule(settings));
+                modules.add(new SettingsModule(settings, settingsFilter ));
                 modules.add(new NetworkModule(networkService, settings, true, namedWriteableRegistry));
                 modules.add(new ClusterNameModule(settings));
                 modules.add(new ThreadPoolModule(threadPool));
@@ -144,16 +150,13 @@ public class TransportClient extends AbstractClient {
                         // noop
                     }
                 });
-                modules.add(new ActionModule(false, true));
+                modules.add(new ActionModule(true));
                 modules.add(new CircuitBreakerModule(settings));
 
                 pluginsService.processModules(modules);
 
                 Injector injector = modules.createInjector();
-                final TransportService transportService = injector.getInstance(TransportService.class);
-                transportService.start();
-                transportService.acceptIncomingRequests();
-
+                injector.getInstance(TransportService.class).start();
                 TransportClient transportClient = new TransportClient(injector);
                 success = true;
                 return transportClient;
@@ -173,7 +176,7 @@ public class TransportClient extends AbstractClient {
     private final TransportProxyClient proxy;
 
     private TransportClient(Injector injector) {
-        super(injector.getInstance(Settings.class), injector.getInstance(ThreadPool.class));
+        super(injector.getInstance(Settings.class), injector.getInstance(ThreadPool.class), injector.getInstance(Headers.class));
         this.injector = injector;
         nodesService = injector.getInstance(TransportClientNodesService.class);
         proxy = injector.getInstance(TransportProxyClient.class);

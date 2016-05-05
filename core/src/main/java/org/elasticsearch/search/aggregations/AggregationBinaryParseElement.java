@@ -21,7 +21,6 @@ package org.elasticsearch.search.aggregations;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentParser;
-import org.elasticsearch.indices.query.IndicesQueriesRegistry;
 import org.elasticsearch.search.internal.SearchContext;
 
 /**
@@ -30,8 +29,8 @@ import org.elasticsearch.search.internal.SearchContext;
 public class AggregationBinaryParseElement extends AggregationParseElement {
 
     @Inject
-    public AggregationBinaryParseElement(AggregatorParsers aggregatorParsers, IndicesQueriesRegistry queriesRegistry) {
-        super(aggregatorParsers, queriesRegistry);
+    public AggregationBinaryParseElement(AggregatorParsers aggregatorParsers) {
+        super(aggregatorParsers);
     }
 
     @Override

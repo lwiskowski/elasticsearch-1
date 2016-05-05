@@ -88,7 +88,7 @@ import java.util.Objects;
 public class Lucene {
     public static final String LATEST_DOC_VALUES_FORMAT = "Lucene54";
     public static final String LATEST_POSTINGS_FORMAT = "Lucene50";
-    public static final String LATEST_CODEC = "Lucene60";
+    public static final String LATEST_CODEC = "Lucene54";
 
     static {
         Deprecated annotation = PostingsFormat.forName(LATEST_POSTINGS_FORMAT).getClass().getAnnotation(Deprecated.class);
@@ -111,7 +111,7 @@ public class Lucene {
         try {
             return Version.parse(version);
         } catch (ParseException e) {
-            logger.warn("no version match {}, default to {}", e, version, defaultVersion);
+            logger.warn("no version match {}, default to {}", version, defaultVersion, e);
             return defaultVersion;
         }
     }
@@ -235,7 +235,16 @@ public class Lucene {
             @Override
             protected Object doBody(String segmentFileName) throws IOException {
                 try (IndexInput input = directory.openInput(segmentFileName, IOContext.READ)) {
-                    CodecUtil.checksumEntireFile(input);
+                    final int format = input.readInt();
+                    final int actualFormat;
+                    if (format == CodecUtil.CODEC_MAGIC) {
+                        // 4.0+
+                        actualFormat = CodecUtil.checkHeaderNoMagic(input, "segments", SegmentInfos.VERSION_40, Integer.MAX_VALUE);
+                        if (actualFormat >= SegmentInfos.VERSION_48) {
+                            CodecUtil.checksumEntireFile(input);
+                        }
+                    }
+                    // legacy....
                 }
                 return null;
             }
@@ -373,7 +382,7 @@ public class Lucene {
                     writeMissingValue(out, comparatorSource.missingValue(sortField.getReverse()));
                 } else {
                     writeSortType(out, sortField.getType());
-                    writeMissingValue(out, sortField.getMissingValue());
+                    writeMissingValue(out, sortField.missingValue);
                 }
                 out.writeBoolean(sortField.getReverse());
             }
@@ -618,7 +627,7 @@ public class Lucene {
     }
 
     /**
-     * Parses the version string lenient and returns the default value if the given string is null or emtpy
+     * Parses the version string lenient and returns the the default value if the given string is null or emtpy
      */
     public static Version parseVersionLenient(String toParse, Version defaultValue) {
         return LenientParser.parse(toParse, defaultValue);
@@ -675,7 +684,7 @@ public class Lucene {
             segmentsFileName = infos.getSegmentsFileName();
             this.dir = dir;
             userData = infos.getUserData();
-            files = Collections.unmodifiableCollection(infos.files(true));
+            files = Collections.unmodifiableCollection(infos.files(dir, true));
             generation = infos.getGeneration();
             segmentCount = infos.size();
         }

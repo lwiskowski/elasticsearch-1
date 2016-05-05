@@ -354,6 +354,7 @@ public class SearchContextHighlight {
                 if (fieldOptions.phraseLimit == -1) {
                     fieldOptions.phraseLimit = globalOptions.phraseLimit;
                 }
+
                 return this;
             }
         }

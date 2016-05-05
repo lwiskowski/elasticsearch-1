@@ -20,9 +20,10 @@
 package org.elasticsearch.common.xcontent.support;
 
 import org.apache.lucene.util.BytesRef;
-import org.elasticsearch.ElasticsearchParseException;
 import org.elasticsearch.common.Booleans;
+import org.elasticsearch.common.ParseFieldMatcher;
 import org.elasticsearch.common.xcontent.XContentParser;
+import org.apache.lucene.index.Term;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -31,21 +32,25 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import java.io.PrintStream;
+
 /**
  *
  */
 public abstract class AbstractXContentParser implements XContentParser {
 
-    // Currently this is not a setting that can be changed and is a policy
+    private ParseFieldMatcher matcher = ParseFieldMatcher.STRICT;
+
+    //Currently this is not a setting that can be changed and is a policy
     // that relates to how parsing of things like "boost" are done across
     // the whole of Elasticsearch (eg if String "1.0" is a valid float).
     // The idea behind keeping it as a constant is that we can track
     // references to this policy decision throughout the codebase and find
     // and change any code that needs to apply an alternative policy.
-    public static final boolean DEFAULT_NUMBER_COERCE_POLICY = true;
+    public static final boolean DEFAULT_NUMBER_COEERCE_POLICY = true;
 
-    private static void checkCoerceString(boolean coerce, Class<? extends Number> clazz) {
-        if (!coerce) {
+    private static void checkCoerceString(boolean coeerce, Class<? extends Number> clazz) {
+        if (!coeerce) {
             //Need to throw type IllegalArgumentException as current catch logic in
             //NumberFieldMapper.parseCreateField relies on this for "malformed" value detection
             throw new IllegalArgumentException(clazz.getSimpleName() + " value passed as String");
@@ -100,12 +105,15 @@ public abstract class AbstractXContentParser implements XContentParser {
 
     @Override
     public short shortValue() throws IOException {
-        return shortValue(DEFAULT_NUMBER_COERCE_POLICY);
+        return shortValue(DEFAULT_NUMBER_COEERCE_POLICY);
     }
 
     @Override
-    public short shortValue(boolean coerce) throws IOException {
+    public short shortValue(boolean coerce) throws IOException, IllegalArgumentException {
         Token token = currentToken();
+        if (token != Token.VALUE_STRING && token != Token.VALUE_NUMBER) {
+          throw new IllegalArgumentException();
+        }
         if (token == Token.VALUE_STRING) {
             checkCoerceString(coerce, Short.class);
             return Short.parseShort(text());
@@ -119,13 +127,16 @@ public abstract class AbstractXContentParser implements XContentParser {
 
     @Override
     public int intValue() throws IOException {
-        return intValue(DEFAULT_NUMBER_COERCE_POLICY);
+        return intValue(DEFAULT_NUMBER_COEERCE_POLICY);
     }
 
 
     @Override
-    public int intValue(boolean coerce) throws IOException {
+    public int intValue(boolean coerce) throws IOException, IllegalArgumentException {
         Token token = currentToken();
+        if (token != Token.VALUE_STRING && token != Token.VALUE_NUMBER) {
+          throw new IllegalArgumentException();
+        }
         if (token == Token.VALUE_STRING) {
             checkCoerceString(coerce, Integer.class);
             return Integer.parseInt(text());
@@ -139,12 +150,15 @@ public abstract class AbstractXContentParser implements XContentParser {
 
     @Override
     public long longValue() throws IOException {
-        return longValue(DEFAULT_NUMBER_COERCE_POLICY);
+        return longValue(DEFAULT_NUMBER_COEERCE_POLICY);
     }
 
     @Override
-    public long longValue(boolean coerce) throws IOException {
+    public long longValue(boolean coerce) throws IOException, IllegalArgumentException {
         Token token = currentToken();
+        if (token != Token.VALUE_STRING && token != Token.VALUE_NUMBER) {
+          throw new IllegalArgumentException();
+        }
         if (token == Token.VALUE_STRING) {
             checkCoerceString(coerce, Long.class);
             return Long.parseLong(text());
@@ -158,12 +172,15 @@ public abstract class AbstractXContentParser implements XContentParser {
 
     @Override
     public float floatValue() throws IOException {
-        return floatValue(DEFAULT_NUMBER_COERCE_POLICY);
+        return floatValue(DEFAULT_NUMBER_COEERCE_POLICY);
     }
 
     @Override
-    public float floatValue(boolean coerce) throws IOException {
+    public float floatValue(boolean coerce) throws IOException, IllegalArgumentException {
         Token token = currentToken();
+        if (token != Token.VALUE_STRING && token != Token.VALUE_NUMBER) {
+          throw new IllegalArgumentException();
+        }
         if (token == Token.VALUE_STRING) {
             checkCoerceString(coerce, Float.class);
             return Float.parseFloat(text());
@@ -176,12 +193,15 @@ public abstract class AbstractXContentParser implements XContentParser {
 
     @Override
     public double doubleValue() throws IOException {
-        return doubleValue(DEFAULT_NUMBER_COERCE_POLICY);
+        return doubleValue(DEFAULT_NUMBER_COEERCE_POLICY);
     }
 
     @Override
-    public double doubleValue(boolean coerce) throws IOException {
+    public double doubleValue(boolean coerce) throws IOException, IllegalArgumentException {
         Token token = currentToken();
+        if (token != Token.VALUE_STRING && token != Token.VALUE_NUMBER) {
+          throw new IllegalArgumentException();
+        }
         if (token == Token.VALUE_STRING) {
             checkCoerceString(coerce, Double.class);
             return Double.parseDouble(text());
@@ -284,21 +304,14 @@ public abstract class AbstractXContentParser implements XContentParser {
 
     static List<Object> readList(XContentParser parser, MapFactory mapFactory) throws IOException {
         XContentParser.Token token = parser.currentToken();
-        if (token == null) {
-            token = parser.nextToken();
-        }
         if (token == XContentParser.Token.FIELD_NAME) {
             token = parser.nextToken();
         }
         if (token == XContentParser.Token.START_ARRAY) {
             token = parser.nextToken();
-        } else {
-            throw new ElasticsearchParseException("Failed to parse list:  expecting "
-                    + XContentParser.Token.START_ARRAY + " but got " + token);
         }
-
         ArrayList<Object> list = new ArrayList<>();
-        for (; token != null && token != XContentParser.Token.END_ARRAY; token = parser.nextToken()) {
+        for (; token != XContentParser.Token.END_ARRAY; token = parser.nextToken()) {
             list.add(readValue(parser, mapFactory, token));
         }
         return list;
@@ -334,4 +347,12 @@ public abstract class AbstractXContentParser implements XContentParser {
 
     @Override
     public abstract boolean isClosed();
+
+    public ParseFieldMatcher getParseFieldMatcher() {
+        return matcher;
+    }
+
+    public void setParseFieldMatcher(ParseFieldMatcher matcher) {
+        this.matcher = matcher;
+    }
 }

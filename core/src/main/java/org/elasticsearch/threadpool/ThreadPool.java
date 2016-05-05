@@ -20,7 +20,6 @@
 package org.elasticsearch.threadpool;
 
 import org.apache.lucene.util.Counter;
-import org.apache.lucene.util.IOUtils;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.io.stream.StreamInput;
@@ -28,7 +27,6 @@ import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Streamable;
 import org.elasticsearch.common.settings.ClusterSettings;
 import org.elasticsearch.common.settings.Setting;
-import org.elasticsearch.common.settings.Setting.Property;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.settings.SettingsException;
 import org.elasticsearch.common.unit.SizeValue;
@@ -36,13 +34,11 @@ import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.util.concurrent.EsAbortPolicy;
 import org.elasticsearch.common.util.concurrent.EsExecutors;
 import org.elasticsearch.common.util.concurrent.EsThreadPoolExecutor;
-import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.common.util.concurrent.XRejectedExecutionHandler;
 import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.XContentBuilder;
-import org.elasticsearch.node.Node;
+import org.elasticsearch.common.xcontent.XContentBuilderString;
 
-import java.io.Closeable;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -64,13 +60,14 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static java.util.Collections.unmodifiableMap;
+import static org.elasticsearch.common.settings.Settings.settingsBuilder;
 import static org.elasticsearch.common.unit.SizeValue.parseSizeValue;
 import static org.elasticsearch.common.unit.TimeValue.timeValueMinutes;
 
 /**
  *
  */
-public class ThreadPool extends AbstractComponent implements Closeable {
+public class ThreadPool extends AbstractComponent {
 
     public static class Names {
         public static final String SAME = "same";
@@ -80,6 +77,8 @@ public class ThreadPool extends AbstractComponent implements Closeable {
         public static final String INDEX = "index";
         public static final String BULK = "bulk";
         public static final String SEARCH = "search";
+        public static final String SUGGEST = "suggest";
+        public static final String PERCOLATE = "percolate";
         public static final String MANAGEMENT = "management";
         public static final String FLUSH = "flush";
         public static final String REFRESH = "refresh";
@@ -91,6 +90,7 @@ public class ThreadPool extends AbstractComponent implements Closeable {
     }
 
     public enum ThreadPoolType {
+        CACHED("cached"),
         DIRECT("direct"),
         FIXED("fixed"),
         SCALING("scaling");
@@ -124,17 +124,19 @@ public class ThreadPool extends AbstractComponent implements Closeable {
         }
     }
 
-    public static final Map<String, ThreadPoolType> THREAD_POOL_TYPES;
+    public static Map<String, ThreadPoolType> THREAD_POOL_TYPES;
 
     static {
         HashMap<String, ThreadPoolType> map = new HashMap<>();
         map.put(Names.SAME, ThreadPoolType.DIRECT);
-        map.put(Names.GENERIC, ThreadPoolType.SCALING);
+        map.put(Names.GENERIC, ThreadPoolType.CACHED);
         map.put(Names.LISTENER, ThreadPoolType.FIXED);
         map.put(Names.GET, ThreadPoolType.FIXED);
         map.put(Names.INDEX, ThreadPoolType.FIXED);
         map.put(Names.BULK, ThreadPoolType.FIXED);
         map.put(Names.SEARCH, ThreadPoolType.FIXED);
+        map.put(Names.SUGGEST, ThreadPoolType.FIXED);
+        map.put(Names.PERCOLATE, ThreadPoolType.FIXED);
         map.put(Names.MANAGEMENT, ThreadPoolType.SCALING);
         map.put(Names.FLUSH, ThreadPoolType.SCALING);
         map.put(Names.REFRESH, ThreadPoolType.SCALING);
@@ -152,72 +154,37 @@ public class ThreadPool extends AbstractComponent implements Closeable {
         executorSettings.put(name, settings);
     }
 
-    private static abstract class ExecutorSettingsBuilder<T extends ExecutorSettingsBuilder<T>> {
+    private static class ExecutorSettingsBuilder {
+        Map<String, String> settings = new HashMap<>();
 
-        private final Settings.Builder builder;
-
-        protected ExecutorSettingsBuilder(String name, ThreadPoolType threadPoolType) {
-            if (THREAD_POOL_TYPES.get(name) != threadPoolType) {
-                throw new IllegalArgumentException("thread pool [" + name + "] must be of type [" + threadPoolType + "]");
-            }
-            builder = Settings.builder();
-            builder.put("name", name);
-            builder.put("type", threadPoolType.getType());
+        public ExecutorSettingsBuilder(String name) {
+            settings.put("name", name);
+            settings.put("type", THREAD_POOL_TYPES.get(name).getType());
         }
 
-        public T keepAlive(String keepAlive) {
+        public ExecutorSettingsBuilder size(int availableProcessors) {
+            return add("size", Integer.toString(availableProcessors));
+        }
+
+        public ExecutorSettingsBuilder queueSize(int queueSize) {
+            return add("queue_size", Integer.toString(queueSize));
+        }
+
+        public ExecutorSettingsBuilder keepAlive(String keepAlive) {
             return add("keep_alive", keepAlive);
         }
 
-        public T queueSize(int queueSize) {
-            return add("queue_size", queueSize);
+        private ExecutorSettingsBuilder add(String key, String value) {
+            settings.put(key, value);
+            return this;
         }
 
-        protected T add(String setting, int value) {
-            return add(setting, Integer.toString(value));
-        }
-
-
-        protected T add(String setting, String value) {
-            builder.put(setting, value);
-            @SuppressWarnings("unchecked") final T executor = (T)this;
-            return executor;
-        }
-
-        public final Settings build() { return builder.build(); }
-
-    }
-
-    private static class FixedExecutorSettingsBuilder extends ExecutorSettingsBuilder<FixedExecutorSettingsBuilder> {
-
-        public FixedExecutorSettingsBuilder(String name) {
-            super(name, ThreadPoolType.FIXED);
-        }
-
-        public FixedExecutorSettingsBuilder size(int size) {
-            return add("size", Integer.toString(size));
-        }
-
-    }
-
-    private static class ScalingExecutorSettingsBuilder extends ExecutorSettingsBuilder<ScalingExecutorSettingsBuilder> {
-
-        public ScalingExecutorSettingsBuilder(String name) {
-            super(name, ThreadPoolType.SCALING);
-        }
-
-        public ScalingExecutorSettingsBuilder min(int min) {
-            return add("min", min);
-        }
-
-
-        public ScalingExecutorSettingsBuilder size(int size) {
-            return add("size", size);
+        public Settings build() {
+            return settingsBuilder().put(settings).build();
         }
     }
 
-    public static final Setting<Settings> THREADPOOL_GROUP_SETTING =
-        Setting.groupSetting("threadpool.", Property.Dynamic, Property.NodeScope);
+    public static final Setting<Settings> THREADPOOL_GROUP_SETTING = Setting.groupSetting("threadpool.", true, Setting.Scope.CLUSTER);
 
     private volatile Map<String, ExecutorHolder> executors;
 
@@ -233,41 +200,40 @@ public class ThreadPool extends AbstractComponent implements Closeable {
 
     static final Executor DIRECT_EXECUTOR = command -> command.run();
 
-    private final ThreadContext threadContext;
-
     public ThreadPool(String name) {
-        this(Settings.builder().put(Node.NODE_NAME_SETTING.getKey(), name).build());
+        this(Settings.builder().put("name", name).build());
     }
 
     public ThreadPool(Settings settings) {
         super(settings);
 
-        assert Node.NODE_NAME_SETTING.exists(settings) : "ThreadPool's settings should contain a name";
-        threadContext = new ThreadContext(settings);
+        assert settings.get("name") != null : "ThreadPool's settings should contain a name";
+
         Map<String, Settings> groupSettings = THREADPOOL_GROUP_SETTING.get(settings).getAsGroups();
         validate(groupSettings);
 
         int availableProcessors = EsExecutors.boundedNumberOfProcessors(settings);
-        int halfProcMaxAt5 = halfNumberOfProcessorsMaxFive(availableProcessors);
-        int halfProcMaxAt10 = halfNumberOfProcessorsMaxTen(availableProcessors);
+        int halfProcMaxAt5 = Math.min(((availableProcessors + 1) / 2), 5);
+        int halfProcMaxAt10 = Math.min(((availableProcessors + 1) / 2), 10);
         Map<String, Settings> defaultExecutorTypeSettings = new HashMap<>();
-        int genericThreadPoolMax = boundedBy(4 * availableProcessors, 128, 512);
-        add(defaultExecutorTypeSettings, new ScalingExecutorSettingsBuilder(Names.GENERIC).min(4).size(genericThreadPoolMax).keepAlive("30s"));
-        add(defaultExecutorTypeSettings, new FixedExecutorSettingsBuilder(Names.INDEX).size(availableProcessors).queueSize(200));
-        add(defaultExecutorTypeSettings, new FixedExecutorSettingsBuilder(Names.BULK).size(availableProcessors).queueSize(50));
-        add(defaultExecutorTypeSettings, new FixedExecutorSettingsBuilder(Names.GET).size(availableProcessors).queueSize(1000));
-        add(defaultExecutorTypeSettings, new FixedExecutorSettingsBuilder(Names.SEARCH).size(((availableProcessors * 3) / 2) + 1).queueSize(1000));
-        add(defaultExecutorTypeSettings, new ScalingExecutorSettingsBuilder(Names.MANAGEMENT).min(1).size(5).keepAlive("5m"));
+        add(defaultExecutorTypeSettings, new ExecutorSettingsBuilder(Names.GENERIC).keepAlive("30s"));
+        add(defaultExecutorTypeSettings, new ExecutorSettingsBuilder(Names.INDEX).size(availableProcessors).queueSize(200));
+        add(defaultExecutorTypeSettings, new ExecutorSettingsBuilder(Names.BULK).size(availableProcessors).queueSize(50));
+        add(defaultExecutorTypeSettings, new ExecutorSettingsBuilder(Names.GET).size(availableProcessors).queueSize(1000));
+        add(defaultExecutorTypeSettings, new ExecutorSettingsBuilder(Names.SEARCH).size(((availableProcessors * 3) / 2) + 1).queueSize(1000));
+        add(defaultExecutorTypeSettings, new ExecutorSettingsBuilder(Names.SUGGEST).size(availableProcessors).queueSize(1000));
+        add(defaultExecutorTypeSettings, new ExecutorSettingsBuilder(Names.PERCOLATE).size(availableProcessors).queueSize(1000));
+        add(defaultExecutorTypeSettings, new ExecutorSettingsBuilder(Names.MANAGEMENT).size(5).keepAlive("5m"));
         // no queue as this means clients will need to handle rejections on listener queue even if the operation succeeded
         // the assumption here is that the listeners should be very lightweight on the listeners side
-        add(defaultExecutorTypeSettings, new FixedExecutorSettingsBuilder(Names.LISTENER).size(halfProcMaxAt10));
-        add(defaultExecutorTypeSettings, new ScalingExecutorSettingsBuilder(Names.FLUSH).min(1).size(halfProcMaxAt5).keepAlive("5m"));
-        add(defaultExecutorTypeSettings, new ScalingExecutorSettingsBuilder(Names.REFRESH).min(1).size(halfProcMaxAt10).keepAlive("5m"));
-        add(defaultExecutorTypeSettings, new ScalingExecutorSettingsBuilder(Names.WARMER).min(1).size(halfProcMaxAt5).keepAlive("5m"));
-        add(defaultExecutorTypeSettings, new ScalingExecutorSettingsBuilder(Names.SNAPSHOT).min(1).size(halfProcMaxAt5).keepAlive("5m"));
-        add(defaultExecutorTypeSettings, new FixedExecutorSettingsBuilder(Names.FORCE_MERGE).size(1));
-        add(defaultExecutorTypeSettings, new ScalingExecutorSettingsBuilder(Names.FETCH_SHARD_STARTED).min(1).size(availableProcessors * 2).keepAlive("5m"));
-        add(defaultExecutorTypeSettings, new ScalingExecutorSettingsBuilder(Names.FETCH_SHARD_STORE).min(1).size(availableProcessors * 2).keepAlive("5m"));
+        add(defaultExecutorTypeSettings, new ExecutorSettingsBuilder(Names.LISTENER).size(halfProcMaxAt10));
+        add(defaultExecutorTypeSettings, new ExecutorSettingsBuilder(Names.FLUSH).size(halfProcMaxAt5).keepAlive("5m"));
+        add(defaultExecutorTypeSettings, new ExecutorSettingsBuilder(Names.REFRESH).size(halfProcMaxAt10).keepAlive("5m"));
+        add(defaultExecutorTypeSettings, new ExecutorSettingsBuilder(Names.WARMER).size(halfProcMaxAt5).keepAlive("5m"));
+        add(defaultExecutorTypeSettings, new ExecutorSettingsBuilder(Names.SNAPSHOT).size(halfProcMaxAt5).keepAlive("5m"));
+        add(defaultExecutorTypeSettings, new ExecutorSettingsBuilder(Names.FORCE_MERGE).size(1));
+        add(defaultExecutorTypeSettings, new ExecutorSettingsBuilder(Names.FETCH_SHARD_STARTED).size(availableProcessors * 2).keepAlive("5m"));
+        add(defaultExecutorTypeSettings, new ExecutorSettingsBuilder(Names.FETCH_SHARD_STORE).size(availableProcessors * 2).keepAlive("5m"));
 
         this.defaultExecutorTypeSettings = unmodifiableMap(defaultExecutorTypeSettings);
 
@@ -285,6 +251,9 @@ public class ThreadPool extends AbstractComponent implements Closeable {
         }
 
         executors.put(Names.SAME, new ExecutorHolder(DIRECT_EXECUTOR, new Info(Names.SAME, ThreadPoolType.DIRECT)));
+        if (!executors.get(Names.GENERIC).info.getThreadPoolType().equals(ThreadPoolType.CACHED)) {
+            throw new IllegalArgumentException("generic thread pool must be of type cached");
+        }
         this.executors = unmodifiableMap(executors);
         this.scheduler = new ScheduledThreadPoolExecutor(1, EsExecutors.daemonThreadFactory(settings, "scheduler"), new EsAbortPolicy());
         this.scheduler.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
@@ -364,18 +333,10 @@ public class ThreadPool extends AbstractComponent implements Closeable {
         return new ThreadPoolStats(stats);
     }
 
-    /**
-     * Get the generic executor. This executor's {@link Executor#execute(Runnable)} method will run the Runnable it is given in
-     * the {@link ThreadContext} of the thread that queues it.
-     */
     public Executor generic() {
         return executor(Names.GENERIC);
     }
 
-    /**
-     * Get the executor with the given name. This executor's {@link Executor#execute(Runnable)} method will run the Runnable it is given in
-     * the {@link ThreadContext} of the thread that queues it.
-     */
     public Executor executor(String name) {
         Executor executor = executors.get(name).executor();
         if (executor == null) {
@@ -388,31 +349,10 @@ public class ThreadPool extends AbstractComponent implements Closeable {
         return this.scheduler;
     }
 
-    /**
-     * Schedules a periodic action that always runs on the scheduler thread.
-     *
-     * @param command the action to take
-     * @param interval the delay interval
-     * @return a ScheduledFuture who's get will return when the task is complete and throw an exception if it is canceled
-     */
     public ScheduledFuture<?> scheduleWithFixedDelay(Runnable command, TimeValue interval) {
         return scheduler.scheduleWithFixedDelay(new LoggingRunnable(command), interval.millis(), interval.millis(), TimeUnit.MILLISECONDS);
     }
 
-    /**
-     * Schedules a one-shot command to run after a given delay. The command is not run in the context of the calling thread. To preserve the
-     * context of the calling thread you may call <code>threadPool.getThreadContext().preserveContext</code> on the runnable before passing
-     * it to this method.
-     *
-     * @param delay delay before the task executes
-     * @param name the name of the thread pool on which to execute this task. SAME means "execute on the scheduler thread" which changes the
-     *        meaning of the ScheduledFuture returned by this method. In that case the ScheduledFuture will complete only when the command
-     *        completes.
-     * @param command the command to run
-     * @return a ScheduledFuture who's get will return when the task is has been added to its target thread pool and throw an exception if
-     *         the task is canceled before it was added to its target thread pool. Once the task has been added to its target thread pool
-     *         the ScheduledFuture will cannot interact with it.
-     */
     public ScheduledFuture<?> schedule(TimeValue delay, String name, Runnable command) {
         if (!Names.SAME.equals(name)) {
             command = new ThreadedRunnable(command, executor(name));
@@ -478,23 +418,49 @@ public class ThreadPool extends AbstractComponent implements Closeable {
         ThreadFactory threadFactory = EsExecutors.daemonThreadFactory(this.settings, name);
         if (ThreadPoolType.DIRECT == threadPoolType) {
             if (previousExecutorHolder != null) {
-                logger.debug("updating thread pool [{}], type [{}]", name, type);
+                logger.debug("updating thread_pool [{}], type [{}]", name, type);
             } else {
-                logger.debug("creating thread pool [{}], type [{}]", name, type);
+                logger.debug("creating thread_pool [{}], type [{}]", name, type);
             }
             return new ExecutorHolder(DIRECT_EXECUTOR, new Info(name, threadPoolType));
+        } else if (ThreadPoolType.CACHED == threadPoolType) {
+            if (!Names.GENERIC.equals(name)) {
+                throw new IllegalArgumentException("thread pool type cached is reserved only for the generic thread pool and can not be applied to [" + name + "]");
+            }
+            TimeValue defaultKeepAlive = defaultSettings.getAsTime("keep_alive", timeValueMinutes(5));
+            if (previousExecutorHolder != null) {
+                if (ThreadPoolType.CACHED == previousInfo.getThreadPoolType()) {
+                    TimeValue updatedKeepAlive = settings.getAsTime("keep_alive", previousInfo.getKeepAlive());
+                    if (!previousInfo.getKeepAlive().equals(updatedKeepAlive)) {
+                        logger.debug("updating thread_pool [{}], type [{}], keep_alive [{}]", name, type, updatedKeepAlive);
+                        ((EsThreadPoolExecutor) previousExecutorHolder.executor()).setKeepAliveTime(updatedKeepAlive.millis(), TimeUnit.MILLISECONDS);
+                        return new ExecutorHolder(previousExecutorHolder.executor(), new Info(name, threadPoolType, -1, -1, updatedKeepAlive, null));
+                    }
+                    return previousExecutorHolder;
+                }
+                if (previousInfo.getKeepAlive() != null) {
+                    defaultKeepAlive = previousInfo.getKeepAlive();
+                }
+            }
+            TimeValue keepAlive = settings.getAsTime("keep_alive", defaultKeepAlive);
+            if (previousExecutorHolder != null) {
+                logger.debug("updating thread_pool [{}], type [{}], keep_alive [{}]", name, type, keepAlive);
+            } else {
+                logger.debug("creating thread_pool [{}], type [{}], keep_alive [{}]", name, type, keepAlive);
+            }
+            Executor executor = EsExecutors.newCached(name, keepAlive.millis(), TimeUnit.MILLISECONDS, threadFactory);
+            return new ExecutorHolder(executor, new Info(name, threadPoolType, -1, -1, keepAlive, null));
         } else if (ThreadPoolType.FIXED == threadPoolType) {
             int defaultSize = defaultSettings.getAsInt("size", EsExecutors.boundedNumberOfProcessors(settings));
             SizeValue defaultQueueSize = getAsSizeOrUnbounded(defaultSettings, "queue", getAsSizeOrUnbounded(defaultSettings, "queue_size", null));
 
             if (previousExecutorHolder != null) {
-                assert previousInfo != null;
                 if (ThreadPoolType.FIXED == previousInfo.getThreadPoolType()) {
                     SizeValue updatedQueueSize = getAsSizeOrUnbounded(settings, "capacity", getAsSizeOrUnbounded(settings, "queue", getAsSizeOrUnbounded(settings, "queue_size", previousInfo.getQueueSize())));
                     if (Objects.equals(previousInfo.getQueueSize(), updatedQueueSize)) {
                         int updatedSize = applyHardSizeLimit(name, settings.getAsInt("size", previousInfo.getMax()));
                         if (previousInfo.getMax() != updatedSize) {
-                            logger.debug("updating thread pool [{}], type [{}], size [{}], queue_size [{}]", name, type, updatedSize, updatedQueueSize);
+                            logger.debug("updating thread_pool [{}], type [{}], size [{}], queue_size [{}]", name, type, updatedSize, updatedQueueSize);
                             // if you think this code is crazy: that's because it is!
                             if (updatedSize > previousInfo.getMax()) {
                                 ((EsThreadPoolExecutor) previousExecutorHolder.executor()).setMaximumPoolSize(updatedSize);
@@ -516,24 +482,20 @@ public class ThreadPool extends AbstractComponent implements Closeable {
 
             int size = applyHardSizeLimit(name, settings.getAsInt("size", defaultSize));
             SizeValue queueSize = getAsSizeOrUnbounded(settings, "capacity", getAsSizeOrUnbounded(settings, "queue", getAsSizeOrUnbounded(settings, "queue_size", defaultQueueSize)));
-            logger.debug("creating thread pool [{}], type [{}], size [{}], queue_size [{}]", name, type, size, queueSize);
-            Executor executor = EsExecutors.newFixed(name, size, queueSize == null ? -1 : (int) queueSize.singles(), threadFactory, threadContext);
+            logger.debug("creating thread_pool [{}], type [{}], size [{}], queue_size [{}]", name, type, size, queueSize);
+            Executor executor = EsExecutors.newFixed(name, size, queueSize == null ? -1 : (int) queueSize.singles(), threadFactory);
             return new ExecutorHolder(executor, new Info(name, threadPoolType, size, size, null, queueSize));
         } else if (ThreadPoolType.SCALING == threadPoolType) {
             TimeValue defaultKeepAlive = defaultSettings.getAsTime("keep_alive", timeValueMinutes(5));
             int defaultMin = defaultSettings.getAsInt("min", 1);
             int defaultSize = defaultSettings.getAsInt("size", EsExecutors.boundedNumberOfProcessors(settings));
-            final Integer queueSize = settings.getAsInt("queue_size", defaultSettings.getAsInt("queue_size", null));
-            if (queueSize != null) {
-                throw new IllegalArgumentException("thread pool [" + name + "] of type scaling can not have its queue re-sized but was [" + queueSize + "]");
-            }
             if (previousExecutorHolder != null) {
                 if (ThreadPoolType.SCALING == previousInfo.getThreadPoolType()) {
                     TimeValue updatedKeepAlive = settings.getAsTime("keep_alive", previousInfo.getKeepAlive());
                     int updatedMin = settings.getAsInt("min", previousInfo.getMin());
                     int updatedSize = settings.getAsInt("max", settings.getAsInt("size", previousInfo.getMax()));
                     if (!previousInfo.getKeepAlive().equals(updatedKeepAlive) || previousInfo.getMin() != updatedMin || previousInfo.getMax() != updatedSize) {
-                        logger.debug("updating thread pool [{}], type [{}], keep_alive [{}]", name, type, updatedKeepAlive);
+                        logger.debug("updating thread_pool [{}], type [{}], keep_alive [{}]", name, type, updatedKeepAlive);
                         if (!previousInfo.getKeepAlive().equals(updatedKeepAlive)) {
                             ((EsThreadPoolExecutor) previousExecutorHolder.executor()).setKeepAliveTime(updatedKeepAlive.millis(), TimeUnit.MILLISECONDS);
                         }
@@ -561,11 +523,11 @@ public class ThreadPool extends AbstractComponent implements Closeable {
             int min = settings.getAsInt("min", defaultMin);
             int size = settings.getAsInt("max", settings.getAsInt("size", defaultSize));
             if (previousExecutorHolder != null) {
-                logger.debug("updating thread pool [{}], type [{}], min [{}], size [{}], keep_alive [{}]", name, type, min, size, keepAlive);
+                logger.debug("updating thread_pool [{}], type [{}], min [{}], size [{}], keep_alive [{}]", name, type, min, size, keepAlive);
             } else {
-                logger.debug("creating thread pool [{}], type [{}], min [{}], size [{}], keep_alive [{}]", name, type, min, size, keepAlive);
+                logger.debug("creating thread_pool [{}], type [{}], min [{}], size [{}], keep_alive [{}]", name, type, min, size, keepAlive);
             }
-            Executor executor = EsExecutors.newScaling(name, min, size, keepAlive.millis(), TimeUnit.MILLISECONDS, threadFactory, threadContext);
+            Executor executor = EsExecutors.newScaling(name, min, size, keepAlive.millis(), TimeUnit.MILLISECONDS, threadFactory);
             return new ExecutorHolder(executor, new Info(name, threadPoolType, min, size, keepAlive, null));
         }
         throw new IllegalArgumentException("No type found [" + type + "], for [" + name + "]");
@@ -584,32 +546,6 @@ public class ThreadPool extends AbstractComponent implements Closeable {
         }
 
         return size;
-    }
-
-    /**
-     * Constrains a value between minimum and maximum values
-     * (inclusive).
-     *
-     * @param value the value to constrain
-     * @param min   the minimum acceptable value
-     * @param max   the maximum acceptable value
-     * @return min if value is less than min, max if value is greater
-     * than value, otherwise value
-     */
-    static int boundedBy(int value, int min, int max) {
-        return Math.min(max, Math.max(min, value));
-    }
-
-    static int halfNumberOfProcessorsMaxFive(int numberOfProcessors) {
-        return boundedBy((numberOfProcessors + 1) / 2, 1, 5);
-    }
-
-    static int halfNumberOfProcessorsMaxTen(int numberOfProcessors) {
-        return boundedBy((numberOfProcessors + 1) / 2, 1, 10);
-    }
-
-    static int twiceNumberOfProcessors(int numberOfProcessors) {
-        return boundedBy(2 * numberOfProcessors, 2, Integer.MAX_VALUE);
     }
 
     private void updateSettings(Settings settings) {
@@ -923,7 +859,7 @@ public class ThreadPool extends AbstractComponent implements Closeable {
 
         @Override
         public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-            builder.startObject(name);
+            builder.startObject(name, XContentBuilder.FieldCaseConversion.NONE);
             builder.field(Fields.TYPE, type.getType());
             if (min != -1) {
                 builder.field(Fields.MIN, min);
@@ -944,11 +880,11 @@ public class ThreadPool extends AbstractComponent implements Closeable {
         }
 
         static final class Fields {
-            static final String TYPE = "type";
-            static final String MIN = "min";
-            static final String MAX = "max";
-            static final String KEEP_ALIVE = "keep_alive";
-            static final String QUEUE_SIZE = "queue_size";
+            static final XContentBuilderString TYPE = new XContentBuilderString("type");
+            static final XContentBuilderString MIN = new XContentBuilderString("min");
+            static final XContentBuilderString MAX = new XContentBuilderString("max");
+            static final XContentBuilderString KEEP_ALIVE = new XContentBuilderString("keep_alive");
+            static final XContentBuilderString QUEUE_SIZE = new XContentBuilderString("queue_size");
         }
 
     }
@@ -978,31 +914,17 @@ public class ThreadPool extends AbstractComponent implements Closeable {
      */
     public static boolean terminate(ThreadPool pool, long timeout, TimeUnit timeUnit) {
         if (pool != null) {
+            pool.shutdown();
             try {
-                pool.shutdown();
-                try {
-                    if (pool.awaitTermination(timeout, timeUnit)) {
-                        return true;
-                    }
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
+                if (pool.awaitTermination(timeout, timeUnit)) {
+                    return true;
                 }
-                // last resort
-                pool.shutdownNow();
-            } finally {
-                IOUtils.closeWhileHandlingException(pool);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
             }
+            // last resort
+            pool.shutdownNow();
         }
         return false;
     }
-
-    @Override
-    public void close() throws IOException {
-        threadContext.close();
-    }
-
-    public ThreadContext getThreadContext() {
-        return threadContext;
-    }
-
 }

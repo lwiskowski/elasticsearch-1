@@ -19,6 +19,7 @@
 
 package org.elasticsearch.action.get;
 
+import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionRequestValidationException;
 import org.elasticsearch.action.RealtimeRequest;
 import org.elasticsearch.action.ValidateActions;
@@ -57,7 +58,7 @@ public class GetRequest extends SingleShardRequest<GetRequest> implements Realti
 
     private boolean refresh = false;
 
-    boolean realtime = true;
+    Boolean realtime;
 
     private VersionType versionType = VersionType.INTERNAL;
     private long version = Versions.MATCH_ANY;
@@ -68,12 +69,41 @@ public class GetRequest extends SingleShardRequest<GetRequest> implements Realti
     }
 
     /**
+     * Copy constructor that creates a new get request that is a copy of the one provided as an argument.
+     * The new request will inherit though headers and context from the original request that caused it.
+     */
+    public GetRequest(GetRequest getRequest, ActionRequest originalRequest) {
+        super(originalRequest);
+        this.index = getRequest.index;
+        this.type = getRequest.type;
+        this.id = getRequest.id;
+        this.routing = getRequest.routing;
+        this.parent = getRequest.parent;
+        this.preference = getRequest.preference;
+        this.fields = getRequest.fields;
+        this.fetchSourceContext = getRequest.fetchSourceContext;
+        this.refresh = getRequest.refresh;
+        this.realtime = getRequest.realtime;
+        this.version = getRequest.version;
+        this.versionType = getRequest.versionType;
+        this.ignoreErrorsOnGeneratedFields = getRequest.ignoreErrorsOnGeneratedFields;
+    }
+
+    /**
      * Constructs a new get request against the specified index. The {@link #type(String)} and {@link #id(String)}
      * must be set.
      */
     public GetRequest(String index) {
         super(index);
         this.type = "_all";
+    }
+
+    /**
+     * Constructs a new get request starting from the provided request, meaning that it will
+     * inherit its headers and context, and against the specified index.
+     */
+    public GetRequest(ActionRequest request, String index) {
+        super(request, index);
     }
 
     /**
@@ -218,11 +248,11 @@ public class GetRequest extends SingleShardRequest<GetRequest> implements Realti
     }
 
     public boolean realtime() {
-        return this.realtime;
+        return this.realtime == null ? true : this.realtime;
     }
 
     @Override
-    public GetRequest realtime(boolean realtime) {
+    public GetRequest realtime(Boolean realtime) {
         this.realtime = realtime;
         return this;
     }
@@ -277,12 +307,18 @@ public class GetRequest extends SingleShardRequest<GetRequest> implements Realti
                 fields[i] = in.readString();
             }
         }
-        realtime = in.readBoolean();
+        byte realtime = in.readByte();
+        if (realtime == 0) {
+            this.realtime = false;
+        } else if (realtime == 1) {
+            this.realtime = true;
+        }
         this.ignoreErrorsOnGeneratedFields = in.readBoolean();
 
         this.versionType = VersionType.fromValue(in.readByte());
         this.version = in.readLong();
-        fetchSourceContext = in.readOptionalStreamable(FetchSourceContext::new);
+
+        fetchSourceContext = FetchSourceContext.optionalReadFromStream(in);
     }
 
     @Override
@@ -303,11 +339,18 @@ public class GetRequest extends SingleShardRequest<GetRequest> implements Realti
                 out.writeString(field);
             }
         }
-        out.writeBoolean(realtime);
+        if (realtime == null) {
+            out.writeByte((byte) -1);
+        } else if (!realtime) {
+            out.writeByte((byte) 0);
+        } else {
+            out.writeByte((byte) 1);
+        }
         out.writeBoolean(ignoreErrorsOnGeneratedFields);
         out.writeByte(versionType.getValue());
         out.writeLong(version);
-        out.writeOptionalStreamable(fetchSourceContext);
+
+        FetchSourceContext.optionalWriteToStream(fetchSourceContext, out);
     }
 
     @Override

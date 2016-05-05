@@ -12,10 +12,7 @@
 
   - is_true: cluster_name
   - is_true: nodes
-  - is_true: nodes.$master.name
-  - is_false: nodes.$master.jvm
-  - is_true:  nodes.$master.discovery
-  - is_true:  nodes.$master.roles
+  - is_true: nodes.$master.discovery
 
   - do:
       nodes.stats:
@@ -26,4 +23,3 @@
   - is_false: nodes.$master.name
   - is_false: nodes.$master.jvm
   - is_true:  nodes.$master.discovery
-  - is_false:  nodes.$master.roles

@@ -20,9 +20,11 @@
 package org.elasticsearch.index.query;
 
 import org.apache.lucene.search.Query;
+import org.elasticsearch.action.support.ToXContentToBytes;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.common.xcontent.XContentType;
 
 import java.io.IOException;
 
@@ -30,26 +32,21 @@ import java.io.IOException;
  * A {@link QueryBuilder} that is a stand in replacement for an empty query clause in the DSL.
  * The current DSL allows parsing inner queries / filters like "{ }", in order to have a
  * valid non-null representation of these clauses that actually do nothing we can use this class.
+ *
+ * This builder has no corresponding parser and it is not registered under the query name. It is
+ * intended to be used internally as a stand-in for nested queries that are left empty and should
+ * be ignored upstream.
  */
-public final class EmptyQueryBuilder extends AbstractQueryBuilder<EmptyQueryBuilder> {
+public class EmptyQueryBuilder extends ToXContentToBytes implements QueryBuilder<EmptyQueryBuilder> {
 
     public static final String NAME = "empty_query";
 
-    /**
-     * Construct an empty query. This query can *technically* be named and given a boost.
-     */
-    public EmptyQueryBuilder() {
-    }
+    /** the one and only empty query builder */
+    public static final EmptyQueryBuilder PROTOTYPE = new EmptyQueryBuilder();
 
-    /**
-     * Read from a stream.
-     */
-    public EmptyQueryBuilder(StreamInput in) throws IOException {
-        super(in);
-    }
-
-    @Override
-    protected void doWriteTo(StreamOutput out) throws IOException {
+    // prevent instances other than prototype
+    private EmptyQueryBuilder() {
+        super(XContentType.JSON);
     }
 
     @Override
@@ -58,26 +55,57 @@ public final class EmptyQueryBuilder extends AbstractQueryBuilder<EmptyQueryBuil
     }
 
     @Override
-    protected Query doToQuery(QueryShardContext context) throws IOException {
-        return null;
-    }
-
-    @Override
     public String getName() {
         return getWriteableName();
     }
 
     @Override
-    protected void doXContent(XContentBuilder builder, Params params) throws IOException {
+    public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
+        builder.startObject();
+        builder.endObject();
+        return builder;
     }
 
     @Override
-    protected int doHashCode() {
-        return 31;
+    public Query toQuery(QueryShardContext context) throws IOException {
+        // empty
+        return null;
     }
 
     @Override
-    protected boolean doEquals(EmptyQueryBuilder other) {
-        return true;
+    public Query toFilter(QueryShardContext context) throws IOException {
+        // empty
+        return null;
+    }
+
+    @Override
+    public void writeTo(StreamOutput out) throws IOException {
+    }
+
+    @Override
+    public EmptyQueryBuilder readFrom(StreamInput in) throws IOException {
+        return EmptyQueryBuilder.PROTOTYPE;
+    }
+
+    @Override
+    public EmptyQueryBuilder queryName(String queryName) {
+        //no-op
+        return this;
+    }
+
+    @Override
+    public String queryName() {
+        return null;
+    }
+
+    @Override
+    public float boost() {
+        return -1;
+    }
+
+    @Override
+    public EmptyQueryBuilder boost(float boost) {
+        //no-op
+        return this;
     }
 }

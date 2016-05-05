@@ -47,7 +47,7 @@ public class RestRefreshAction extends BaseRestHandler {
 
     @Inject
     public RestRefreshAction(Settings settings, RestController controller, Client client) {
-        super(settings, client);
+        super(settings, controller, client);
         controller.registerHandler(POST, "/_refresh", this);
         controller.registerHandler(POST, "/{index}/_refresh", this);
 

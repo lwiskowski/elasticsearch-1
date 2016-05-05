@@ -28,12 +28,13 @@ import java.io.Writer;
 /**
  * A MustacheFactory that does simple JSON escaping.
  */
-final class JsonEscapingMustacheFactory extends DefaultMustacheFactory {
-
+public final class JsonEscapingMustacheFactory extends DefaultMustacheFactory {
+    
     @Override
     public void encode(String value, Writer writer) {
         try {
-            writer.write(JsonStringEncoder.getInstance().quoteAsString(value));
+            JsonStringEncoder utils = new JsonStringEncoder();
+            writer.write(utils.quoteAsString(value));;
         } catch (IOException e) {
             throw new MustacheException("Failed to encode value: " + value);
         }

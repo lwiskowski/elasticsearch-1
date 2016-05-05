@@ -80,12 +80,11 @@ public class ExplainableScriptIT extends ESIntegTestCase {
 
         ElasticsearchAssertions.assertNoFailures(response);
         SearchHits hits = response.getHits();
-        assertThat(hits.getTotalHits(), equalTo(20L));
+        assertThat(hits.getTotalHits(), equalTo(20l));
         int idCounter = 19;
         for (SearchHit hit : hits.getHits()) {
             assertThat(hit.getId(), equalTo(Integer.toString(idCounter)));
-            assertThat(hit.explanation().toString(),
-                    containsString(Double.toString(idCounter) + " = This script returned " + Double.toString(idCounter)));
+            assertThat(hit.explanation().toString(), containsString(Double.toString(idCounter) + " = This script returned " + Double.toString(idCounter)));
             assertThat(hit.explanation().toString(), containsString("1.0 = tf(freq=1.0), with freq of"));
             assertThat(hit.explanation().getDetails().length, equalTo(2));
             idCounter--;

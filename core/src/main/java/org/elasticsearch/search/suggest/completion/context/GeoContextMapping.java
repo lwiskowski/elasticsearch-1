@@ -22,6 +22,7 @@ package org.elasticsearch.search.suggest.completion.context;
 import org.apache.lucene.document.StringField;
 import org.apache.lucene.index.DocValuesType;
 import org.apache.lucene.index.IndexableField;
+import org.apache.lucene.util.GeoHashUtils;
 import org.elasticsearch.ElasticsearchParseException;
 import org.elasticsearch.common.geo.GeoPoint;
 import org.elasticsearch.common.geo.GeoUtils;
@@ -33,7 +34,6 @@ import org.elasticsearch.index.mapper.FieldMapper;
 import org.elasticsearch.index.mapper.ParseContext;
 import org.elasticsearch.index.mapper.ParseContext.Document;
 import org.elasticsearch.index.mapper.geo.GeoPointFieldMapper;
-import org.elasticsearch.index.query.QueryParseContext;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -43,10 +43,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.stream.Collectors;
-
-import static org.elasticsearch.common.geo.GeoHashUtils.addNeighbors;
-import static org.elasticsearch.common.geo.GeoHashUtils.stringEncode;
 
 /**
  * A {@link ContextMapping} that uses a geo location/area as a
@@ -58,7 +54,7 @@ import static org.elasticsearch.common.geo.GeoHashUtils.stringEncode;
  * {@link GeoQueryContext} defines the options for constructing
  * a unit of query context for this context type
  */
-public class GeoContextMapping extends ContextMapping<GeoQueryContext> {
+public class GeoContextMapping extends ContextMapping {
 
     public static final String FIELD_PRECISION = "precision";
     public static final String FIELD_FIELDNAME = "path";
@@ -154,7 +150,7 @@ public class GeoContextMapping extends ContextMapping<GeoQueryContext> {
                 if (parser.nextToken() == Token.VALUE_NUMBER) {
                     double lat = parser.doubleValue();
                     if (parser.nextToken() == Token.END_ARRAY) {
-                        contexts.add(stringEncode(lon, lat, precision));
+                        contexts.add(GeoHashUtils.stringEncode(lon, lat, precision));
                     } else {
                         throw new ElasticsearchParseException("only two values [lon, lat] expected");
                     }
@@ -164,7 +160,7 @@ public class GeoContextMapping extends ContextMapping<GeoQueryContext> {
             } else {
                 while (token != Token.END_ARRAY) {
                     GeoPoint point = GeoUtils.parseGeoPoint(parser);
-                    contexts.add(stringEncode(point.getLon(), point.getLat(), precision));
+                    contexts.add(GeoHashUtils.stringEncode(point.getLon(), point.getLat(), precision));
                     token = parser.nextToken();
                 }
             }
@@ -175,7 +171,7 @@ public class GeoContextMapping extends ContextMapping<GeoQueryContext> {
         } else {
             // or a single location
             GeoPoint point = GeoUtils.parseGeoPoint(parser);
-            contexts.add(stringEncode(point.getLon(), point.getLat(), precision));
+            contexts.add(GeoHashUtils.stringEncode(point.getLon(), point.getLat(), precision));
         }
         return contexts;
     }
@@ -198,7 +194,7 @@ public class GeoContextMapping extends ContextMapping<GeoQueryContext> {
                         // we write doc values fields differently: one field for all values, so we need to only care about indexed fields
                         if (lonField.fieldType().docValuesType() == DocValuesType.NONE) {
                             spare.reset(latField.numericValue().doubleValue(), lonField.numericValue().doubleValue());
-                            geohashes.add(stringEncode(spare.getLon(), spare.getLat(), precision));
+                            geohashes.add(GeoHashUtils.stringEncode(spare.getLon(), spare.getLat(), precision));
                         }
                     }
                 }
@@ -221,11 +217,6 @@ public class GeoContextMapping extends ContextMapping<GeoQueryContext> {
             locations.add(truncatedGeohash);
         }
         return locations;
-    }
-
-    @Override
-    protected GeoQueryContext fromXContent(QueryParseContext context) throws IOException {
-        return GeoQueryContext.fromXContent(context);
     }
 
     /**
@@ -252,31 +243,42 @@ public class GeoContextMapping extends ContextMapping<GeoQueryContext> {
      * see {@link GeoUtils#parseGeoPoint(String, GeoPoint)} for GEO POINT
      */
     @Override
-    public List<InternalQueryContext> toInternalQueryContexts(List<GeoQueryContext> queryContexts) {
-        List<InternalQueryContext> internalQueryContextList = new ArrayList<>();
+    public List<QueryContext> parseQueryContext(XContentParser parser) throws IOException, ElasticsearchParseException {
+        List<GeoQueryContext> queryContexts = new ArrayList<>();
+        Token token = parser.nextToken();
+        if (token == Token.START_OBJECT || token == Token.VALUE_STRING) {
+            queryContexts.add(GeoQueryContext.parse(parser));
+        } else if (token == Token.START_ARRAY) {
+            while (parser.nextToken() != Token.END_ARRAY) {
+                queryContexts.add(GeoQueryContext.parse(parser));
+            }
+        }
+        List<QueryContext> queryContextList = new ArrayList<>();
         for (GeoQueryContext queryContext : queryContexts) {
-            int minPrecision = Math.min(this.precision, queryContext.getPrecision());
+            int minPrecision = this.precision;
+            if (queryContext.getPrecision() != -1) {
+                minPrecision = Math.min(minPrecision, queryContext.getPrecision());
+            }
             GeoPoint point = queryContext.getGeoPoint();
             final Collection<String> locations = new HashSet<>();
-            String geoHash = stringEncode(point.getLon(), point.getLat(), minPrecision);
+            String geoHash = GeoHashUtils.stringEncode(point.getLon(), point.getLat(), minPrecision);
             locations.add(geoHash);
             if (queryContext.getNeighbours().isEmpty() && geoHash.length() == this.precision) {
-                addNeighbors(geoHash, locations);
+                GeoHashUtils.addNeighbors(geoHash, locations);
             } else if (queryContext.getNeighbours().isEmpty() == false) {
-                queryContext.getNeighbours().stream()
-                    .filter(neighbourPrecision -> neighbourPrecision < geoHash.length())
-                    .forEach(neighbourPrecision -> {
+                for (Integer neighbourPrecision : queryContext.getNeighbours()) {
+                    if (neighbourPrecision < geoHash.length()) {
                         String truncatedGeoHash = geoHash.substring(0, neighbourPrecision);
                         locations.add(truncatedGeoHash);
-                        addNeighbors(truncatedGeoHash, locations);
-                    });
+                        GeoHashUtils.addNeighbors(truncatedGeoHash, locations);
+                    }
+                }
             }
-            internalQueryContextList.addAll(
-                locations.stream()
-                    .map(location -> new InternalQueryContext(location, queryContext.getBoost(), location.length() < this.precision))
-                    .collect(Collectors.toList()));
+            for (String location : locations) {
+                queryContextList.add(new QueryContext(location, queryContext.getBoost(), location.length() < this.precision));
+            }
         }
-        return internalQueryContextList;
+        return queryContextList;
     }
 
     @Override
@@ -300,7 +302,7 @@ public class GeoContextMapping extends ContextMapping<GeoQueryContext> {
         private int precision = DEFAULT_PRECISION;
         private String fieldName = null;
 
-        public Builder(String name) {
+        protected Builder(String name) {
             super(name);
         }
 

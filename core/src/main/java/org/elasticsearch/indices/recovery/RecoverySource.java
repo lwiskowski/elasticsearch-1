@@ -20,9 +20,9 @@
 package org.elasticsearch.indices.recovery;
 
 import org.elasticsearch.ExceptionsHelper;
+import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.routing.RoutingNode;
 import org.elasticsearch.cluster.routing.ShardRouting;
-import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.inject.Inject;
@@ -61,7 +61,8 @@ public class RecoverySource extends AbstractComponent implements IndexEventListe
 
     private final ClusterService clusterService;
 
-    private final OngoingRecoveries ongoingRecoveries = new OngoingRecoveries();
+    private final OngoingRecoveres ongoingRecoveries = new OngoingRecoveres();
+
 
     @Inject
     public RecoverySource(Settings settings, TransportService transportService, IndicesService indicesService,
@@ -83,24 +84,16 @@ public class RecoverySource extends AbstractComponent implements IndexEventListe
     }
 
     private RecoveryResponse recover(final StartRecoveryRequest request) throws IOException {
-        final IndexService indexService = indicesService.indexServiceSafe(request.shardId().getIndex());
+        final IndexService indexService = indicesService.indexServiceSafe(request.shardId().index().name());
         final IndexShard shard = indexService.getShard(request.shardId().id());
 
         // starting recovery from that our (the source) shard state is marking the shard to be in recovery mode as well, otherwise
         // the index operations will not be routed to it properly
-        RoutingNode node = clusterService.state().getRoutingNodes().node(request.targetNode().getId());
+        RoutingNode node = clusterService.state().getRoutingNodes().node(request.targetNode().id());
         if (node == null) {
             logger.debug("delaying recovery of {} as source node {} is unknown", request.shardId(), request.targetNode());
             throw new DelayRecoveryException("source node does not have the node [" + request.targetNode() + "] in its state yet..");
         }
-
-        ShardRouting routingEntry = shard.routingEntry();
-        if (request.recoveryType() == RecoveryState.Type.PRIMARY_RELOCATION &&
-            (routingEntry.relocating() == false || routingEntry.relocatingNodeId().equals(request.targetNode().getId()) == false)) {
-            logger.debug("delaying recovery of {} as source shard is not marked yet as relocating to {}", request.shardId(), request.targetNode());
-            throw new DelayRecoveryException("source shard is not marked yet as relocating to [" + request.targetNode() + "]");
-        }
-
         ShardRouting targetShardRouting = null;
         for (ShardRouting shardRouting : node) {
             if (shardRouting.shardId().equals(request.shardId())) {
@@ -114,19 +107,16 @@ public class RecoverySource extends AbstractComponent implements IndexEventListe
         }
         if (!targetShardRouting.initializing()) {
             logger.debug("delaying recovery of {} as it is not listed as initializing on the target node {}. known shards state is [{}]",
-                request.shardId(), request.targetNode(), targetShardRouting.state());
+                    request.shardId(), request.targetNode(), targetShardRouting.state());
             throw new DelayRecoveryException("source node has the state of the target shard to be [" + targetShardRouting.state() + "], expecting to be [initializing]");
         }
 
-        logger.trace("[{}][{}] starting recovery to {}", request.shardId().getIndex().getName(), request.shardId().id(), request.targetNode());
+        logger.trace("[{}][{}] starting recovery to {}, mark_as_relocated {}", request.shardId().index().name(), request.shardId().id(), request.targetNode(), request.markAsRelocated());
         final RecoverySourceHandler handler;
-        final RemoteRecoveryTargetHandler recoveryTarget =
-                new RemoteRecoveryTargetHandler(request.recoveryId(), request.shardId(), transportService, request.targetNode(),
-                        recoverySettings, throttleTime -> shard.recoveryStats().addThrottleTime(throttleTime));
         if (shard.indexSettings().isOnSharedFilesystem()) {
-            handler = new SharedFSRecoverySourceHandler(shard, recoveryTarget, request, logger);
+            handler = new SharedFSRecoverySourceHandler(shard, request, recoverySettings, transportService, logger);
         } else {
-            handler = new RecoverySourceHandler(shard, recoveryTarget, request, recoverySettings.getChunkSize().bytesAsInt(), logger);
+            handler = new RecoverySourceHandler(shard, request, recoverySettings, transportService, logger);
         }
         ongoingRecoveries.add(shard, handler);
         try {
@@ -144,7 +134,8 @@ public class RecoverySource extends AbstractComponent implements IndexEventListe
         }
     }
 
-    private static final class OngoingRecoveries {
+
+    private static final class OngoingRecoveres {
         private final Map<IndexShard, Set<RecoverySourceHandler>> ongoingRecoveries = new HashMap<>();
 
         synchronized void add(IndexShard shard, RecoverySourceHandler handler) {

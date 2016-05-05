@@ -18,7 +18,10 @@
  */
 package org.elasticsearch.search.aggregations.bucket;
 
+import org.apache.lucene.index.LeafReaderContext;
+import org.apache.lucene.search.Scorer;
 import org.elasticsearch.action.index.IndexRequestBuilder;
+import org.elasticsearch.action.search.SearchPhaseExecutionException;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.common.joda.DateMathParser;
 import org.elasticsearch.common.joda.Joda;
@@ -26,14 +29,21 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.index.mapper.core.DateFieldMapper;
 import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.plugins.Plugin;
+import org.elasticsearch.script.CompiledScript;
+import org.elasticsearch.script.ExecutableScript;
+import org.elasticsearch.script.LeafSearchScript;
 import org.elasticsearch.script.Script;
+import org.elasticsearch.script.ScriptEngineService;
+import org.elasticsearch.script.ScriptModule;
 import org.elasticsearch.script.ScriptService.ScriptType;
-import org.elasticsearch.search.aggregations.bucket.DateScriptMocks.DateScriptsMockPlugin;
+import org.elasticsearch.script.SearchScript;
 import org.elasticsearch.search.aggregations.bucket.histogram.DateHistogramInterval;
-import org.elasticsearch.search.aggregations.bucket.histogram.ExtendedBounds;
 import org.elasticsearch.search.aggregations.bucket.histogram.Histogram;
 import org.elasticsearch.search.aggregations.bucket.histogram.Histogram.Bucket;
+import org.elasticsearch.search.aggregations.metrics.max.Max;
 import org.elasticsearch.search.aggregations.metrics.sum.Sum;
+import org.elasticsearch.search.lookup.LeafSearchLookup;
+import org.elasticsearch.search.lookup.SearchLookup;
 import org.elasticsearch.test.ESIntegTestCase;
 import org.hamcrest.Matchers;
 import org.joda.time.DateTime;
@@ -79,7 +89,7 @@ public class DateHistogramIT extends ESIntegTestCase {
     }
 
     private DateTime date(String date) {
-        return DateFieldMapper.DEFAULT_DATE_TIME_FORMATTER.parser().parseDateTime(date);
+        return DateFieldMapper.Defaults.DATE_TIME_FORMATTER.parser().parseDateTime(date);
     }
 
     private static String format(DateTime date, String pattern) {
@@ -131,7 +141,8 @@ public class DateHistogramIT extends ESIntegTestCase {
     @Override
     protected Collection<Class<? extends Plugin>> nodePlugins() {
         return Arrays.asList(
-                DateScriptsMockPlugin.class);
+                ExtractFieldScriptPlugin.class,
+                FieldValueScriptPlugin.class);
     }
 
     @After
@@ -144,12 +155,12 @@ public class DateHistogramIT extends ESIntegTestCase {
     }
 
     private static String getBucketKeyAsString(DateTime key, DateTimeZone tz) {
-        return Joda.forPattern(DateFieldMapper.DEFAULT_DATE_TIME_FORMATTER.format()).printer().withZone(tz).print(key);
+        return Joda.forPattern(DateFieldMapper.Defaults.DATE_TIME_FORMATTER.format()).printer().withZone(tz).print(key);
     }
 
     public void testSingleValuedField() throws Exception {
         SearchResponse response = client().prepareSearch("idx")
-                .addAggregation(dateHistogram("histo").field("date").dateHistogramInterval(DateHistogramInterval.MONTH))
+                .addAggregation(dateHistogram("histo").field("date").interval(DateHistogramInterval.MONTH))
                 .execute().actionGet();
 
         assertSearchResponse(response);
@@ -165,26 +176,26 @@ public class DateHistogramIT extends ESIntegTestCase {
         assertThat(bucket, notNullValue());
         assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key)));
         assertThat(((DateTime) bucket.getKey()), equalTo(key));
-        assertThat(bucket.getDocCount(), equalTo(1L));
+        assertThat(bucket.getDocCount(), equalTo(1l));
 
         key = new DateTime(2012, 2, 1, 0, 0, DateTimeZone.UTC);
         bucket = buckets.get(1);
         assertThat(bucket, notNullValue());
         assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key)));
         assertThat(((DateTime) bucket.getKey()), equalTo(key));
-        assertThat(bucket.getDocCount(), equalTo(2L));
+        assertThat(bucket.getDocCount(), equalTo(2l));
 
         key = new DateTime(2012, 3, 1, 0, 0, DateTimeZone.UTC);
         bucket = buckets.get(2);
         assertThat(bucket, notNullValue());
         assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key)));
         assertThat(((DateTime) bucket.getKey()), equalTo(key));
-        assertThat(bucket.getDocCount(), equalTo(3L));
+        assertThat(bucket.getDocCount(), equalTo(3l));
     }
 
     public void testSingleValuedFieldWithTimeZone() throws Exception {
         SearchResponse response = client().prepareSearch("idx")
-                .addAggregation(dateHistogram("histo").field("date").dateHistogramInterval(DateHistogramInterval.DAY).minDocCount(1).timeZone(DateTimeZone.forID("+01:00"))).execute()
+                .addAggregation(dateHistogram("histo").field("date").interval(DateHistogramInterval.DAY).minDocCount(1).timeZone("+01:00")).execute()
                 .actionGet();
         DateTimeZone tz = DateTimeZone.forID("+01:00");
         assertSearchResponse(response);
@@ -200,49 +211,49 @@ public class DateHistogramIT extends ESIntegTestCase {
         assertThat(bucket, notNullValue());
         assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key, tz)));
         assertThat(((DateTime) bucket.getKey()), equalTo(key));
-        assertThat(bucket.getDocCount(), equalTo(1L));
+        assertThat(bucket.getDocCount(), equalTo(1l));
 
         key = new DateTime(2012, 2, 1, 23, 0, DateTimeZone.UTC);
         bucket = buckets.get(1);
         assertThat(bucket, notNullValue());
         assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key, tz)));
         assertThat(((DateTime) bucket.getKey()), equalTo(key));
-        assertThat(bucket.getDocCount(), equalTo(1L));
+        assertThat(bucket.getDocCount(), equalTo(1l));
 
         key = new DateTime(2012, 2, 14, 23, 0, DateTimeZone.UTC);
         bucket = buckets.get(2);
         assertThat(bucket, notNullValue());
         assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key, tz)));
         assertThat(((DateTime) bucket.getKey()), equalTo(key));
-        assertThat(bucket.getDocCount(), equalTo(1L));
+        assertThat(bucket.getDocCount(), equalTo(1l));
 
         key = new DateTime(2012, 3, 1, 23, 0, DateTimeZone.UTC);
         bucket = buckets.get(3);
         assertThat(bucket, notNullValue());
         assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key, tz)));
         assertThat(((DateTime) bucket.getKey()), equalTo(key));
-        assertThat(bucket.getDocCount(), equalTo(1L));
+        assertThat(bucket.getDocCount(), equalTo(1l));
 
         key = new DateTime(2012, 3, 14, 23, 0, DateTimeZone.UTC);
         bucket = buckets.get(4);
         assertThat(bucket, notNullValue());
         assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key, tz)));
         assertThat(((DateTime) bucket.getKey()), equalTo(key));
-        assertThat(bucket.getDocCount(), equalTo(1L));
+        assertThat(bucket.getDocCount(), equalTo(1l));
 
         key = new DateTime(2012, 3, 22, 23, 0, DateTimeZone.UTC);
         bucket = buckets.get(5);
         assertThat(bucket, notNullValue());
         assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key, tz)));
         assertThat(((DateTime) bucket.getKey()), equalTo(key));
-        assertThat(bucket.getDocCount(), equalTo(1L));
+        assertThat(bucket.getDocCount(), equalTo(1l));
     }
 
     public void testSingleValuedFieldOrderedByKeyAsc() throws Exception {
         SearchResponse response = client().prepareSearch("idx")
                 .addAggregation(dateHistogram("histo")
                         .field("date")
-                        .dateHistogramInterval(DateHistogramInterval.MONTH)
+                        .interval(DateHistogramInterval.MONTH)
                         .order(Histogram.Order.KEY_ASC))
                 .execute().actionGet();
 
@@ -265,7 +276,7 @@ public class DateHistogramIT extends ESIntegTestCase {
         SearchResponse response = client().prepareSearch("idx")
                 .addAggregation(dateHistogram("histo")
                         .field("date")
-                        .dateHistogramInterval(DateHistogramInterval.MONTH)
+                        .interval(DateHistogramInterval.MONTH)
                         .order(Histogram.Order.KEY_DESC))
                 .execute().actionGet();
 
@@ -287,7 +298,7 @@ public class DateHistogramIT extends ESIntegTestCase {
         SearchResponse response = client().prepareSearch("idx")
                 .addAggregation(dateHistogram("histo")
                         .field("date")
-                        .dateHistogramInterval(DateHistogramInterval.MONTH)
+                        .interval(DateHistogramInterval.MONTH)
                         .order(Histogram.Order.COUNT_ASC))
                 .execute().actionGet();
 
@@ -309,7 +320,7 @@ public class DateHistogramIT extends ESIntegTestCase {
         SearchResponse response = client().prepareSearch("idx")
                 .addAggregation(dateHistogram("histo")
                         .field("date")
-                        .dateHistogramInterval(DateHistogramInterval.MONTH)
+                        .interval(DateHistogramInterval.MONTH)
                         .order(Histogram.Order.COUNT_DESC))
                 .execute().actionGet();
 
@@ -329,7 +340,7 @@ public class DateHistogramIT extends ESIntegTestCase {
 
     public void testSingleValuedFieldWithSubAggregation() throws Exception {
         SearchResponse response = client().prepareSearch("idx")
-                .addAggregation(dateHistogram("histo").field("date").dateHistogramInterval(DateHistogramInterval.MONTH)
+                .addAggregation(dateHistogram("histo").field("date").interval(DateHistogramInterval.MONTH)
                         .subAggregation(sum("sum").field("value")))
                 .execute().actionGet();
 
@@ -349,12 +360,12 @@ public class DateHistogramIT extends ESIntegTestCase {
         assertThat(bucket, notNullValue());
         assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key)));
         assertThat(((DateTime) bucket.getKey()), equalTo(key));
-        assertThat(bucket.getDocCount(), equalTo(1L));
+        assertThat(bucket.getDocCount(), equalTo(1l));
         Sum sum = bucket.getAggregations().get("sum");
         assertThat(sum, notNullValue());
         assertThat(sum.getValue(), equalTo(1.0));
         assertThat((DateTime) propertiesKeys[0], equalTo(key));
-        assertThat((long) propertiesDocCounts[0], equalTo(1L));
+        assertThat((long) propertiesDocCounts[0], equalTo(1l));
         assertThat((double) propertiesCounts[0], equalTo(1.0));
 
         key = new DateTime(2012, 2, 1, 0, 0, DateTimeZone.UTC);
@@ -362,12 +373,12 @@ public class DateHistogramIT extends ESIntegTestCase {
         assertThat(bucket, notNullValue());
         assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key)));
         assertThat(((DateTime) bucket.getKey()), equalTo(key));
-        assertThat(bucket.getDocCount(), equalTo(2L));
+        assertThat(bucket.getDocCount(), equalTo(2l));
         sum = bucket.getAggregations().get("sum");
         assertThat(sum, notNullValue());
         assertThat(sum.getValue(), equalTo(5.0));
         assertThat((DateTime) propertiesKeys[1], equalTo(key));
-        assertThat((long) propertiesDocCounts[1], equalTo(2L));
+        assertThat((long) propertiesDocCounts[1], equalTo(2l));
         assertThat((double) propertiesCounts[1], equalTo(5.0));
 
         key = new DateTime(2012, 3, 1, 0, 0, DateTimeZone.UTC);
@@ -375,20 +386,65 @@ public class DateHistogramIT extends ESIntegTestCase {
         assertThat(bucket, notNullValue());
         assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key)));
         assertThat(((DateTime) bucket.getKey()), equalTo(key));
-        assertThat(bucket.getDocCount(), equalTo(3L));
+        assertThat(bucket.getDocCount(), equalTo(3l));
         sum = bucket.getAggregations().get("sum");
         assertThat(sum, notNullValue());
         assertThat(sum.getValue(), equalTo(15.0));
         assertThat((DateTime) propertiesKeys[2], equalTo(key));
-        assertThat((long) propertiesDocCounts[2], equalTo(3L));
+        assertThat((long) propertiesDocCounts[2], equalTo(3l));
         assertThat((double) propertiesCounts[2], equalTo(15.0));
+    }
+
+    public void testSingleValuedFieldWithSubAggregationInherited() throws Exception {
+        SearchResponse response = client().prepareSearch("idx")
+                .addAggregation(dateHistogram("histo").field("date").interval(DateHistogramInterval.MONTH)
+                        .subAggregation(max("max")))
+                .execute().actionGet();
+
+        assertSearchResponse(response);
+
+        Histogram histo = response.getAggregations().get("histo");
+        assertThat(histo, notNullValue());
+        assertThat(histo.getName(), equalTo("histo"));
+        List<? extends Bucket> buckets = histo.getBuckets();
+        assertThat(buckets.size(), equalTo(3));
+
+        DateTime key = new DateTime(2012, 1, 1, 0, 0, DateTimeZone.UTC);
+        Histogram.Bucket bucket = buckets.get(0);
+        assertThat(bucket, notNullValue());
+        assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key)));
+        assertThat(((DateTime) bucket.getKey()), equalTo(key));
+        assertThat(bucket.getDocCount(), equalTo(1l));
+        Max max = bucket.getAggregations().get("max");
+        assertThat(max, notNullValue());
+        assertThat(max.getValue(), equalTo((double) new DateTime(2012, 1, 2, 0, 0, DateTimeZone.UTC).getMillis()));
+
+        key = new DateTime(2012, 2, 1, 0, 0, DateTimeZone.UTC);
+        bucket = buckets.get(1);
+        assertThat(bucket, notNullValue());
+        assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key)));
+        assertThat(((DateTime) bucket.getKey()), equalTo(key));
+        assertThat(bucket.getDocCount(), equalTo(2l));
+        max = bucket.getAggregations().get("max");
+        assertThat(max, notNullValue());
+        assertThat(max.getValue(), equalTo((double) new DateTime(2012, 2, 15, 0, 0, DateTimeZone.UTC).getMillis()));
+
+        key = new DateTime(2012, 3, 1, 0, 0, DateTimeZone.UTC);
+        bucket = buckets.get(2);
+        assertThat(bucket, notNullValue());
+        assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key)));
+        assertThat(((DateTime) bucket.getKey()), equalTo(key));
+        assertThat(bucket.getDocCount(), equalTo(3l));
+        max = bucket.getAggregations().get("max");
+        assertThat(max, notNullValue());
+        assertThat(max.getValue(), equalTo((double) new DateTime(2012, 3, 23, 0, 0, DateTimeZone.UTC).getMillis()));
     }
 
     public void testSingleValuedFieldOrderedBySubAggregationAsc() throws Exception {
         SearchResponse response = client().prepareSearch("idx")
                 .addAggregation(dateHistogram("histo")
                         .field("date")
-                        .dateHistogramInterval(DateHistogramInterval.MONTH)
+                        .interval(DateHistogramInterval.MONTH)
                         .order(Histogram.Order.aggregation("sum", true))
                         .subAggregation(max("sum").field("value")))
                 .execute().actionGet();
@@ -411,7 +467,7 @@ public class DateHistogramIT extends ESIntegTestCase {
         SearchResponse response = client().prepareSearch("idx")
                 .addAggregation(dateHistogram("histo")
                         .field("date")
-                        .dateHistogramInterval(DateHistogramInterval.MONTH)
+                        .interval(DateHistogramInterval.MONTH)
                         .order(Histogram.Order.aggregation("sum", false))
                         .subAggregation(max("sum").field("value")))
                 .execute().actionGet();
@@ -430,11 +486,34 @@ public class DateHistogramIT extends ESIntegTestCase {
         }
     }
 
+    public void testSingleValuedFieldOrderedByMultiValuedSubAggregationAscInherited() throws Exception {
+        SearchResponse response = client().prepareSearch("idx")
+                .addAggregation(dateHistogram("histo")
+                        .field("date")
+                        .interval(DateHistogramInterval.MONTH)
+                        .order(Histogram.Order.aggregation("stats", "sum", true))
+                        .subAggregation(stats("stats").field("value")))
+                .execute().actionGet();
+
+        assertSearchResponse(response);
+
+        Histogram histo = response.getAggregations().get("histo");
+        assertThat(histo, notNullValue());
+        assertThat(histo.getName(), equalTo("histo"));
+        assertThat(histo.getBuckets().size(), equalTo(3));
+
+        int i = 0;
+        for (Histogram.Bucket bucket : histo.getBuckets()) {
+            assertThat(((DateTime) bucket.getKey()), equalTo(new DateTime(2012, i + 1, 1, 0, 0, DateTimeZone.UTC)));
+            i++;
+        }
+    }
+
     public void testSingleValuedFieldOrderedByMultiValuedSubAggregationDesc() throws Exception {
         SearchResponse response = client().prepareSearch("idx")
                 .addAggregation(dateHistogram("histo")
                         .field("date")
-                        .dateHistogramInterval(DateHistogramInterval.MONTH)
+                        .interval(DateHistogramInterval.MONTH)
                         .order(Histogram.Order.aggregation("stats", "sum", false))
                         .subAggregation(stats("stats").field("value")))
                 .execute().actionGet();
@@ -454,13 +533,11 @@ public class DateHistogramIT extends ESIntegTestCase {
     }
 
     public void testSingleValuedFieldWithValueScript() throws Exception {
-        Map<String, Object> params = new HashMap<>();
-        params.put("fieldname", "date");
         SearchResponse response = client().prepareSearch("idx")
                 .addAggregation(dateHistogram("histo")
                         .field("date")
-                        .script(new Script(DateScriptMocks.PlusOneMonthScript.NAME, ScriptType.INLINE, "native", params))
-                        .dateHistogramInterval(DateHistogramInterval.MONTH)).execute().actionGet();
+                        .script(new Script("", ScriptType.INLINE, FieldValueScriptEngine.NAME, null))
+                        .interval(DateHistogramInterval.MONTH)).execute().actionGet();
 
         assertSearchResponse(response);
 
@@ -476,21 +553,21 @@ public class DateHistogramIT extends ESIntegTestCase {
         assertThat(bucket, notNullValue());
         assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key)));
         assertThat(((DateTime) bucket.getKey()), equalTo(key));
-        assertThat(bucket.getDocCount(), equalTo(1L));
+        assertThat(bucket.getDocCount(), equalTo(1l));
 
         key = new DateTime(2012, 3, 1, 0, 0, DateTimeZone.UTC);
         bucket = buckets.get(1);
         assertThat(bucket, notNullValue());
         assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key)));
         assertThat(((DateTime) bucket.getKey()), equalTo(key));
-        assertThat(bucket.getDocCount(), equalTo(2L));
+        assertThat(bucket.getDocCount(), equalTo(2l));
 
         key = new DateTime(2012, 4, 1, 0, 0, DateTimeZone.UTC);
         bucket = buckets.get(2);
         assertThat(bucket, notNullValue());
         assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key)));
         assertThat(((DateTime) bucket.getKey()), equalTo(key));
-        assertThat(bucket.getDocCount(), equalTo(3L));
+        assertThat(bucket.getDocCount(), equalTo(3l));
     }
 
     /*
@@ -504,7 +581,7 @@ public class DateHistogramIT extends ESIntegTestCase {
 
     public void testMultiValuedField() throws Exception {
         SearchResponse response = client().prepareSearch("idx")
-                .addAggregation(dateHistogram("histo").field("dates").dateHistogramInterval(DateHistogramInterval.MONTH))
+                .addAggregation(dateHistogram("histo").field("dates").interval(DateHistogramInterval.MONTH))
                 .execute().actionGet();
 
         assertSearchResponse(response);
@@ -520,35 +597,35 @@ public class DateHistogramIT extends ESIntegTestCase {
         assertThat(bucket, notNullValue());
         assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key)));
         assertThat(((DateTime) bucket.getKey()), equalTo(key));
-        assertThat(bucket.getDocCount(), equalTo(1L));
+        assertThat(bucket.getDocCount(), equalTo(1l));
 
         key = new DateTime(2012, 2, 1, 0, 0, DateTimeZone.UTC);
         bucket = buckets.get(1);
         assertThat(bucket, notNullValue());
         assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key)));
         assertThat(((DateTime) bucket.getKey()), equalTo(key));
-        assertThat(bucket.getDocCount(), equalTo(3L));
+        assertThat(bucket.getDocCount(), equalTo(3l));
 
         key = new DateTime(2012, 3, 1, 0, 0, DateTimeZone.UTC);
         bucket = buckets.get(2);
         assertThat(bucket, notNullValue());
         assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key)));
         assertThat(((DateTime) bucket.getKey()), equalTo(key));
-        assertThat(bucket.getDocCount(), equalTo(5L));
+        assertThat(bucket.getDocCount(), equalTo(5l));
 
         key = new DateTime(2012, 4, 1, 0, 0, DateTimeZone.UTC);
         bucket = buckets.get(3);
         assertThat(bucket, notNullValue());
         assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key)));
         assertThat(((DateTime) bucket.getKey()), equalTo(key));
-        assertThat(bucket.getDocCount(), equalTo(3L));
+        assertThat(bucket.getDocCount(), equalTo(3l));
     }
 
     public void testMultiValuedFieldOrderedByKeyDesc() throws Exception {
         SearchResponse response = client().prepareSearch("idx")
                 .addAggregation(dateHistogram("histo")
                         .field("dates")
-                        .dateHistogramInterval(DateHistogramInterval.MONTH)
+                        .interval(DateHistogramInterval.MONTH)
                         .order(Histogram.Order.COUNT_DESC))
                 .execute().actionGet();
 
@@ -564,19 +641,19 @@ public class DateHistogramIT extends ESIntegTestCase {
 
         Histogram.Bucket bucket = buckets.get(0);
         assertThat(bucket, notNullValue());
-        assertThat(bucket.getDocCount(), equalTo(5L));
+        assertThat(bucket.getDocCount(), equalTo(5l));
 
         bucket = buckets.get(1);
         assertThat(bucket, notNullValue());
-        assertThat(bucket.getDocCount(), equalTo(3L));
+        assertThat(bucket.getDocCount(), equalTo(3l));
 
         bucket = buckets.get(2);
         assertThat(bucket, notNullValue());
-        assertThat(bucket.getDocCount(), equalTo(3L));
+        assertThat(bucket.getDocCount(), equalTo(3l));
 
         bucket = buckets.get(3);
         assertThat(bucket, notNullValue());
-        assertThat(bucket.getDocCount(), equalTo(1L));
+        assertThat(bucket.getDocCount(), equalTo(1l));
     }
 
     /**
@@ -590,13 +667,11 @@ public class DateHistogramIT extends ESIntegTestCase {
      * doc 6: [ Apr 23, May 24]
      */
     public void testMultiValuedFieldWithValueScript() throws Exception {
-        Map<String, Object> params = new HashMap<>();
-        params.put("fieldname", "dates");
         SearchResponse response = client().prepareSearch("idx")
                 .addAggregation(dateHistogram("histo")
                         .field("dates")
-                        .script(new Script(DateScriptMocks.PlusOneMonthScript.NAME, ScriptType.INLINE, "native", params))
-                        .dateHistogramInterval(DateHistogramInterval.MONTH)).execute().actionGet();
+                        .script(new Script("", ScriptType.INLINE, FieldValueScriptEngine.NAME, null))
+                        .interval(DateHistogramInterval.MONTH)).execute().actionGet();
 
         assertSearchResponse(response);
 
@@ -611,28 +686,94 @@ public class DateHistogramIT extends ESIntegTestCase {
         assertThat(bucket, notNullValue());
         assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key)));
         assertThat(((DateTime) bucket.getKey()), equalTo(key));
-        assertThat(bucket.getDocCount(), equalTo(1L));
+        assertThat(bucket.getDocCount(), equalTo(1l));
 
         key = new DateTime(2012, 3, 1, 0, 0, DateTimeZone.UTC);
         bucket = buckets.get(1);
         assertThat(bucket, notNullValue());
         assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key)));
         assertThat(((DateTime) bucket.getKey()), equalTo(key));
-        assertThat(bucket.getDocCount(), equalTo(3L));
+        assertThat(bucket.getDocCount(), equalTo(3l));
 
         key = new DateTime(2012, 4, 1, 0, 0, DateTimeZone.UTC);
         bucket = buckets.get(2);
         assertThat(bucket, notNullValue());
         assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key)));
         assertThat(((DateTime) bucket.getKey()), equalTo(key));
-        assertThat(bucket.getDocCount(), equalTo(5L));
+        assertThat(bucket.getDocCount(), equalTo(5l));
 
         key = new DateTime(2012, 5, 1, 0, 0, DateTimeZone.UTC);
         bucket = buckets.get(3);
         assertThat(bucket, notNullValue());
         assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key)));
         assertThat(((DateTime) bucket.getKey()), equalTo(key));
-        assertThat(bucket.getDocCount(), equalTo(3L));
+        assertThat(bucket.getDocCount(), equalTo(3l));
+    }
+
+    /**
+     * The script will change to document date values to the following:
+     * <p>
+     * doc 1: [ Feb 2, Mar 3]
+     * doc 2: [ Mar 2, Apr 3]
+     * doc 3: [ Mar 15, Apr 16]
+     * doc 4: [ Apr 2, May 3]
+     * doc 5: [ Apr 15, May 16]
+     * doc 6: [ Apr 23, May 24]
+     */
+    public void testMultiValuedFieldWithValueScriptWithInheritedSubAggregator() throws Exception {
+        SearchResponse response = client().prepareSearch("idx")
+                .addAggregation(dateHistogram("histo")
+                        .field("dates")
+                        .script(new Script("", ScriptType.INLINE, FieldValueScriptEngine.NAME, null))
+                        .interval(DateHistogramInterval.MONTH).subAggregation(max("max"))).execute().actionGet();
+
+        assertSearchResponse(response);
+
+        Histogram histo = response.getAggregations().get("histo");
+        assertThat(histo, notNullValue());
+        assertThat(histo.getName(), equalTo("histo"));
+        List<? extends Bucket> buckets = histo.getBuckets();
+        assertThat(buckets.size(), equalTo(4));
+
+        DateTime key = new DateTime(2012, 2, 1, 0, 0, DateTimeZone.UTC);
+        Histogram.Bucket bucket = buckets.get(0);
+        assertThat(bucket, notNullValue());
+        assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key)));
+        assertThat(((DateTime) bucket.getKey()), equalTo(key));
+        assertThat(bucket.getDocCount(), equalTo(1l));
+        Max max = bucket.getAggregations().get("max");
+        assertThat(max, notNullValue());
+        assertThat((long) max.getValue(), equalTo(new DateTime(2012, 3, 3, 0, 0, DateTimeZone.UTC).getMillis()));
+
+        key = new DateTime(2012, 3, 1, 0, 0, DateTimeZone.UTC);
+        bucket = buckets.get(1);
+        assertThat(bucket, notNullValue());
+        assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key)));
+        assertThat(((DateTime) bucket.getKey()), equalTo(key));
+        assertThat(bucket.getDocCount(), equalTo(3l));
+        max = bucket.getAggregations().get("max");
+        assertThat(max, notNullValue());
+        assertThat((long) max.getValue(), equalTo(new DateTime(2012, 4, 16, 0, 0, DateTimeZone.UTC).getMillis()));
+
+        key = new DateTime(2012, 4, 1, 0, 0, DateTimeZone.UTC);
+        bucket = buckets.get(2);
+        assertThat(bucket, notNullValue());
+        assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key)));
+        assertThat(((DateTime) bucket.getKey()), equalTo(key));
+        assertThat(bucket.getDocCount(), equalTo(5l));
+        max = bucket.getAggregations().get("max");
+        assertThat(max, notNullValue());
+        assertThat((long) max.getValue(), equalTo(new DateTime(2012, 5, 24, 0, 0, DateTimeZone.UTC).getMillis()));
+
+        key = new DateTime(2012, 5, 1, 0, 0, DateTimeZone.UTC);
+        bucket = buckets.get(3);
+        assertThat(bucket, notNullValue());
+        assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key)));
+        assertThat(((DateTime) bucket.getKey()), equalTo(key));
+        assertThat(bucket.getDocCount(), equalTo(3l));
+        max = bucket.getAggregations().get("max");
+        assertThat(max, notNullValue());
+        assertThat((long) max.getValue(), equalTo(new DateTime(2012, 5, 24, 0, 0, DateTimeZone.UTC).getMillis()));
     }
 
     /**
@@ -644,11 +785,8 @@ public class DateHistogramIT extends ESIntegTestCase {
      * Mar 23
      */
     public void testScriptSingleValue() throws Exception {
-        Map<String, Object> params = new HashMap<>();
-        params.put("fieldname", "date");
         SearchResponse response = client().prepareSearch("idx")
-                .addAggregation(dateHistogram("histo").script(new Script(DateScriptMocks.ExtractFieldScript.NAME,
-                        ScriptType.INLINE, "native", params)).dateHistogramInterval(DateHistogramInterval.MONTH))
+                .addAggregation(dateHistogram("histo").script(new Script("date", ScriptType.INLINE, ExtractFieldScriptEngine.NAME, null)).interval(DateHistogramInterval.MONTH))
                 .execute().actionGet();
 
         assertSearchResponse(response);
@@ -664,29 +802,71 @@ public class DateHistogramIT extends ESIntegTestCase {
         assertThat(bucket, notNullValue());
         assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key)));
         assertThat(((DateTime) bucket.getKey()), equalTo(key));
-        assertThat(bucket.getDocCount(), equalTo(1L));
+        assertThat(bucket.getDocCount(), equalTo(1l));
 
         key = new DateTime(2012, 2, 1, 0, 0, DateTimeZone.UTC);
         bucket = buckets.get(1);
         assertThat(bucket, notNullValue());
         assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key)));
         assertThat(((DateTime) bucket.getKey()), equalTo(key));
-        assertThat(bucket.getDocCount(), equalTo(2L));
+        assertThat(bucket.getDocCount(), equalTo(2l));
 
         key = new DateTime(2012, 3, 1, 0, 0, DateTimeZone.UTC);
         bucket = buckets.get(2);
         assertThat(bucket, notNullValue());
         assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key)));
         assertThat(((DateTime) bucket.getKey()), equalTo(key));
-        assertThat(bucket.getDocCount(), equalTo(3L));
+        assertThat(bucket.getDocCount(), equalTo(3l));
+    }
+
+    public void testScriptSingleValueWithSubAggregatorInherited() throws Exception {
+        SearchResponse response = client().prepareSearch("idx")
+                .addAggregation(dateHistogram("histo")
+                        .script(new Script("date", ScriptType.INLINE, ExtractFieldScriptEngine.NAME, null)).interval(DateHistogramInterval.MONTH)
+                        .subAggregation(max("max"))).execute().actionGet();
+
+        assertSearchResponse(response);
+
+        Histogram histo = response.getAggregations().get("histo");
+        assertThat(histo, notNullValue());
+        assertThat(histo.getName(), equalTo("histo"));
+        List<? extends Bucket> buckets = histo.getBuckets();
+        assertThat(buckets.size(), equalTo(3));
+
+        DateTime key = new DateTime(2012, 1, 1, 0, 0, DateTimeZone.UTC);
+        Histogram.Bucket bucket = buckets.get(0);
+        assertThat(bucket, notNullValue());
+        assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key)));
+        assertThat(((DateTime) bucket.getKey()), equalTo(key));
+        assertThat(bucket.getDocCount(), equalTo(1l));
+        Max max = bucket.getAggregations().get("max");
+        assertThat(max, notNullValue());
+        assertThat(max.getValue(), equalTo((double) new DateTime(2012, 1, 2, 0, 0, DateTimeZone.UTC).getMillis()));
+
+        key = new DateTime(2012, 2, 1, 0, 0, DateTimeZone.UTC);
+        bucket = buckets.get(1);
+        assertThat(bucket, notNullValue());
+        assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key)));
+        assertThat(((DateTime) bucket.getKey()), equalTo(key));
+        assertThat(bucket.getDocCount(), equalTo(2l));
+        max = bucket.getAggregations().get("max");
+        assertThat(max, notNullValue());
+        assertThat(max.getValue(), equalTo((double) new DateTime(2012, 2, 15, 0, 0, DateTimeZone.UTC).getMillis()));
+
+        key = new DateTime(2012, 3, 1, 0, 0, DateTimeZone.UTC);
+        bucket = buckets.get(2);
+        assertThat(bucket, notNullValue());
+        assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key)));
+        assertThat(((DateTime) bucket.getKey()), equalTo(key));
+        assertThat(bucket.getDocCount(), equalTo(3l));
+        max = bucket.getAggregations().get("max");
+        assertThat(max, notNullValue());
+        assertThat(max.getValue(), equalTo((double) new DateTime(2012, 3, 23, 0, 0, DateTimeZone.UTC).getMillis()));
     }
 
     public void testScriptMultiValued() throws Exception {
-        Map<String, Object> params = new HashMap<>();
-        params.put("fieldname", "dates");
         SearchResponse response = client().prepareSearch("idx")
-                .addAggregation(dateHistogram("histo").script(new Script(DateScriptMocks.ExtractFieldScript.NAME,
-                        ScriptType.INLINE, "native", params)).dateHistogramInterval(DateHistogramInterval.MONTH))
+                .addAggregation(dateHistogram("histo").script(new Script("dates", ScriptType.INLINE, ExtractFieldScriptEngine.NAME, null)).interval(DateHistogramInterval.MONTH))
                 .execute().actionGet();
 
         assertSearchResponse(response);
@@ -702,28 +882,28 @@ public class DateHistogramIT extends ESIntegTestCase {
         assertThat(bucket, notNullValue());
         assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key)));
         assertThat(((DateTime) bucket.getKey()), equalTo(key));
-        assertThat(bucket.getDocCount(), equalTo(1L));
+        assertThat(bucket.getDocCount(), equalTo(1l));
 
         key = new DateTime(2012, 2, 1, 0, 0, DateTimeZone.UTC);
         bucket = buckets.get(1);
         assertThat(bucket, notNullValue());
         assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key)));
         assertThat(((DateTime) bucket.getKey()), equalTo(key));
-        assertThat(bucket.getDocCount(), equalTo(3L));
+        assertThat(bucket.getDocCount(), equalTo(3l));
 
         key = new DateTime(2012, 3, 1, 0, 0, DateTimeZone.UTC);
         bucket = buckets.get(2);
         assertThat(bucket, notNullValue());
         assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key)));
         assertThat(((DateTime) bucket.getKey()), equalTo(key));
-        assertThat(bucket.getDocCount(), equalTo(5L));
+        assertThat(bucket.getDocCount(), equalTo(5l));
 
         key = new DateTime(2012, 4, 1, 0, 0, DateTimeZone.UTC);
         bucket = buckets.get(3);
         assertThat(bucket, notNullValue());
         assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key)));
         assertThat(((DateTime) bucket.getKey()), equalTo(key));
-        assertThat(bucket.getDocCount(), equalTo(3L));
+        assertThat(bucket.getDocCount(), equalTo(3l));
     }
 
 
@@ -737,9 +917,64 @@ public class DateHistogramIT extends ESIntegTestCase {
     [ Mar 23, Apr 24]
      */
 
+    public void testScriptMultiValuedWithAggregatorInherited() throws Exception {
+        SearchResponse response = client().prepareSearch("idx")
+                .addAggregation(dateHistogram("histo")
+                        .script(new Script("dates", ScriptType.INLINE, ExtractFieldScriptEngine.NAME, null)).interval(DateHistogramInterval.MONTH)
+                        .subAggregation(max("max"))).execute().actionGet();
+
+        assertSearchResponse(response);
+
+        Histogram histo = response.getAggregations().get("histo");
+        assertThat(histo, notNullValue());
+        assertThat(histo.getName(), equalTo("histo"));
+        List<? extends Bucket> buckets = histo.getBuckets();
+        assertThat(buckets.size(), equalTo(4));
+
+        DateTime key = new DateTime(2012, 1, 1, 0, 0, DateTimeZone.UTC);
+        Histogram.Bucket bucket = buckets.get(0);
+        assertThat(bucket, notNullValue());
+        assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key)));
+        assertThat(((DateTime) bucket.getKey()), equalTo(key));
+        assertThat(bucket.getDocCount(), equalTo(1l));
+        Max max = bucket.getAggregations().get("max");
+        assertThat(max, notNullValue());
+        assertThat((long) max.getValue(), equalTo(new DateTime(2012, 2, 3, 0, 0, DateTimeZone.UTC).getMillis()));
+
+        key = new DateTime(2012, 2, 1, 0, 0, DateTimeZone.UTC);
+        bucket = buckets.get(1);
+        assertThat(bucket, notNullValue());
+        assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key)));
+        assertThat(((DateTime) bucket.getKey()), equalTo(key));
+        assertThat(bucket.getDocCount(), equalTo(3l));
+        max = bucket.getAggregations().get("max");
+        assertThat(max, notNullValue());
+        assertThat((long) max.getValue(), equalTo(new DateTime(2012, 3, 16, 0, 0, DateTimeZone.UTC).getMillis()));
+
+        key = new DateTime(2012, 3, 1, 0, 0, DateTimeZone.UTC);
+        bucket = buckets.get(2);
+        assertThat(bucket, notNullValue());
+        assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key)));
+        assertThat(((DateTime) bucket.getKey()), equalTo(key));
+        assertThat(bucket.getDocCount(), equalTo(5l));
+        max = bucket.getAggregations().get("max");
+        assertThat(max, notNullValue());
+        assertThat((long) max.getValue(), equalTo(new DateTime(2012, 4, 24, 0, 0, DateTimeZone.UTC).getMillis()));
+
+        key = new DateTime(2012, 4, 1, 0, 0, DateTimeZone.UTC);
+        bucket = buckets.get(3);
+        assertThat(bucket, notNullValue());
+        assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key)));
+        assertThat(((DateTime) bucket.getKey()), equalTo(key));
+        assertThat(bucket.getDocCount(), equalTo(3l));
+        max = bucket.getAggregations().get("max");
+        assertThat(max, notNullValue());
+        assertThat((long) max.getValue(), equalTo(new DateTime(2012, 4, 24, 0, 0, DateTimeZone.UTC).getMillis()));
+    }
+
     public void testUnmapped() throws Exception {
         SearchResponse response = client().prepareSearch("idx_unmapped")
-                .addAggregation(dateHistogram("histo").field("date").dateHistogramInterval(DateHistogramInterval.MONTH))
+                .addAggregation(dateHistogram("histo").field("date").interval(DateHistogramInterval.MONTH))
                 .execute().actionGet();
 
         assertSearchResponse(response);
@@ -752,7 +987,7 @@ public class DateHistogramIT extends ESIntegTestCase {
 
     public void testPartiallyUnmapped() throws Exception {
         SearchResponse response = client().prepareSearch("idx", "idx_unmapped")
-                .addAggregation(dateHistogram("histo").field("date").dateHistogramInterval(DateHistogramInterval.MONTH))
+                .addAggregation(dateHistogram("histo").field("date").interval(DateHistogramInterval.MONTH))
                 .execute().actionGet();
 
         assertSearchResponse(response);
@@ -768,31 +1003,30 @@ public class DateHistogramIT extends ESIntegTestCase {
         assertThat(bucket, notNullValue());
         assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key)));
         assertThat(((DateTime) bucket.getKey()), equalTo(key));
-        assertThat(bucket.getDocCount(), equalTo(1L));
+        assertThat(bucket.getDocCount(), equalTo(1l));
 
         key = new DateTime(2012, 2, 1, 0, 0, DateTimeZone.UTC);
         bucket = buckets.get(1);
         assertThat(bucket, notNullValue());
         assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key)));
         assertThat(((DateTime) bucket.getKey()), equalTo(key));
-        assertThat(bucket.getDocCount(), equalTo(2L));
+        assertThat(bucket.getDocCount(), equalTo(2l));
 
         key = new DateTime(2012, 3, 1, 0, 0, DateTimeZone.UTC);
         bucket = buckets.get(2);
         assertThat(bucket, notNullValue());
         assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key)));
         assertThat(((DateTime) bucket.getKey()), equalTo(key));
-        assertThat(bucket.getDocCount(), equalTo(3L));
+        assertThat(bucket.getDocCount(), equalTo(3l));
     }
 
     public void testEmptyAggregation() throws Exception {
         SearchResponse searchResponse = client().prepareSearch("empty_bucket_idx")
                 .setQuery(matchAllQuery())
-                .addAggregation(histogram("histo").field("value").interval(1L).minDocCount(0)
-                        .subAggregation(dateHistogram("date_histo").field("value").interval(1)))
+                .addAggregation(histogram("histo").field("value").interval(1l).minDocCount(0).subAggregation(dateHistogram("date_histo").interval(1)))
                 .execute().actionGet();
 
-        assertThat(searchResponse.getHits().getTotalHits(), equalTo(2L));
+        assertThat(searchResponse.getHits().getTotalHits(), equalTo(2l));
         Histogram histo = searchResponse.getAggregations().get("histo");
         assertThat(histo, Matchers.notNullValue());
         List<? extends Histogram.Bucket> buckets = histo.getBuckets();
@@ -823,12 +1057,12 @@ public class DateHistogramIT extends ESIntegTestCase {
                 .setQuery(matchAllQuery())
                 .addAggregation(dateHistogram("date_histo")
                         .field("date")
-                        .timeZone(DateTimeZone.forID("-02:00"))
-                        .dateHistogramInterval(DateHistogramInterval.DAY)
+                        .timeZone("-02:00")
+                        .interval(DateHistogramInterval.DAY)
                         .format("yyyy-MM-dd:HH-mm-ssZZ"))
                 .execute().actionGet();
 
-        assertThat(response.getHits().getTotalHits(), equalTo(5L));
+        assertThat(response.getHits().getTotalHits(), equalTo(5l));
 
         Histogram histo = response.getAggregations().get("date_histo");
         List<? extends Histogram.Bucket> buckets = histo.getBuckets();
@@ -837,12 +1071,12 @@ public class DateHistogramIT extends ESIntegTestCase {
         Histogram.Bucket bucket = buckets.get(0);
         assertThat(bucket, notNullValue());
         assertThat(bucket.getKeyAsString(), equalTo("2014-03-10:00-00-00-02:00"));
-        assertThat(bucket.getDocCount(), equalTo(2L));
+        assertThat(bucket.getDocCount(), equalTo(2l));
 
         bucket = buckets.get(1);
         assertThat(bucket, notNullValue());
         assertThat(bucket.getKeyAsString(), equalTo("2014-03-11:00-00-00-02:00"));
-        assertThat(bucket.getDocCount(), equalTo(3L));
+        assertThat(bucket.getDocCount(), equalTo(3l));
     }
 
     public void testSingleValueFieldWithExtendedBounds() throws Exception {
@@ -917,10 +1151,10 @@ public class DateHistogramIT extends ESIntegTestCase {
             response = client().prepareSearch("idx2")
                     .addAggregation(dateHistogram("histo")
                             .field("date")
-                            .dateHistogramInterval(DateHistogramInterval.days(interval))
+                            .interval(DateHistogramInterval.days(interval))
                             .minDocCount(0)
                                     // when explicitly specifying a format, the extended bounds should be defined by the same format
-                            .extendedBounds(new ExtendedBounds(format(boundsMin, pattern), format(boundsMax, pattern)))
+                            .extendedBounds(format(boundsMin, pattern), format(boundsMax, pattern))
                             .format(pattern))
                     .execute().actionGet();
 
@@ -993,12 +1227,12 @@ public class DateHistogramIT extends ESIntegTestCase {
                 .prepareSearch(index)
                 .setQuery(QueryBuilders.rangeQuery("date").from("now/d").to("now/d").includeLower(true).includeUpper(true).timeZone(timezone.getID()))
                 .addAggregation(
-                        dateHistogram("histo").field("date").dateHistogramInterval(DateHistogramInterval.hours(1)).timeZone(timezone).minDocCount(0)
-                                .extendedBounds(new ExtendedBounds("now/d", "now/d+23h"))
+                        dateHistogram("histo").field("date").interval(DateHistogramInterval.hours(1)).timeZone(timezone.getID()).minDocCount(0)
+                                .extendedBounds("now/d", "now/d+23h")
                 ).execute().actionGet();
         assertSearchResponse(response);
 
-        assertThat("Expected 24 buckets for one day aggregation with hourly interval", response.getHits().totalHits(), equalTo(2L));
+        assertThat("Expected 24 buckets for one day aggregation with hourly interval", response.getHits().totalHits(), equalTo(2l));
 
         Histogram histo = response.getAggregations().get("histo");
         assertThat(histo, notNullValue());
@@ -1011,9 +1245,9 @@ public class DateHistogramIT extends ESIntegTestCase {
             assertThat(bucket, notNullValue());
             assertThat("InternalBucket " + i + " had wrong key", (DateTime) bucket.getKey(), equalTo(new DateTime(timeZoneStartToday.getMillis() + (i * 60 * 60 * 1000), DateTimeZone.UTC)));
             if (i == 0 || i == 12) {
-                assertThat(bucket.getDocCount(), equalTo(1L));
+                assertThat(bucket.getDocCount(), equalTo(1l));
             } else {
-                assertThat(bucket.getDocCount(), equalTo(0L));
+                assertThat(bucket.getDocCount(), equalTo(0l));
             }
         }
         internalCluster().wipeIndices("test12278");
@@ -1032,7 +1266,7 @@ public class DateHistogramIT extends ESIntegTestCase {
                 .setQuery(matchAllQuery())
                 .addAggregation(dateHistogram("date_histo")
                         .field("date")
-                        .dateHistogramInterval(DateHistogramInterval.DAY))
+                        .interval(DateHistogramInterval.DAY))
                 .execute().actionGet();
 
         assertSearchHits(response, "0", "1", "2", "3", "4");
@@ -1046,12 +1280,12 @@ public class DateHistogramIT extends ESIntegTestCase {
         assertThat(bucket, notNullValue());
         assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key)));
         assertThat(((DateTime) bucket.getKey()), equalTo(key));
-        assertThat(bucket.getDocCount(), equalTo(5L));
+        assertThat(bucket.getDocCount(), equalTo(5l));
     }
 
     public void testIssue6965() {
         SearchResponse response = client().prepareSearch("idx")
-                .addAggregation(dateHistogram("histo").field("date").timeZone(DateTimeZone.forID("+01:00")).dateHistogramInterval(DateHistogramInterval.MONTH).minDocCount(0))
+                .addAggregation(dateHistogram("histo").field("date").timeZone("+01:00").interval(DateHistogramInterval.MONTH).minDocCount(0))
                 .execute().actionGet();
 
         assertSearchResponse(response);
@@ -1069,21 +1303,21 @@ public class DateHistogramIT extends ESIntegTestCase {
         assertThat(bucket, notNullValue());
         assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key, tz)));
         assertThat(((DateTime) bucket.getKey()), equalTo(key));
-        assertThat(bucket.getDocCount(), equalTo(1L));
+        assertThat(bucket.getDocCount(), equalTo(1l));
 
         key = new DateTime(2012, 1, 31, 23, 0, DateTimeZone.UTC);
         bucket = buckets.get(1);
         assertThat(bucket, notNullValue());
         assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key, tz)));
         assertThat(((DateTime) bucket.getKey()), equalTo(key));
-        assertThat(bucket.getDocCount(), equalTo(2L));
+        assertThat(bucket.getDocCount(), equalTo(2l));
 
         key = new DateTime(2012, 2, 29, 23, 0, DateTimeZone.UTC);
         bucket = buckets.get(2);
         assertThat(bucket, notNullValue());
         assertThat(bucket.getKeyAsString(), equalTo(getBucketKeyAsString(key, tz)));
         assertThat(((DateTime) bucket.getKey()), equalTo(key));
-        assertThat(bucket.getDocCount(), equalTo(3L));
+        assertThat(bucket.getDocCount(), equalTo(3l));
     }
 
     public void testDSTBoundaryIssue9491() throws InterruptedException, ExecutionException {
@@ -1092,7 +1326,7 @@ public class DateHistogramIT extends ESIntegTestCase {
                 client().prepareIndex("test9491", "type").setSource("d", "2014-11-08T13:00:00Z"));
         ensureSearchable("test9491");
         SearchResponse response = client().prepareSearch("test9491")
-                .addAggregation(dateHistogram("histo").field("d").dateHistogramInterval(DateHistogramInterval.YEAR).timeZone(DateTimeZone.forID("Asia/Jerusalem")))
+                .addAggregation(dateHistogram("histo").field("d").interval(DateHistogramInterval.YEAR).timeZone("Asia/Jerusalem"))
                 .execute().actionGet();
         assertSearchResponse(response);
         Histogram histo = response.getAggregations().get("histo");
@@ -1109,7 +1343,7 @@ public class DateHistogramIT extends ESIntegTestCase {
                 client().prepareIndex("test8209", "type").setSource("d", "2014-04-30T00:00:00Z"));
         ensureSearchable("test8209");
         SearchResponse response = client().prepareSearch("test8209")
-                .addAggregation(dateHistogram("histo").field("d").dateHistogramInterval(DateHistogramInterval.MONTH).timeZone(DateTimeZone.forID("CET"))
+                .addAggregation(dateHistogram("histo").field("d").interval(DateHistogramInterval.MONTH).timeZone("CET")
                         .minDocCount(0))
                 .execute().actionGet();
         assertSearchResponse(response);
@@ -1127,7 +1361,7 @@ public class DateHistogramIT extends ESIntegTestCase {
     }
 
     /**
-     * see issue #9634, negative dateHistogramInterval in date_histogram should raise exception
+     * see issue #9634, negative interval in date_histogram should raise exception
      */
     public void testExceptionOnNegativeInterval() {
         try {
@@ -1135,15 +1369,269 @@ public class DateHistogramIT extends ESIntegTestCase {
                     .addAggregation(dateHistogram("histo").field("date").interval(-TimeUnit.DAYS.toMillis(1)).minDocCount(0)).execute()
                     .actionGet();
             fail();
-        } catch (IllegalArgumentException e) {
-            assertThat(e.toString(), containsString("[interval] must be 1 or greater for histogram aggregation [histo]"));
+        } catch (SearchPhaseExecutionException e) {
+            assertThat(e.toString(), containsString("ElasticsearchParseException"));
         }
     }
 
     public void testTimestampField() { // see #11692
-        SearchResponse response = client().prepareSearch("idx").addAggregation(dateHistogram("histo").field("_timestamp").dateHistogramInterval(randomFrom(DateHistogramInterval.DAY, DateHistogramInterval.MONTH))).get();
+        SearchResponse response = client().prepareSearch("idx").addAggregation(dateHistogram("histo").field("_timestamp").interval(randomFrom(DateHistogramInterval.DAY, DateHistogramInterval.MONTH))).get();
         assertSearchResponse(response);
         Histogram histo = response.getAggregations().get("histo");
         assertThat(histo.getBuckets().size(), greaterThan(0));
+    }
+
+    /**
+     * Mock plugin for the {@link ExtractFieldScriptEngine}
+     */
+    public static class ExtractFieldScriptPlugin extends Plugin {
+
+        @Override
+        public String name() {
+            return ExtractFieldScriptEngine.NAME;
+        }
+
+        @Override
+        public String description() {
+            return "Mock script engine for " + DateHistogramIT.class;
+        }
+
+        public void onModule(ScriptModule module) {
+            module.addScriptEngine(ExtractFieldScriptEngine.class);
+        }
+
+    }
+
+    /**
+     * This mock script returns the field that is specified by name in the script body
+     */
+    public static class ExtractFieldScriptEngine implements ScriptEngineService {
+
+        public static final String NAME = "extract_field";
+
+        @Override
+        public void close() throws IOException {
+        }
+
+        @Override
+        public String[] types() {
+            return new String[] { NAME };
+        }
+
+        @Override
+        public String[] extensions() {
+            return types();
+        }
+
+        @Override
+        public boolean sandboxed() {
+            return true;
+        }
+
+        @Override
+        public Object compile(String script, Map<String, String> params) {
+            return script;
+        }
+
+        @Override
+        public ExecutableScript executable(CompiledScript compiledScript, Map<String, Object> params) {
+            throw new UnsupportedOperationException();
+        }
+        @Override
+        public SearchScript search(CompiledScript compiledScript, SearchLookup lookup, Map<String, Object> vars) {
+            return new SearchScript() {
+
+                @Override
+                public LeafSearchScript getLeafSearchScript(LeafReaderContext context) throws IOException {
+
+                    final LeafSearchLookup leafLookup = lookup.getLeafSearchLookup(context);
+
+                    return new LeafSearchScript() {
+
+                        @Override
+                        public Object unwrap(Object value) {
+                            return null;
+                        }
+
+                        @Override
+                        public void setNextVar(String name, Object value) {
+                        }
+
+                        @Override
+                        public Object run() {
+                            String fieldName = (String) compiledScript.compiled();
+                            return leafLookup.doc().get(fieldName);
+                        }
+
+                        @Override
+                        public void setScorer(Scorer scorer) {
+                        }
+
+                        @Override
+                        public void setSource(Map<String, Object> source) {
+                        }
+
+                        @Override
+                        public void setDocument(int doc) {
+                            if (leafLookup != null) {
+                                leafLookup.setDocument(doc);
+                            }
+                        }
+
+                        @Override
+                        public long runAsLong() {
+                            throw new UnsupportedOperationException();
+                        }
+
+                        @Override
+                        public float runAsFloat() {
+                            throw new UnsupportedOperationException();
+                        }
+
+                        @Override
+                        public double runAsDouble() {
+                            throw new UnsupportedOperationException();
+                        }
+                    };
+                }
+
+                @Override
+                public boolean needsScores() {
+                    return false;
+                }
+            };
+        }
+
+        @Override
+        public void scriptRemoved(CompiledScript script) {
+        }
+    }
+
+    /**
+     * Mock plugin for the {@link FieldValueScriptEngine}
+     */
+    public static class FieldValueScriptPlugin extends Plugin {
+
+        @Override
+        public String name() {
+            return FieldValueScriptEngine.NAME;
+        }
+
+        @Override
+        public String description() {
+            return "Mock script engine for " + DateHistogramIT.class;
+        }
+
+        public void onModule(ScriptModule module) {
+            module.addScriptEngine(FieldValueScriptEngine.class);
+        }
+
+    }
+
+    /**
+     * This mock script returns the field value and adds one month to the returned date
+     */
+    public static class FieldValueScriptEngine implements ScriptEngineService {
+
+        public static final String NAME = "field_value";
+
+        @Override
+        public void close() throws IOException {
+        }
+
+        @Override
+        public String[] types() {
+            return new String[] { NAME };
+        }
+
+        @Override
+        public String[] extensions() {
+            return types();
+        }
+
+        @Override
+        public boolean sandboxed() {
+            return true;
+        }
+
+        @Override
+        public Object compile(String script, Map<String, String> params) {
+            return script;
+        }
+
+        @Override
+        public ExecutableScript executable(CompiledScript compiledScript, Map<String, Object> params) {
+            throw new UnsupportedOperationException();
+        }
+        @Override
+        public SearchScript search(CompiledScript compiledScript, SearchLookup lookup, Map<String, Object> vars) {
+            return new SearchScript() {
+
+                private Map<String, Object> vars = new HashMap<>(2);
+
+                @Override
+                public LeafSearchScript getLeafSearchScript(LeafReaderContext context) throws IOException {
+
+                    final LeafSearchLookup leafLookup = lookup.getLeafSearchLookup(context);
+
+                    return new LeafSearchScript() {
+
+                        @Override
+                        public Object unwrap(Object value) {
+                            throw new UnsupportedOperationException();
+                        }
+
+                        @Override
+                        public void setNextVar(String name, Object value) {
+                            vars.put(name, value);
+                        }
+
+                        @Override
+                        public Object run() {
+                            throw new UnsupportedOperationException();
+                        }
+
+                        @Override
+                        public void setScorer(Scorer scorer) {
+                        }
+
+                        @Override
+                        public void setSource(Map<String, Object> source) {
+                        }
+
+                        @Override
+                        public void setDocument(int doc) {
+                            if (leafLookup != null) {
+                                leafLookup.setDocument(doc);
+                            }
+                        }
+
+                        @Override
+                        public long runAsLong() {
+                            return new DateTime((long) vars.get("_value"), DateTimeZone.UTC).plusMonths(1).getMillis();
+                        }
+
+                        @Override
+                        public float runAsFloat() {
+                            throw new UnsupportedOperationException();
+                        }
+
+                        @Override
+                        public double runAsDouble() {
+                            return new DateTime(new Double((double) vars.get("_value")).longValue(), DateTimeZone.UTC).plusMonths(1).getMillis();
+                        }
+                    };
+                }
+
+                @Override
+                public boolean needsScores() {
+                    return false;
+                }
+            };
+        }
+
+        @Override
+        public void scriptRemoved(CompiledScript script) {
+        }
     }
 }

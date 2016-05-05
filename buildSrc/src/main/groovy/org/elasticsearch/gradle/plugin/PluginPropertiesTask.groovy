@@ -29,7 +29,7 @@ import org.gradle.api.tasks.Copy
 class PluginPropertiesTask extends Copy {
 
     PluginPropertiesExtension extension
-    File generatedResourcesDir = new File(project.buildDir, 'generated-resources')
+    File generatedResourcesDir = new File(project.projectDir, 'generated-resources')
 
     PluginPropertiesTask() {
         File templateFile = new File(project.buildDir, 'templates/plugin-descriptor.properties')
@@ -51,32 +51,33 @@ class PluginPropertiesTask extends Copy {
             if (extension.description == null) {
                 throw new InvalidUserDataException('description is a required setting for esplugin')
             }
-            if (extension.classname == null) {
-                throw new InvalidUserDataException('classname is a required setting for esplugin')
+            if (extension.jvm && extension.classname == null) {
+                throw new InvalidUserDataException('classname is a required setting for esplugin with jvm=true')
+            }
+            doFirst {
+                if (extension.jvm && extension.isolated == false) {
+                    String warning = "WARNING: Disabling plugin isolation in ${project.path} is deprecated and will be removed in the future"
+                    logger.warn("${'=' * warning.length()}\n${warning}\n${'=' * warning.length()}")
+                }
             }
             // configure property substitution
             from(templateFile)
             into(generatedResourcesDir)
-            Map<String, String> properties = generateSubstitutions()
-            expand(properties)
-            inputs.properties(properties)
+            expand(generateSubstitutions())
         }
     }
 
-    Map<String, String> generateSubstitutions() {
-        def stringSnap = { version ->
-            if (version.endsWith("-SNAPSHOT")) {
-               return version.substring(0, version.length() - 9)
-            }
-            return version
-        }
+    Map generateSubstitutions() {
         return [
             'name': extension.name,
             'description': extension.description,
-            'version': stringSnap(extension.version),
-            'elasticsearchVersion': stringSnap(VersionProperties.elasticsearch),
+            'version': extension.version,
+            'elasticsearchVersion': VersionProperties.elasticsearch,
             'javaVersion': project.targetCompatibility as String,
-            'classname': extension.classname
+            'jvm': extension.jvm as String,
+            'site': extension.site as String,
+            'isolated': extension.isolated as String,
+            'classname': extension.jvm ? extension.classname : 'NA'
         ]
     }
 }

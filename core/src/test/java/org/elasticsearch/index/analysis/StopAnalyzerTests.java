@@ -23,19 +23,22 @@ import org.elasticsearch.Version;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.env.Environment;
+import org.elasticsearch.index.Index;
 import org.elasticsearch.index.IndexSettings;
 import org.elasticsearch.test.ESTokenStreamTestCase;
 import org.elasticsearch.test.IndexSettingsModule;
 
+import static org.elasticsearch.common.settings.Settings.settingsBuilder;
+
 public class StopAnalyzerTests extends ESTokenStreamTestCase {
     public void testDefaultsCompoundAnalysis() throws Exception {
         String json = "/org/elasticsearch/index/analysis/stop.json";
-        Settings settings = Settings.builder()
+        Settings settings = settingsBuilder()
             .loadFromStream(json, getClass().getResourceAsStream(json))
-                .put(Environment.PATH_HOME_SETTING.getKey(), createTempDir().toString())
+                .put("path.home", createTempDir().toString())
                 .put(IndexMetaData.SETTING_VERSION_CREATED, Version.CURRENT)
                 .build();
-        IndexSettings idxSettings = IndexSettingsModule.newIndexSettings("index", settings);
+        IndexSettings idxSettings = IndexSettingsModule.newIndexSettings(new Index("index"), settings);
         AnalysisService analysisService = new AnalysisRegistry(null, new Environment(settings)).build(idxSettings);
 
         NamedAnalyzer analyzer1 = analysisService.analyzer("analyzer1");

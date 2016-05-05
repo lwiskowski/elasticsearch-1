@@ -22,18 +22,23 @@ package org.elasticsearch.search.aggregations.pipeline.movavg;
 import org.elasticsearch.common.collect.EvictingQueue;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
-import org.elasticsearch.search.DocValueFormat;
 import org.elasticsearch.search.aggregations.AggregationExecutionException;
+import org.elasticsearch.search.aggregations.AggregatorFactory;
 import org.elasticsearch.search.aggregations.InternalAggregation;
 import org.elasticsearch.search.aggregations.InternalAggregation.ReduceContext;
 import org.elasticsearch.search.aggregations.InternalAggregation.Type;
 import org.elasticsearch.search.aggregations.InternalAggregations;
+import org.elasticsearch.search.aggregations.bucket.histogram.HistogramAggregator;
 import org.elasticsearch.search.aggregations.bucket.histogram.InternalHistogram;
 import org.elasticsearch.search.aggregations.pipeline.BucketHelpers.GapPolicy;
 import org.elasticsearch.search.aggregations.pipeline.InternalSimpleValue;
 import org.elasticsearch.search.aggregations.pipeline.PipelineAggregator;
+import org.elasticsearch.search.aggregations.pipeline.PipelineAggregatorFactory;
 import org.elasticsearch.search.aggregations.pipeline.PipelineAggregatorStreams;
 import org.elasticsearch.search.aggregations.pipeline.movavg.models.MovAvgModel;
+import org.elasticsearch.search.aggregations.pipeline.movavg.models.MovAvgModelStreams;
+import org.elasticsearch.search.aggregations.support.format.ValueFormatter;
+import org.elasticsearch.search.aggregations.support.format.ValueFormatterStreams;
 import org.joda.time.DateTime;
 
 import java.io.IOException;
@@ -63,7 +68,7 @@ public class MovAvgPipelineAggregator extends PipelineAggregator {
         PipelineAggregatorStreams.registerStream(STREAM, TYPE.stream());
     }
 
-    private DocValueFormat formatter;
+    private ValueFormatter formatter;
     private GapPolicy gapPolicy;
     private int window;
     private MovAvgModel model;
@@ -73,7 +78,7 @@ public class MovAvgPipelineAggregator extends PipelineAggregator {
     public MovAvgPipelineAggregator() {
     }
 
-    public MovAvgPipelineAggregator(String name, String[] bucketsPaths, DocValueFormat formatter, GapPolicy gapPolicy,
+    public MovAvgPipelineAggregator(String name, String[] bucketsPaths, ValueFormatter formatter, GapPolicy gapPolicy,
                          int window, int predict, MovAvgModel model, boolean minimize, Map<String, Object> metadata) {
         super(name, bucketsPaths, metadata);
         this.formatter = formatter;
@@ -150,7 +155,7 @@ public class MovAvgPipelineAggregator extends PipelineAggregator {
         if (buckets.size() > 0 && predict > 0) {
 
             boolean keyed;
-            DocValueFormat formatter;
+            ValueFormatter formatter;
             keyed = buckets.get(0).getKeyed();
             formatter = buckets.get(0).getFormatter();
 
@@ -249,23 +254,69 @@ public class MovAvgPipelineAggregator extends PipelineAggregator {
 
     @Override
     public void doReadFrom(StreamInput in) throws IOException {
-        formatter = in.readNamedWriteable(DocValueFormat.class);
+        formatter = ValueFormatterStreams.readOptional(in);
         gapPolicy = GapPolicy.readFrom(in);
         window = in.readVInt();
         predict = in.readVInt();
-        model = in.readNamedWriteable(MovAvgModel.class);
+        model = MovAvgModelStreams.read(in);
         minimize = in.readBoolean();
 
     }
 
     @Override
     public void doWriteTo(StreamOutput out) throws IOException {
-        out.writeNamedWriteable(formatter);
+        ValueFormatterStreams.writeOptional(formatter, out);
         gapPolicy.writeTo(out);
         out.writeVInt(window);
         out.writeVInt(predict);
-        out.writeNamedWriteable(model);
+        model.writeTo(out);
         out.writeBoolean(minimize);
+
+    }
+
+    public static class Factory extends PipelineAggregatorFactory {
+
+        private final ValueFormatter formatter;
+        private GapPolicy gapPolicy;
+        private int window;
+        private MovAvgModel model;
+        private int predict;
+        private boolean minimize;
+
+        public Factory(String name, String[] bucketsPaths, ValueFormatter formatter, GapPolicy gapPolicy,
+                       int window, int predict, MovAvgModel model, boolean minimize) {
+            super(name, TYPE.name(), bucketsPaths);
+            this.formatter = formatter;
+            this.gapPolicy = gapPolicy;
+            this.window = window;
+            this.model = model;
+            this.predict = predict;
+            this.minimize = minimize;
+        }
+
+        @Override
+        protected PipelineAggregator createInternal(Map<String, Object> metaData) throws IOException {
+            return new MovAvgPipelineAggregator(name, bucketsPaths, formatter, gapPolicy, window, predict, model, minimize, metaData);
+        }
+
+        @Override
+        public void doValidate(AggregatorFactory parent, AggregatorFactory[] aggFactories,
+                List<PipelineAggregatorFactory> pipelineAggregatoractories) {
+            if (bucketsPaths.length != 1) {
+                throw new IllegalStateException(PipelineAggregator.Parser.BUCKETS_PATH.getPreferredName()
+                        + " must contain a single entry for aggregation [" + name + "]");
+            }
+            if (!(parent instanceof HistogramAggregator.Factory)) {
+                throw new IllegalStateException("moving average aggregation [" + name
+                        + "] must have a histogram or date_histogram as parent");
+            } else {
+                HistogramAggregator.Factory histoParent = (HistogramAggregator.Factory) parent;
+                if (histoParent.minDocCount() != 0) {
+                    throw new IllegalStateException("parent histogram of moving average aggregation [" + name
+                            + "] must have min_doc_count of 0");
+                }
+            }
+        }
 
     }
 }

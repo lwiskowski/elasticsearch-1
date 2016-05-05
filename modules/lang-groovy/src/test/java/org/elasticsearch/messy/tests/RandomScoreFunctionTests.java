@@ -21,7 +21,7 @@ package org.elasticsearch.messy.tests;
 import org.apache.lucene.util.ArrayUtil;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.index.query.functionscore.FunctionScoreQueryBuilder;
-import org.elasticsearch.index.query.functionscore.RandomScoreFunctionBuilder;
+import org.elasticsearch.index.query.functionscore.random.RandomScoreFunctionBuilder;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.script.Script;
 import org.elasticsearch.script.ScriptService.ScriptType;
@@ -123,7 +123,7 @@ public class RandomScoreFunctionTests extends ESIntegTestCase {
     }
 
     public void testScoreAccessWithinScript() throws Exception {
-        assertAcked(prepareCreate("test").addMapping("type", "body", "type=text", "index",
+        assertAcked(prepareCreate("test").addMapping("type", "body", "type=string", "index",
                 "type=" + randomFrom("short", "float", "long", "integer", "double")));
         ensureYellow();
 
@@ -316,9 +316,10 @@ public class RandomScoreFunctionTests extends ESIntegTestCase {
             }
         }
 
-        logger.info("max repeat: {}", maxRepeat);
-        logger.info("avg repeat: {}", sumRepeat / (double) filled);
-        logger.info("distribution: {}", filled / (double) count);
+        System.out.println();
+        System.out.println("max repeat: " + maxRepeat);
+        System.out.println("avg repeat: " + sumRepeat / (double) filled);
+        System.out.println("distribution: " + filled / (double) count);
 
         int percentile50 = filled / 2;
         int percentile25 = (filled / 4);
@@ -332,18 +333,18 @@ public class RandomScoreFunctionTests extends ESIntegTestCase {
             }
             sum += i * matrix[i];
             if (percentile50 == 0) {
-                logger.info("median: {}", i);
+                System.out.println("median: " + i);
             } else if (percentile25 == 0) {
-                logger.info("percentile_25: {}", i);
+                System.out.println("percentile_25: " + i);
             } else if (percentile75 == 0) {
-                logger.info("percentile_75: {}", i);
+                System.out.println("percentile_75: " + i);
             }
             percentile50--;
             percentile25--;
             percentile75--;
         }
 
-        logger.info("mean: {}", sum / (double) count);
+        System.out.println("mean: " + sum / (double) count);
     }
 
 }

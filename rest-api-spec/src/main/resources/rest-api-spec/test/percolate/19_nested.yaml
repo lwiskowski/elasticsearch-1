@@ -8,16 +8,12 @@ setup:
                   company:
                       properties:
                           companyname:
-                              type: text
+                              type: string
                           employee:
                               type: nested
                               properties:
                                   name:
-                                      type: text
-                  queries:
-                      properties:
-                        query:
-                          type: percolator
+                                      type: string
 
 
   - do:
@@ -25,7 +21,7 @@ setup:
   - do:
       index:
           index: nestedindex
-          type:  "queries"
+          type:  ".percolator"
           id:    query
           body:  { "query": { "nested": { "path": "employee", "score_mode": "avg", "query": { "match": { "employee.name": { "query": "virginia potts", "operator": "and"} } } } } }
   - do:

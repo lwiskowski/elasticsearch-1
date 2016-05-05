@@ -19,6 +19,7 @@
 package org.elasticsearch.discovery.zen;
 
 import org.elasticsearch.ElasticsearchTimeoutException;
+import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateUpdateTask;
 import org.elasticsearch.cluster.NotMasterException;
@@ -27,7 +28,7 @@ import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
 import org.elasticsearch.cluster.routing.RoutingService;
 import org.elasticsearch.cluster.routing.allocation.RoutingAllocation;
-import org.elasticsearch.cluster.service.ClusterService;
+import org.elasticsearch.cluster.service.InternalClusterService;
 import org.elasticsearch.common.Priority;
 import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.settings.Settings;
@@ -240,13 +241,13 @@ public class NodeJoinController extends AbstractComponent {
                 // Take into account the previous known nodes, if they happen not to be available
                 // then fault detection will remove these nodes.
 
-                if (currentState.nodes().getMasterNode() != null) {
+                if (currentState.nodes().masterNode() != null) {
                     // TODO can we tie break here? we don't have a remote master cluster state version to decide on
-                    logger.trace("join thread elected local node as master, but there is already a master in place: {}", currentState.nodes().getMasterNode());
+                    logger.trace("join thread elected local node as master, but there is already a master in place: {}", currentState.nodes().masterNode());
                     throw new NotMasterException("Node [" + clusterService.localNode() + "] not master for join request");
                 }
 
-                DiscoveryNodes.Builder builder = new DiscoveryNodes.Builder(currentState.nodes()).masterNodeId(currentState.nodes().getLocalNode().getId());
+                DiscoveryNodes.Builder builder = new DiscoveryNodes.Builder(currentState.nodes()).masterNodeId(currentState.nodes().localNode().id());
                 // update the fact that we are the master...
                 ClusterBlocks clusterBlocks = ClusterBlocks.builder().blocks(currentState.blocks()).removeGlobalBlock(discoverySettings.getNoMasterBlock()).build();
                 currentState = ClusterState.builder(currentState).nodes(builder).blocks(clusterBlocks).build();
@@ -322,7 +323,7 @@ public class NodeJoinController extends AbstractComponent {
         public void onElectedAsMaster(ClusterState state) {
             assert pendingSetAsMasterTask.get() : "onElectedAsMaster called but pendingSetAsMasterTask is not set";
             assertClusterStateThread();
-            assert state.nodes().isLocalNodeElectedMaster() : "onElectedAsMaster called but local node is not master";
+            assert state.nodes().localNodeMaster() : "onElectedAsMaster called but local node is not master";
             if (closed.compareAndSet(false, true)) {
                 try {
                     onClose();
@@ -345,7 +346,7 @@ public class NodeJoinController extends AbstractComponent {
         }
 
         private void assertClusterStateThread() {
-            assert clusterService instanceof ClusterService == false || ((ClusterService) clusterService).assertClusterStateThread();
+            assert clusterService instanceof InternalClusterService == false || ((InternalClusterService) clusterService).assertClusterStateThread();
         }
     }
 
@@ -378,14 +379,14 @@ public class NodeJoinController extends AbstractComponent {
                     final DiscoveryNode node = entry.getKey();
                     joinCallbacksToRespondTo.addAll(entry.getValue());
                     iterator.remove();
-                    if (currentState.nodes().nodeExists(node.getId())) {
+                    if (currentState.nodes().nodeExists(node.id())) {
                         logger.debug("received a join request for an existing node [{}]", node);
                     } else {
                         nodeAdded = true;
                         nodesBuilder.put(node);
                         for (DiscoveryNode existingNode : currentState.nodes()) {
-                            if (node.getAddress().equals(existingNode.getAddress())) {
-                                nodesBuilder.remove(existingNode.getId());
+                            if (node.address().equals(existingNode.address())) {
+                                nodesBuilder.remove(existingNode.id());
                                 logger.warn("received join request from node [{}], but found existing node {} with same address, removing existing node", node, existingNode);
                             }
                         }

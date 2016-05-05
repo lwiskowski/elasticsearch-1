@@ -33,7 +33,7 @@ import org.elasticsearch.cluster.routing.allocation.command.MoveAllocationComman
 import org.elasticsearch.cluster.routing.allocation.decider.ClusterRebalanceAllocationDecider;
 import org.elasticsearch.common.logging.ESLogger;
 import org.elasticsearch.common.logging.Loggers;
-import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.test.ESAllocationTestCase;
 
 import static java.util.Collections.singletonMap;
@@ -41,6 +41,7 @@ import static org.elasticsearch.cluster.routing.ShardRoutingState.INITIALIZING;
 import static org.elasticsearch.cluster.routing.ShardRoutingState.RELOCATING;
 import static org.elasticsearch.cluster.routing.ShardRoutingState.STARTED;
 import static org.elasticsearch.cluster.routing.ShardRoutingState.UNASSIGNED;
+import static org.elasticsearch.common.settings.Settings.settingsBuilder;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.sameInstance;
@@ -52,7 +53,7 @@ public class AwarenessAllocationTests extends ESAllocationTestCase {
     private final ESLogger logger = Loggers.getLogger(AwarenessAllocationTests.class);
 
     public void testMoveShardOnceNewNodeWithAttributeAdded1() {
-        AllocationService strategy = createAllocationService(Settings.builder()
+        AllocationService strategy = createAllocationService(settingsBuilder()
                 .put("cluster.routing.allocation.node_concurrent_recoveries", 10)
                 .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.getKey(), "always")
                 .put("cluster.routing.allocation.awareness.attributes", "rack_id")
@@ -120,7 +121,7 @@ public class AwarenessAllocationTests extends ESAllocationTestCase {
     }
 
     public void testMoveShardOnceNewNodeWithAttributeAdded2() {
-        AllocationService strategy = createAllocationService(Settings.builder()
+        AllocationService strategy = createAllocationService(settingsBuilder()
                 .put("cluster.routing.allocation.concurrent_recoveries", 10)
                 .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.getKey(), "always")
                 .put("cluster.routing.allocation.awareness.attributes", "rack_id")
@@ -189,7 +190,7 @@ public class AwarenessAllocationTests extends ESAllocationTestCase {
     }
 
     public void testMoveShardOnceNewNodeWithAttributeAdded3() {
-        AllocationService strategy = createAllocationService(Settings.builder()
+        AllocationService strategy = createAllocationService(settingsBuilder()
                 .put("cluster.routing.allocation.node_concurrent_recoveries", 10)
                 .put("cluster.routing.allocation.node_initial_primaries_recoveries", 10)
                 .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.getKey(), "always")
@@ -220,10 +221,18 @@ public class AwarenessAllocationTests extends ESAllocationTestCase {
         routingTable = strategy.reroute(clusterState, "reroute").routingTable();
         clusterState = ClusterState.builder(clusterState).routingTable(routingTable).build();
 
-        logger.info("Initializing shards: {}", clusterState.getRoutingNodes().shardsWithState(INITIALIZING));
-        logger.info("Started shards: {}", clusterState.getRoutingNodes().shardsWithState(STARTED));
-        logger.info("Relocating shards: {}", clusterState.getRoutingNodes().shardsWithState(RELOCATING));
-        logger.info("Unassigned shards: {}", clusterState.getRoutingNodes().shardsWithState(UNASSIGNED));
+        for (ShardRouting shard : clusterState.getRoutingNodes().shardsWithState(INITIALIZING)) {
+            logger.info(shard.toString());
+        }
+        for (ShardRouting shard : clusterState.getRoutingNodes().shardsWithState(STARTED)) {
+            logger.info(shard.toString());
+        }
+        for (ShardRouting shard : clusterState.getRoutingNodes().shardsWithState(RELOCATING)) {
+            logger.info(shard.toString());
+        }
+        for (ShardRouting shard : clusterState.getRoutingNodes().shardsWithState(UNASSIGNED)) {
+            logger.info(shard.toString());
+        }
 
         assertThat(clusterState.getRoutingNodes().shardsWithState(INITIALIZING).size(), equalTo(5));
 
@@ -281,7 +290,7 @@ public class AwarenessAllocationTests extends ESAllocationTestCase {
     }
 
     public void testMoveShardOnceNewNodeWithAttributeAdded4() {
-        AllocationService strategy = createAllocationService(Settings.builder()
+        AllocationService strategy = createAllocationService(settingsBuilder()
                 .put("cluster.routing.allocation.node_concurrent_recoveries", 10)
                 .put("cluster.routing.allocation.node_initial_primaries_recoveries", 10)
                 .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.getKey(), "always")
@@ -376,7 +385,7 @@ public class AwarenessAllocationTests extends ESAllocationTestCase {
     }
 
     public void testMoveShardOnceNewNodeWithAttributeAdded5() {
-        AllocationService strategy = createAllocationService(Settings.builder()
+        AllocationService strategy = createAllocationService(settingsBuilder()
                 .put("cluster.routing.allocation.node_concurrent_recoveries", 10)
                 .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.getKey(), "always")
                 .put("cluster.routing.allocation.awareness.attributes", "rack_id")
@@ -454,7 +463,7 @@ public class AwarenessAllocationTests extends ESAllocationTestCase {
     }
 
     public void testMoveShardOnceNewNodeWithAttributeAdded6() {
-        AllocationService strategy = createAllocationService(Settings.builder()
+        AllocationService strategy = createAllocationService(settingsBuilder()
                 .put("cluster.routing.allocation.node_concurrent_recoveries", 10)
                 .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.getKey(), "always")
                 .put("cluster.routing.allocation.awareness.attributes", "rack_id")
@@ -534,7 +543,7 @@ public class AwarenessAllocationTests extends ESAllocationTestCase {
     }
 
     public void testFullAwareness1() {
-        AllocationService strategy = createAllocationService(Settings.builder()
+        AllocationService strategy = createAllocationService(settingsBuilder()
                 .put("cluster.routing.allocation.node_concurrent_recoveries", 10)
                 .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.getKey(), "always")
                 .put("cluster.routing.allocation.awareness.force.rack_id.values", "1,2")
@@ -601,7 +610,7 @@ public class AwarenessAllocationTests extends ESAllocationTestCase {
     }
 
     public void testFullAwareness2() {
-        AllocationService strategy = createAllocationService(Settings.builder()
+        AllocationService strategy = createAllocationService(settingsBuilder()
                 .put("cluster.routing.allocation.node_concurrent_recoveries", 10)
                 .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.getKey(), "always")
                 .put("cluster.routing.allocation.awareness.force.rack_id.values", "1,2")
@@ -669,7 +678,7 @@ public class AwarenessAllocationTests extends ESAllocationTestCase {
     }
 
     public void testFullAwareness3() {
-        AllocationService strategy = createAllocationService(Settings.builder()
+        AllocationService strategy = createAllocationService(settingsBuilder()
                 .put("cluster.routing.allocation.node_concurrent_recoveries", 10)
                 .put("cluster.routing.allocation.node_initial_primaries_recoveries", 10)
                 .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.getKey(), "always")
@@ -753,7 +762,7 @@ public class AwarenessAllocationTests extends ESAllocationTestCase {
     }
 
     public void testUnbalancedZones() {
-        AllocationService strategy = createAllocationService(Settings.builder()
+        AllocationService strategy = createAllocationService(settingsBuilder()
                 .put("cluster.routing.allocation.awareness.force.zone.values", "a,b")
                 .put("cluster.routing.allocation.awareness.attributes", "zone")
                 .put("cluster.routing.allocation.node_concurrent_recoveries", 10)
@@ -817,7 +826,7 @@ public class AwarenessAllocationTests extends ESAllocationTestCase {
     }
 
     public void testUnassignedShardsWithUnbalancedZones() {
-        AllocationService strategy = createAllocationService(Settings.builder()
+        AllocationService strategy = createAllocationService(settingsBuilder()
                 .put("cluster.routing.allocation.node_concurrent_recoveries", 10)
                 .put(ClusterRebalanceAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ALLOW_REBALANCE_SETTING.getKey(), "always")
                 .put("cluster.routing.allocation.awareness.attributes", "zone")
@@ -863,10 +872,10 @@ public class AwarenessAllocationTests extends ESAllocationTestCase {
             if (routing.primary()) {
                 primaryNode = routing.currentNodeId();
             } else if (routing.initializing()) {
-                commands.add(new CancelAllocationCommand(routing.shardId().getIndexName(), routing.id(), routing.currentNodeId(), false));
+                commands.add(new CancelAllocationCommand(routing.shardId(), routing.currentNodeId(), false));
             }
         }
-        commands.add(new MoveAllocationCommand("test", 0, primaryNode, "A-4"));
+        commands.add(new MoveAllocationCommand(new ShardId("test", 0), primaryNode, "A-4"));
 
         routingTable = strategy.reroute(clusterState, commands).routingTable();
         clusterState = ClusterState.builder(clusterState).routingTable(routingTable).build();

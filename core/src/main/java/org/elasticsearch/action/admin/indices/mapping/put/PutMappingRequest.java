@@ -32,12 +32,9 @@ import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentType;
-import org.elasticsearch.index.Index;
 
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.Map;
-import java.util.Objects;
 
 import static org.elasticsearch.action.ValidateActions.addValidationError;
 
@@ -68,7 +65,6 @@ public class PutMappingRequest extends AcknowledgedRequest<PutMappingRequest> im
     private String source;
 
     private boolean updateAllTypes = false;
-    private Index concreteIndex;
 
     public PutMappingRequest() {
     }
@@ -94,10 +90,6 @@ public class PutMappingRequest extends AcknowledgedRequest<PutMappingRequest> im
         } else if (source.isEmpty()) {
             validationException = addValidationError("mapping source is empty", validationException);
         }
-        if (concreteIndex != null && (indices != null && indices.length > 0)) {
-            validationException = addValidationError("either concrete index or unresolved indices can be set, concrete index: ["
-                + concreteIndex + "] and indices: " + Arrays.asList(indices) , validationException);
-        }
         return validationException;
     }
 
@@ -108,22 +100,6 @@ public class PutMappingRequest extends AcknowledgedRequest<PutMappingRequest> im
     public PutMappingRequest indices(String... indices) {
         this.indices = indices;
         return this;
-    }
-
-    /**
-     * Sets a concrete index for this put mapping request.
-     */
-    public PutMappingRequest setConcreteIndex(Index index) {
-        Objects.requireNonNull(indices, "index must not be null");
-        this.concreteIndex = index;
-        return this;
-    }
-
-    /**
-     * Returns a concrete index for this mapping or <code>null</code> if no concrete index is defined
-     */
-    public Index getConcreteIndex() {
-        return concreteIndex;
     }
 
     /**
@@ -283,7 +259,6 @@ public class PutMappingRequest extends AcknowledgedRequest<PutMappingRequest> im
         source = in.readString();
         updateAllTypes = in.readBoolean();
         readTimeout(in);
-        concreteIndex = in.readOptionalWriteable(Index::new);
     }
 
     @Override
@@ -295,6 +270,5 @@ public class PutMappingRequest extends AcknowledgedRequest<PutMappingRequest> im
         out.writeString(source);
         out.writeBoolean(updateAllTypes);
         writeTimeout(out);
-        out.writeOptionalWriteable(concreteIndex);
     }
 }

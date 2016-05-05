@@ -18,7 +18,6 @@
  */
 package org.elasticsearch.bwcompat;
 
-import org.elasticsearch.common.network.NetworkModule;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.node.Node;
 
@@ -28,8 +27,8 @@ public class RecoveryWithUnsupportedIndicesIT extends StaticIndexBackwardCompati
     public void testUpgradeStartClusterOn_0_20_6() throws Exception {
         String indexName = "unsupported-0.20.6";
 
-        logger.info("Checking static index {}", indexName);
-        Settings nodeSettings = prepareBackwardsDataDir(getBwcIndicesPath().resolve(indexName + ".zip"), NetworkModule.HTTP_ENABLED.getKey(), true);
+        logger.info("Checking static index " + indexName);
+        Settings nodeSettings = prepareBackwardsDataDir(getBwcIndicesPath().resolve(indexName + ".zip"), Node.HTTP_ENABLED, true);
         try {
             internalCluster().startNode(nodeSettings);
             fail();

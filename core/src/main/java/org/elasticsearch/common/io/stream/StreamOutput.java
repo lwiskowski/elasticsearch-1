@@ -32,8 +32,11 @@ import org.elasticsearch.Version;
 import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.geo.GeoPoint;
+import org.elasticsearch.common.geo.builders.ShapeBuilder;
 import org.elasticsearch.common.text.Text;
-import org.joda.time.DateTimeZone;
+import org.elasticsearch.index.query.QueryBuilder;
+import org.elasticsearch.index.query.functionscore.ScoreFunctionBuilder;
+import org.elasticsearch.search.rescore.RescoreBuilder.Rescorer;
 import org.joda.time.ReadableInstant;
 
 import java.io.EOFException;
@@ -54,32 +57,19 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * A stream from another node to this node. Technically, it can also be streamed from a byte array but that is mostly for testing.
  *
- * This class's methods are optimized so you can put the methods that read and write a class next to each other and you can scan them
- * visually for differences. That means that most variables should be read and written in a single line so even large objects fit both
- * reading and writing on the screen. It also means that the methods on this class are named very similarly to {@link StreamInput}. Finally
- * it means that the "barrier to entry" for adding new methods to this class is relatively low even though it is a shared class with code
- * everywhere. That being said, this class deals primarily with {@code List}s rather than Arrays. For the most part calls should adapt to
- * lists, either by storing {@code List}s internally or just converting to and from a {@code List} when calling. This comment is repeated
- * on {@link StreamInput}.
  */
 public abstract class StreamOutput extends OutputStream {
 
     private Version version = Version.CURRENT;
 
-    /**
-     * The version of the node on the other side of this stream.
-     */
     public Version getVersion() {
         return this.version;
     }
 
-    /**
-     * Set the version of the node on the other side of this stream.
-     */
-    public void setVersion(Version version) {
+    public StreamOutput setVersion(Version version) {
         this.version = version;
+        return this;
     }
 
     public long position() throws IOException {
@@ -142,19 +132,6 @@ public abstract class StreamOutput extends OutputStream {
             return;
         }
         writeVInt(bytes.length());
-        bytes.writeTo(this);
-    }
-
-    /**
-     * Writes an optional bytes reference including a length header. Use this if you need to differentiate between null and empty bytes
-     * references. Use {@link #writeBytesReference(BytesReference)} and {@link StreamInput#readBytesReference()} if you do not.
-     */
-    public void writeOptionalBytesReference(@Nullable BytesReference bytes) throws IOException {
-        if (bytes == null) {
-            writeVInt(0);
-            return;
-        }
-        writeVInt(bytes.length() + 1);
         bytes.writeTo(this);
     }
 
@@ -253,15 +230,6 @@ public abstract class StreamOutput extends OutputStream {
         }
     }
 
-    public void writeOptionalFloat(@Nullable Float floatValue) throws IOException {
-        if (floatValue == null) {
-            writeBoolean(false);
-        } else {
-            writeBoolean(true);
-            writeFloat(floatValue);
-        }
-    }
-
     public void writeOptionalText(@Nullable Text text) throws IOException {
         if (text == null) {
             writeInt(-1);
@@ -312,14 +280,6 @@ public abstract class StreamOutput extends OutputStream {
         writeLong(Double.doubleToLongBits(v));
     }
 
-    public void writeOptionalDouble(Double v) throws IOException {
-        if (v == null) {
-            writeBoolean(false);
-        } else {
-            writeBoolean(true);
-            writeDouble(v);
-        }
-    }
 
     private static byte ZERO = 0;
     private static byte ONE = 1;
@@ -552,15 +512,6 @@ public abstract class StreamOutput extends OutputStream {
         }
     }
 
-    public void writeOptionalWriteable(@Nullable Writeable writeable) throws IOException {
-        if (writeable != null) {
-            writeBoolean(true);
-            writeable.writeTo(this);
-        } else {
-            writeBoolean(false);
-        }
-    }
-
     public void writeThrowable(Throwable throwable) throws IOException {
         if (throwable == null) {
             writeBoolean(false);
@@ -683,21 +634,30 @@ public abstract class StreamOutput extends OutputStream {
     /**
      * Writes a {@link NamedWriteable} to the current stream, by first writing its name and then the object itself
      */
-    public void writeNamedWriteable(NamedWriteable namedWriteable) throws IOException {
+    void writeNamedWriteable(NamedWriteable namedWriteable) throws IOException {
         writeString(namedWriteable.getWriteableName());
         namedWriteable.writeTo(this);
     }
 
     /**
-     * Write an optional {@link NamedWriteable} to the stream.
+     * Writes a {@link QueryBuilder} to the current stream
      */
-    public void writeOptionalNamedWriteable(@Nullable NamedWriteable namedWriteable) throws IOException {
-        if (namedWriteable == null) {
-            writeBoolean(false);
-        } else {
-            writeBoolean(true);
-            writeNamedWriteable(namedWriteable);
-        }
+    public void writeQuery(QueryBuilder queryBuilder) throws IOException {
+        writeNamedWriteable(queryBuilder);
+    }
+
+    /**
+     * Writes a {@link ShapeBuilder} to the current stream
+     */
+    public void writeShape(ShapeBuilder shapeBuilder) throws IOException {
+        writeNamedWriteable(shapeBuilder);
+    }
+
+    /**
+     * Writes a {@link ScoreFunctionBuilder} to the current stream
+     */
+    public void writeScoreFunction(ScoreFunctionBuilder<?> scoreFunctionBuilder) throws IOException {
+        writeNamedWriteable(scoreFunctionBuilder);
     }
 
     /**
@@ -709,31 +669,19 @@ public abstract class StreamOutput extends OutputStream {
     }
 
     /**
-     * Write a {@linkplain DateTimeZone} to the stream.
-     */
-    public void writeTimeZone(DateTimeZone timeZone) throws IOException {
-        writeString(timeZone.getID());
-    }
-
-    /**
-     * Write an optional {@linkplain DateTimeZone} to the stream.
-     */
-    public void writeOptionalTimeZone(DateTimeZone timeZone) throws IOException {
-        if (timeZone == null) {
-            writeBoolean(false);
-        } else {
-            writeBoolean(true);
-            writeTimeZone(timeZone);
-        }
-    }
-
-    /**
      * Writes a list of {@link Writeable} objects
      */
-    public <T extends Writeable> void writeList(List<T> list) throws IOException {
+    public <T extends Writeable<T>> void writeList(List<T> list) throws IOException {
         writeVInt(list.size());
         for (T obj: list) {
             obj.writeTo(this);
         }
+     }
+
+     /**
+     * Writes a {@link Rescorer} to the current stream
+     */
+    public void writeRescorer(Rescorer rescorer) throws IOException {
+        writeNamedWriteable(rescorer);
     }
 }

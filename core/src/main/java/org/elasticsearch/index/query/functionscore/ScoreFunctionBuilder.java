@@ -31,76 +31,67 @@ import org.elasticsearch.index.query.QueryShardContext;
 import java.io.IOException;
 import java.util.Objects;
 
-public abstract class ScoreFunctionBuilder<FB extends ScoreFunctionBuilder<FB>> implements ToXContent, NamedWriteable {
+public abstract class ScoreFunctionBuilder<FB extends ScoreFunctionBuilder> implements ToXContent, NamedWriteable<FB> {
 
-    private Float weight;
+    protected Float weight;
 
-    /**
-     * Standard empty constructor.
-     */
-    public ScoreFunctionBuilder() {
-    }
-
-    /**
-     * Read from a stream.
-     */
-    public ScoreFunctionBuilder(StreamInput in) throws IOException {
-        weight = in.readOptionalFloat();
-    }
-
-    @Override
-    public final void writeTo(StreamOutput out) throws IOException {
-        out.writeOptionalFloat(weight);
-        doWriteTo(out);
-    }
-
-    /**
-     * Write the subclass's components into the stream.
-     */
-    protected abstract void doWriteTo(StreamOutput out) throws IOException;
-
-    /**
-     * The name of this score function.
-     */
     public abstract String getName();
 
-    /**
-     * Set the weight applied to the function before combining.
-     */
-    @SuppressWarnings("unchecked")
-    public final FB setWeight(float weight) {
+    public ScoreFunctionBuilder setWeight(float weight) {
         this.weight = weight;
-        return (FB) this;
+        return this;
     }
 
-    /**
-     * The weight applied to the function before combining.
-     */
-    public final Float getWeight() {
+    public Float getWeight() {
         return weight;
+    }
+
+    protected void buildWeight(XContentBuilder builder) throws IOException {
+        if (weight != null) {
+            builder.field(FunctionScoreQueryParser.WEIGHT_FIELD.getPreferredName(), weight);
+        }
     }
 
     @Override
     public final XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        if (weight != null) {
-            builder.field(FunctionScoreQueryBuilder.WEIGHT_FIELD.getPreferredName(), weight);
-        }
+        buildWeight(builder);
         doXContent(builder, params);
         return builder;
     }
 
-    /**
-     * Convert this subclass's data into XContent.
-     */
     protected abstract void doXContent(XContentBuilder builder, Params params) throws IOException;
 
     @Override
-    public final String getWriteableName() {
+    public String getWriteableName() {
         return getName();
     }
 
     @Override
-    public final boolean equals(Object obj) {
+    public final void writeTo(StreamOutput out) throws IOException {
+        doWriteTo(out);
+        if (weight == null) {
+            out.writeBoolean(false);
+        } else {
+            out.writeBoolean(true);
+            out.writeFloat(weight);
+        }
+    }
+
+    protected abstract void doWriteTo(StreamOutput out) throws IOException;
+
+    @Override
+    public final FB readFrom(StreamInput in) throws IOException {
+        FB scoreFunctionBuilder = doReadFrom(in);
+        if (in.readBoolean()) {
+            scoreFunctionBuilder.setWeight(in.readFloat());
+        }
+        return scoreFunctionBuilder;
+    }
+
+    protected abstract FB doReadFrom(StreamInput in) throws IOException;
+
+    @Override
+    public boolean equals(Object obj) {
         if (this == obj) {
             return true;
         }
@@ -109,14 +100,10 @@ public abstract class ScoreFunctionBuilder<FB extends ScoreFunctionBuilder<FB>> 
         }
         @SuppressWarnings("unchecked")
         FB other = (FB) obj;
-        return Objects.equals(weight, other.getWeight()) &&
+        return Objects.equals(weight, other.weight) &&
                 doEquals(other);
     }
 
-    /**
-     * Check that two instances of the same subclass of ScoreFunctionBuilder are equal. Implementers don't need to check any fields in
-     * ScoreFunctionBuilder, just fields that they define.
-     */
     protected abstract boolean doEquals(FB functionBuilder);
 
     @Override
@@ -124,14 +111,10 @@ public abstract class ScoreFunctionBuilder<FB extends ScoreFunctionBuilder<FB>> 
         return Objects.hash(getClass(), weight, doHashCode());
     }
 
-    /**
-     * Hashcode for fields defined in this subclass of ScoreFunctionBuilder. Implementers should ignore fields defined in
-     * ScoreFunctionBuilder because they will already be in the hashCode.
-     */
     protected abstract int doHashCode();
 
     /**
-     * Called on a data node, converts this ScoreFunctionBuilder into its corresponding Lucene function object.
+     * Called on a data node, converts a {@link NamedWriteable} score function into its corresponding lucene function object.
      */
     public final ScoreFunction toFunction(QueryShardContext context) throws IOException {
         ScoreFunction scoreFunction = doToFunction(context);
@@ -141,9 +124,5 @@ public abstract class ScoreFunctionBuilder<FB extends ScoreFunctionBuilder<FB>> 
         return new WeightFactorFunction(weight, scoreFunction);
     }
 
-    /**
-     * Build the Lucene ScoreFunction for this builder. Implementers should ignore things defined in ScoreFunctionBuilder like weight as
-     * they will be handled by the function that calls this one.
-     */
     protected abstract ScoreFunction doToFunction(QueryShardContext context) throws IOException;
 }

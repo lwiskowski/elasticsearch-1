@@ -73,7 +73,7 @@ import java.util.Map;
 public final class AnalysisModule extends AbstractModule {
 
     static {
-        Settings build = Settings.builder().put(IndexMetaData.SETTING_VERSION_CREATED, Version.CURRENT)
+        Settings build = Settings.settingsBuilder().put(IndexMetaData.SETTING_VERSION_CREATED, Version.CURRENT)
                 .put(IndexMetaData.SETTING_NUMBER_OF_REPLICAS, 1)
                 .put(IndexMetaData.SETTING_NUMBER_OF_SHARDS, 1)
                 .build();
@@ -160,19 +160,13 @@ public final class AnalysisModule extends AbstractModule {
     @Override
     protected void configure() {
         try {
-            AnalysisRegistry registry = buildRegistry();
-            bind(HunspellService.class).toInstance(registry.getHunspellService());
+            HunspellService service = new HunspellService(environment.settings(), environment, knownDictionaries);
+            AnalysisRegistry registry = new AnalysisRegistry(service, environment, charFilters, tokenFilters, tokenizers, analyzers);
+            bind(HunspellService.class).toInstance(service);
             bind(AnalysisRegistry.class).toInstance(registry);
         } catch (IOException e) {
             throw new ElasticsearchException("failed to load hunspell service", e);
         }
-    }
-
-    /**
-     * Builds an {@link AnalysisRegistry} from the current configuration.
-     */
-    public AnalysisRegistry buildRegistry() throws IOException {
-        return new AnalysisRegistry(new HunspellService(environment.settings(), environment, knownDictionaries), environment, charFilters, tokenFilters, tokenizers, analyzers);
     }
 
     /**

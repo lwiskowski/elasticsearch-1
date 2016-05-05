@@ -48,7 +48,7 @@ public class DefaultShardOperationFailedException implements ShardOperationFaile
     }
 
     public DefaultShardOperationFailedException(ElasticsearchException e) {
-        this.index = e.getIndex() == null ? null : e.getIndex().getName();
+        this.index = e.getIndex();
         this.shardId = e.getShardId().id();
         this.reason = e;
         this.status = e.status();

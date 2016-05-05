@@ -55,8 +55,6 @@ public class GceComputeServiceMock extends GceComputeServiceImpl {
         return this.mockHttpTransport;
     }
 
-    public static final String GCE_METADATA_URL = "http://metadata.google.internal/computeMetadata/v1/instance";
-
     protected HttpTransport configureMock() {
         return new MockHttpTransport() {
             @Override
@@ -82,18 +80,19 @@ public class GceComputeServiceMock extends GceComputeServiceImpl {
         };
     }
 
-    public static String readGoogleInternalJsonResponse(String url) throws IOException {
+    private String readGoogleInternalJsonResponse(String url) throws IOException {
         return readJsonResponse(url, "http://metadata.google.internal/");
     }
 
-    public static String readGoogleApiJsonResponse(String url) throws IOException {
+    private String readGoogleApiJsonResponse(String url) throws IOException {
         return readJsonResponse(url, "https://www.googleapis.com/");
     }
 
-    private static String readJsonResponse(String url, String urlRoot) throws IOException {
+    private String readJsonResponse(String url, String urlRoot) throws IOException {
         // We extract from the url the mock file path we want to use
         String mockFileName = Strings.replace(url, urlRoot, "");
 
+        logger.debug("--> read mock file from [{}]", mockFileName);
         URL resource = GceComputeServiceMock.class.getResource(mockFileName);
         if (resource == null) {
             throw new IOException("can't read [" + url + "] in src/test/resources/org/elasticsearch/discovery/gce");
@@ -107,6 +106,7 @@ public class GceComputeServiceMock extends GceComputeServiceImpl {
                 }
             });
             String response = sb.toString();
+            logger.trace("{}", response);
             return response;
         }
     }

@@ -19,12 +19,10 @@
 package org.elasticsearch.action.percolate;
 
 import org.elasticsearch.ElasticsearchGenerationException;
-import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.ActionRequestValidationException;
 import org.elasticsearch.action.CompositeIndicesRequest;
 import org.elasticsearch.action.IndicesRequest;
 import org.elasticsearch.action.get.GetRequest;
-import org.elasticsearch.action.support.IndicesOptions;
 import org.elasticsearch.action.support.broadcast.BroadcastRequest;
 import org.elasticsearch.client.Requests;
 import org.elasticsearch.common.bytes.BytesArray;
@@ -45,36 +43,49 @@ import static org.elasticsearch.action.ValidateActions.addValidationError;
 /**
  * A request to execute a percolate operation.
  */
-public class PercolateRequest extends ActionRequest<PercolateRequest> implements IndicesRequest.Replaceable {
+public class PercolateRequest extends BroadcastRequest<PercolateRequest> implements CompositeIndicesRequest {
 
-    protected String[] indices;
-    private IndicesOptions indicesOptions = IndicesOptions.strictExpandOpenAndForbidClosed();
     private String documentType;
     private String routing;
     private String preference;
+    private GetRequest getRequest;
     private boolean onlyCount;
 
-    private GetRequest getRequest;
     private BytesReference source;
 
-    public String[] indices() {
-        return indices;
+    private BytesReference docSource;
+
+    // Used internally in order to compute tookInMillis, TransportBroadcastAction itself doesn't allow
+    // to hold it temporarily in an easy way
+    long startTime;
+
+    /**
+     * Constructor only for internal usage.
+     */
+    public PercolateRequest() {
     }
 
-    public final PercolateRequest indices(String... indices) {
-        this.indices = indices;
-        return this;
+    PercolateRequest(PercolateRequest request, BytesReference docSource) {
+        super(request);
+        this.indices = request.indices();
+        this.documentType = request.documentType();
+        this.routing = request.routing();
+        this.preference = request.preference();
+        this.source = request.source;
+        this.docSource = docSource;
+        this.onlyCount = request.onlyCount;
+        this.startTime = request.startTime;
     }
 
-    public IndicesOptions indicesOptions() {
-        return indicesOptions;
+    @Override
+    public List<? extends IndicesRequest> subRequests() {
+        List<IndicesRequest> requests = new ArrayList<>();
+        requests.add(this);
+        if (getRequest != null) {
+            requests.add(getRequest);
+        }
+        return requests;
     }
-
-    public PercolateRequest indicesOptions(IndicesOptions indicesOptions) {
-        this.indicesOptions = indicesOptions;
-        return this;
-    }
-
 
     /**
      * Getter for {@link #documentType(String)}
@@ -234,9 +245,13 @@ public class PercolateRequest extends ActionRequest<PercolateRequest> implements
         return this;
     }
 
+    BytesReference docSource() {
+        return docSource;
+    }
+
     @Override
     public ActionRequestValidationException validate() {
-        ActionRequestValidationException validationException = null;
+        ActionRequestValidationException validationException = super.validate();
         if (documentType == null) {
             validationException = addValidationError("type is missing", validationException);
         }
@@ -252,14 +267,14 @@ public class PercolateRequest extends ActionRequest<PercolateRequest> implements
     @Override
     public void readFrom(StreamInput in) throws IOException {
         super.readFrom(in);
-        indices = in.readStringArray();
-        indicesOptions = IndicesOptions.readIndicesOptions(in);
+        startTime = in.readVLong();
         documentType = in.readString();
         routing = in.readOptionalString();
         preference = in.readOptionalString();
         source = in.readBytesReference();
+        docSource = in.readBytesReference();
         if (in.readBoolean()) {
-            getRequest = new GetRequest();
+            getRequest = new GetRequest(null);
             getRequest.readFrom(in);
         }
         onlyCount = in.readBoolean();
@@ -268,12 +283,12 @@ public class PercolateRequest extends ActionRequest<PercolateRequest> implements
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         super.writeTo(out);
-        out.writeStringArrayNullable(indices);
-        indicesOptions.writeIndicesOptions(out);
+        out.writeVLong(startTime);
         out.writeString(documentType);
         out.writeOptionalString(routing);
         out.writeOptionalString(preference);
         out.writeBytesReference(source);
+        out.writeBytesReference(docSource);
         if (getRequest != null) {
             out.writeBoolean(true);
             getRequest.writeTo(out);

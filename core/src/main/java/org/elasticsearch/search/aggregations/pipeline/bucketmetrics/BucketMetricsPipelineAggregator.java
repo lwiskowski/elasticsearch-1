@@ -21,7 +21,6 @@ package org.elasticsearch.search.aggregations.pipeline.bucketmetrics;
 
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
-import org.elasticsearch.search.DocValueFormat;
 import org.elasticsearch.search.aggregations.Aggregation;
 import org.elasticsearch.search.aggregations.Aggregations;
 import org.elasticsearch.search.aggregations.InternalAggregation;
@@ -33,6 +32,8 @@ import org.elasticsearch.search.aggregations.pipeline.BucketHelpers.GapPolicy;
 import org.elasticsearch.search.aggregations.pipeline.PipelineAggregator;
 import org.elasticsearch.search.aggregations.pipeline.SiblingPipelineAggregator;
 import org.elasticsearch.search.aggregations.support.AggregationPath;
+import org.elasticsearch.search.aggregations.support.format.ValueFormatter;
+import org.elasticsearch.search.aggregations.support.format.ValueFormatterStreams;
 
 import java.io.IOException;
 import java.util.Collections;
@@ -45,18 +46,18 @@ import java.util.Map;
  */
 public abstract class BucketMetricsPipelineAggregator extends SiblingPipelineAggregator {
 
-    protected DocValueFormat format;
+    protected ValueFormatter formatter;
     protected GapPolicy gapPolicy;
 
     public BucketMetricsPipelineAggregator() {
         super();
     }
 
-    protected BucketMetricsPipelineAggregator(String name, String[] bucketsPaths, GapPolicy gapPolicy, DocValueFormat format,
+    protected BucketMetricsPipelineAggregator(String name, String[] bucketsPaths, GapPolicy gapPolicy, ValueFormatter formatter,
             Map<String, Object> metaData) {
         super(name, bucketsPaths, metaData);
         this.gapPolicy = gapPolicy;
-        this.format = format;
+        this.formatter = formatter;
     }
 
     @Override
@@ -66,7 +67,7 @@ public abstract class BucketMetricsPipelineAggregator extends SiblingPipelineAgg
         for (Aggregation aggregation : aggregations) {
             if (aggregation.getName().equals(bucketsPath.get(0))) {
                 bucketsPath = bucketsPath.subList(1, bucketsPath.size());
-                InternalMultiBucketAggregation<?, ?> multiBucketsAgg = (InternalMultiBucketAggregation<?, ?>) aggregation;
+                InternalMultiBucketAggregation multiBucketsAgg = (InternalMultiBucketAggregation) aggregation;
                 List<? extends Bucket> buckets = multiBucketsAgg.getBuckets();
                 for (int i = 0; i < buckets.size(); i++) {
                     Bucket bucket = buckets.get(i);
@@ -111,23 +112,15 @@ public abstract class BucketMetricsPipelineAggregator extends SiblingPipelineAgg
     protected abstract void collectBucketValue(String bucketKey, Double bucketValue);
 
     @Override
-    public final void doReadFrom(StreamInput in) throws IOException {
-        format = in.readNamedWriteable(DocValueFormat.class);
+    public void doReadFrom(StreamInput in) throws IOException {
+        formatter = ValueFormatterStreams.readOptional(in);
         gapPolicy = GapPolicy.readFrom(in);
-        innerReadFrom(in);
-    }
-
-    protected void innerReadFrom(StreamInput in) throws IOException {
     }
 
     @Override
-    public final void doWriteTo(StreamOutput out) throws IOException {
-        out.writeNamedWriteable(format);
+    public void doWriteTo(StreamOutput out) throws IOException {
+        ValueFormatterStreams.writeOptional(formatter, out);
         gapPolicy.writeTo(out);
-        innerWriteTo(out);
-    }
-
-    protected void innerWriteTo(StreamOutput out) throws IOException {
     }
 
 }

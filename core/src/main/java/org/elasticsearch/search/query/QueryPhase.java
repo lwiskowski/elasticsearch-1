@@ -58,6 +58,7 @@ import org.elasticsearch.search.profile.ProfileShardResult;
 import org.elasticsearch.search.profile.Profiler;
 import org.elasticsearch.search.rescore.RescorePhase;
 import org.elasticsearch.search.rescore.RescoreSearchContext;
+import org.elasticsearch.search.sort.SortParseElement;
 import org.elasticsearch.search.sort.TrackScoresParseElement;
 import org.elasticsearch.search.suggest.SuggestPhase;
 
@@ -97,6 +98,7 @@ public class QueryPhase implements SearchPhase {
         parseElements.put("query", new QueryParseElement());
         parseElements.put("post_filter", new PostFilterParseElement());
         parseElements.put("postFilter", new PostFilterParseElement());
+        parseElements.put("sort", new SortParseElement());
         parseElements.put("trackScores", new TrackScoresParseElement());
         parseElements.put("track_scores", new TrackScoresParseElement());
         parseElements.put("min_score", new MinScoreParseElement());
@@ -116,12 +118,6 @@ public class QueryPhase implements SearchPhase {
 
     @Override
     public void execute(SearchContext searchContext) throws QueryPhaseExecutionException {
-        if (searchContext.hasOnlySuggest()) {
-            suggestPhase.execute(searchContext);
-            // TODO: fix this once we can fetch docs for suggestions
-            searchContext.queryResult().topDocs(new TopDocs(0, Lucene.EMPTY_SCORE_DOCS, 0));
-            return;
-        }
         // Pre-process aggregations as late as possible. In the case of a DFS_Q_T_F
         // request, preProcess is called on the DFS phase phase, this is why we pre-process them
         // here to make sure it happens during the QUERY phase
@@ -196,10 +192,10 @@ public class QueryPhase implements SearchPhase {
                 final ScrollContext scrollContext = searchContext.scrollContext();
                 assert (scrollContext != null) == (searchContext.request().scroll() != null);
                 final TopDocsCollector<?> topDocsCollector;
-                ScoreDoc after = null;
+                ScoreDoc lastEmittedDoc;
                 if (searchContext.request().scroll() != null) {
                     numDocs = Math.min(searchContext.size(), totalNumDocs);
-                    after = scrollContext.lastEmittedDoc;
+                    lastEmittedDoc = scrollContext.lastEmittedDoc;
 
                     if (returnsDocsInOrder(query, searchContext.sort())) {
                         if (scrollContext.totalHits == -1) {
@@ -213,7 +209,7 @@ public class QueryPhase implements SearchPhase {
                             if (scrollContext.lastEmittedDoc != null) {
                                 BooleanQuery bq = new BooleanQuery.Builder()
                                     .add(query, BooleanClause.Occur.MUST)
-                                    .add(new MinDocQuery(after.doc + 1), BooleanClause.Occur.FILTER)
+                                    .add(new MinDocQuery(lastEmittedDoc.doc + 1), BooleanClause.Occur.FILTER)
                                     .build();
                                 query = bq;
                             }
@@ -221,7 +217,7 @@ public class QueryPhase implements SearchPhase {
                         }
                     }
                 } else {
-                    after = searchContext.searchAfter();
+                    lastEmittedDoc = null;
                 }
                 if (totalNumDocs == 0) {
                     // top collectors don't like a size of 0
@@ -230,13 +226,13 @@ public class QueryPhase implements SearchPhase {
                 assert numDocs > 0;
                 if (searchContext.sort() != null) {
                     topDocsCollector = TopFieldCollector.create(searchContext.sort(), numDocs,
-                            (FieldDoc) after, true, searchContext.trackScores(), searchContext.trackScores());
+                            (FieldDoc) lastEmittedDoc, true, searchContext.trackScores(), searchContext.trackScores());
                 } else {
                     rescore = !searchContext.rescore().isEmpty();
                     for (RescoreSearchContext rescoreContext : searchContext.rescore()) {
                         numDocs = Math.max(rescoreContext.window(), numDocs);
                     }
-                    topDocsCollector = TopScoreDocCollector.create(numDocs, after);
+                    topDocsCollector = TopScoreDocCollector.create(numDocs, lastEmittedDoc);
                 }
                 collector = topDocsCollector;
                 if (doProfile) {

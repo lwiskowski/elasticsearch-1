@@ -22,6 +22,7 @@ package org.elasticsearch.indices.recovery;
 import org.elasticsearch.common.logging.ESLogger;
 import org.elasticsearch.index.shard.IndexShard;
 import org.elasticsearch.index.translog.Translog;
+import org.elasticsearch.transport.TransportService;
 
 import java.io.IOException;
 
@@ -34,16 +35,15 @@ public class SharedFSRecoverySourceHandler extends RecoverySourceHandler {
     private final IndexShard shard;
     private final StartRecoveryRequest request;
 
-    public SharedFSRecoverySourceHandler(IndexShard shard, RecoveryTargetHandler recoveryTarget, StartRecoveryRequest request, ESLogger
-            logger) {
-        super(shard, recoveryTarget, request, -1, logger);
+    public SharedFSRecoverySourceHandler(IndexShard shard, StartRecoveryRequest request, RecoverySettings recoverySettings, TransportService transportService, ESLogger logger) {
+        super(shard, request, recoverySettings, transportService, logger);
         this.shard = shard;
         this.request = request;
     }
 
     @Override
-    public RecoveryResponse recoverToTarget() throws IOException {
-        boolean engineClosed = false;
+    public RecoveryResponse recoverToTarget() {
+       boolean engineClosed = false;
         try {
             logger.trace("{} recovery [phase1] to {}: skipping phase 1 for shared filesystem", request.shardId(), request.targetNode());
             if (isPrimaryRelocation()) {
@@ -83,4 +83,9 @@ public class SharedFSRecoverySourceHandler extends RecoverySourceHandler {
                 shard.shardId(), request.targetNode());
         return 0;
     }
+
+    private boolean isPrimaryRelocation() {
+        return request.recoveryType() == RecoveryState.Type.RELOCATION && shard.routingEntry().primary();
+    }
+
 }

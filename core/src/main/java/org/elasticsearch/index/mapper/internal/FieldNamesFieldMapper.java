@@ -22,17 +22,16 @@ package org.elasticsearch.index.mapper.internal;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.IndexableField;
-import org.apache.lucene.search.Query;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.lucene.Lucene;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.index.fielddata.FieldDataType;
 import org.elasticsearch.index.mapper.MappedFieldType;
 import org.elasticsearch.index.mapper.Mapper;
 import org.elasticsearch.index.mapper.MapperParsingException;
 import org.elasticsearch.index.mapper.MetadataFieldMapper;
 import org.elasticsearch.index.mapper.ParseContext;
-import org.elasticsearch.index.query.QueryShardContext;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -41,7 +40,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-import static org.elasticsearch.common.xcontent.support.XContentMapValues.lenientNodeBooleanValue;
+import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeBooleanValue;
 
 /**
  * A mapper that indexes the field names of a document under <code>_field_names</code>. This mapper is typically useful in order
@@ -57,7 +56,7 @@ public class FieldNamesFieldMapper extends MetadataFieldMapper {
 
     public static class Defaults {
         public static final String NAME = FieldNamesFieldMapper.NAME;
-
+        
         public static final boolean ENABLED = true;
         public static final MappedFieldType FIELD_TYPE = new FieldNamesFieldType();
 
@@ -87,7 +86,7 @@ public class FieldNamesFieldMapper extends MetadataFieldMapper {
             enabled(index);
             return super.index(index);
         }
-
+        
         public Builder enabled(boolean enabled) {
             this.enabled = enabled;
             return this;
@@ -110,10 +109,10 @@ public class FieldNamesFieldMapper extends MetadataFieldMapper {
 
             for (Iterator<Map.Entry<String, Object>> iterator = node.entrySet().iterator(); iterator.hasNext();) {
                 Map.Entry<String, Object> entry = iterator.next();
-                String fieldName = entry.getKey();
+                String fieldName = Strings.toUnderscoreCase(entry.getKey());
                 Object fieldNode = entry.getValue();
                 if (fieldName.equals("enabled")) {
-                    builder.enabled(lenientNodeBooleanValue(fieldNode));
+                    builder.enabled(nodeBooleanValue(fieldNode));
                     iterator.remove();
                 }
             }
@@ -131,6 +130,7 @@ public class FieldNamesFieldMapper extends MetadataFieldMapper {
         private boolean enabled = Defaults.ENABLED;
 
         public FieldNamesFieldType() {
+            setFieldDataType(new FieldDataType("string"));
         }
 
         protected FieldNamesFieldType(FieldNamesFieldType ref) {
@@ -181,11 +181,16 @@ public class FieldNamesFieldMapper extends MetadataFieldMapper {
         }
 
         @Override
-        public Query termQuery(Object value, QueryShardContext context) {
-            if (isEnabled() == false) {
-                throw new IllegalStateException("Cannot run [exists] queries if the [_field_names] field is disabled");
+        public String value(Object value) {
+            if (value == null) {
+                return null;
             }
-            return super.termQuery(value, context);
+            return value.toString();
+        }
+
+        @Override
+        public boolean useTermQueryWithQueryString() {
+            return true;
         }
     }
 
@@ -286,12 +291,12 @@ public class FieldNamesFieldMapper extends MetadataFieldMapper {
         if (includeDefaults == false && fieldType().isEnabled() == Defaults.ENABLED) {
             return builder;
         }
-
+        
         builder.startObject(NAME);
         if (includeDefaults || fieldType().isEnabled() != Defaults.ENABLED) {
             builder.field("enabled", fieldType().isEnabled());
         }
-
+        
         builder.endObject();
         return builder;
     }

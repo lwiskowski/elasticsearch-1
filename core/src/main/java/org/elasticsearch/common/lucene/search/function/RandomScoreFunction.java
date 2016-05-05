@@ -25,8 +25,6 @@ import org.elasticsearch.index.fielddata.AtomicFieldData;
 import org.elasticsearch.index.fielddata.IndexFieldData;
 import org.elasticsearch.index.fielddata.SortedBinaryDocValues;
 
-import java.util.Objects;
-
 /**
  * Pseudo randomly generate a score for each {@link LeafScoreFunction#score}.
  */
@@ -93,10 +91,5 @@ public class RandomScoreFunction extends ScoreFunction {
         RandomScoreFunction randomScoreFunction = (RandomScoreFunction) other;
         return this.originalSeed == randomScoreFunction.originalSeed &&
                 this.saltedSeed == randomScoreFunction.saltedSeed;
-    }
-
-    @Override
-    protected int doHashCode() {
-        return Objects.hash(originalSeed, saltedSeed);
     }
 }

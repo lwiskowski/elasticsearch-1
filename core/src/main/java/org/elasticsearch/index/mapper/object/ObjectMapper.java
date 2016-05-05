@@ -49,7 +49,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-import static org.elasticsearch.common.xcontent.support.XContentMapValues.lenientNodeBooleanValue;
+import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeBooleanValue;
+import static org.elasticsearch.index.mapper.MapperBuilders.object;
 
 /**
  *
@@ -175,7 +176,7 @@ public class ObjectMapper extends Mapper implements AllFieldMapper.IncludeInAll,
             parseNested(name, node, builder);
             for (Iterator<Map.Entry<String, Object>> iterator = node.entrySet().iterator(); iterator.hasNext();) {
                 Map.Entry<String, Object> entry = iterator.next();
-                String fieldName = entry.getKey();
+                String fieldName = Strings.toUnderscoreCase(entry.getKey());
                 Object fieldNode = entry.getValue();
                 if (parseObjectOrDocumentTypeProperties(fieldName, fieldNode, parserContext, builder)) {
                     iterator.remove();
@@ -190,11 +191,11 @@ public class ObjectMapper extends Mapper implements AllFieldMapper.IncludeInAll,
                 if (value.equalsIgnoreCase("strict")) {
                     builder.dynamic(Dynamic.STRICT);
                 } else {
-                    builder.dynamic(lenientNodeBooleanValue(fieldNode) ? Dynamic.TRUE : Dynamic.FALSE);
+                    builder.dynamic(nodeBooleanValue(fieldNode) ? Dynamic.TRUE : Dynamic.FALSE);
                 }
                 return true;
             } else if (fieldName.equals("enabled")) {
-                builder.enabled(lenientNodeBooleanValue(fieldNode));
+                builder.enabled(nodeBooleanValue(fieldNode));
                 return true;
             } else if (fieldName.equals("properties")) {
                 if (fieldNode instanceof Collection && ((Collection) fieldNode).isEmpty()) {
@@ -206,7 +207,7 @@ public class ObjectMapper extends Mapper implements AllFieldMapper.IncludeInAll,
                 }
                 return true;
             } else if (fieldName.equals("include_in_all")) {
-                builder.includeInAll(lenientNodeBooleanValue(fieldNode));
+                builder.includeInAll(nodeBooleanValue(fieldNode));
                 return true;
             }
             return false;
@@ -229,12 +230,12 @@ public class ObjectMapper extends Mapper implements AllFieldMapper.IncludeInAll,
             }
             fieldNode = node.get("include_in_parent");
             if (fieldNode != null) {
-                nestedIncludeInParent = lenientNodeBooleanValue(fieldNode);
+                nestedIncludeInParent = nodeBooleanValue(fieldNode);
                 node.remove("include_in_parent");
             }
             fieldNode = node.get("include_in_root");
             if (fieldNode != null) {
-                nestedIncludeInRoot = lenientNodeBooleanValue(fieldNode);
+                nestedIncludeInRoot = nodeBooleanValue(fieldNode);
                 node.remove("include_in_root");
             }
             if (nested) {
@@ -299,7 +300,7 @@ public class ObjectMapper extends Mapper implements AllFieldMapper.IncludeInAll,
         }
 
         protected Builder createBuilder(String name) {
-            return new Builder(name);
+            return object(name);
         }
     }
 

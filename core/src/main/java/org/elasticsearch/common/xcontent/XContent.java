@@ -41,28 +41,13 @@ public interface XContent {
     /**
      * Creates a new generator using the provided output stream.
      */
-    default XContentGenerator createGenerator(OutputStream os) throws IOException {
-        return createGenerator(os, null, true);
-    }
+    XContentGenerator createGenerator(OutputStream os) throws IOException;
 
     /**
-     * Creates a new generator using the provided output stream and some
-     * inclusive filters. Same as createGenerator(os, filters, true).
+     * Creates a new generator using the provided output stream and some filters.
      */
-    default XContentGenerator createGenerator(OutputStream os, String[] filters) throws IOException {
-        return createGenerator(os, filters, true);
-    }
+    XContentGenerator createGenerator(OutputStream os, String[] filters) throws IOException;
 
-    /**
-     * Creates a new generator using the provided output stream and some
-     * filters.
-     *
-     * @param inclusive
-     *            If true only paths matching a filter will be included in
-     *            output. If false no path matching a filter will be included in
-     *            output
-     */
-    XContentGenerator createGenerator(OutputStream os, String[] filters, boolean inclusive) throws IOException;
     /**
      * Creates a parser over the provided string content.
      */
@@ -92,5 +77,4 @@ public interface XContent {
      * Creates a parser over the provided reader.
      */
     XContentParser createParser(Reader reader) throws IOException;
-
 }

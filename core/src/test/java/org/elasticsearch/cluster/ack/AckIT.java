@@ -38,8 +38,6 @@ import org.elasticsearch.cluster.routing.ShardRoutingState;
 import org.elasticsearch.cluster.routing.allocation.command.MoveAllocationCommand;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.discovery.DiscoverySettings;
-import org.elasticsearch.index.Index;
-import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.test.ESIntegTestCase;
 import org.elasticsearch.test.ESIntegTestCase.ClusterScope;
 
@@ -47,6 +45,7 @@ import java.util.concurrent.TimeUnit;
 
 import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_NUMBER_OF_REPLICAS;
 import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_NUMBER_OF_SHARDS;
+import static org.elasticsearch.common.settings.Settings.settingsBuilder;
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.anyOf;
 import static org.hamcrest.Matchers.equalTo;
@@ -61,7 +60,7 @@ public class AckIT extends ESIntegTestCase {
         //otherwise the operation is most likely acknowledged even if it doesn't support ack
         return Settings.builder().put(super.nodeSettings(nodeOrdinal))
                 .put(DiscoverySettings.PUBLISH_TIMEOUT_SETTING.getKey(), 0).build();
-    }
+}
 
     public void testUpdateSettingsAcknowledgement() {
         createIndex("test");
@@ -84,15 +83,13 @@ public class AckIT extends ESIntegTestCase {
 
     public void testClusterRerouteAcknowledgement() throws InterruptedException {
         assertAcked(prepareCreate("test").setSettings(Settings.builder()
-                .put(indexSettings())
-                .put(SETTING_NUMBER_OF_SHARDS, between(cluster().numDataNodes(), DEFAULT_MAX_NUM_SHARDS))
-                .put(SETTING_NUMBER_OF_REPLICAS, 0)
+                        .put(indexSettings())
+                        .put(SETTING_NUMBER_OF_SHARDS, between(cluster().numDataNodes(), DEFAULT_MAX_NUM_SHARDS))
+                        .put(SETTING_NUMBER_OF_REPLICAS, 0)
         ));
         ensureGreen();
 
         MoveAllocationCommand moveAllocationCommand = getAllocationCommand();
-        final Index index = client().admin().cluster().prepareState().get().getState().metaData().index("test").getIndex();
-        final ShardId commandShard = new ShardId(index, moveAllocationCommand.shardId());
 
         assertAcked(client().admin().cluster().prepareReroute().add(moveAllocationCommand));
 
@@ -100,7 +97,7 @@ public class AckIT extends ESIntegTestCase {
             ClusterState clusterState = getLocalClusterState(client);
             for (ShardRouting shardRouting : clusterState.getRoutingNodes().routingNodeIter(moveAllocationCommand.fromNode())) {
                 //if the shard that we wanted to move is still on the same node, it must be relocating
-                if (shardRouting.shardId().equals(commandShard)) {
+                if (shardRouting.shardId().equals(moveAllocationCommand.shardId())) {
                     assertThat(shardRouting.relocating(), equalTo(true));
                 }
 
@@ -108,7 +105,7 @@ public class AckIT extends ESIntegTestCase {
 
             boolean found = false;
             for (ShardRouting shardRouting : clusterState.getRoutingNodes().routingNodeIter(moveAllocationCommand.toNode())) {
-                if (shardRouting.shardId().equals(commandShard)) {
+                if (shardRouting.shardId().equals(moveAllocationCommand.shardId())) {
                     assertThat(shardRouting.state(), anyOf(equalTo(ShardRoutingState.INITIALIZING), equalTo(ShardRoutingState.STARTED)));
                     found = true;
                     break;
@@ -120,7 +117,7 @@ public class AckIT extends ESIntegTestCase {
 
     public void testClusterRerouteNoAcknowledgement() throws InterruptedException {
         client().admin().indices().prepareCreate("test")
-                .setSettings(Settings.builder()
+                .setSettings(settingsBuilder()
                         .put(SETTING_NUMBER_OF_SHARDS, between(cluster().numDataNodes(), DEFAULT_MAX_NUM_SHARDS))
                         .put(SETTING_NUMBER_OF_REPLICAS, 0)).get();
         ensureGreen();
@@ -133,15 +130,12 @@ public class AckIT extends ESIntegTestCase {
 
     public void testClusterRerouteAcknowledgementDryRun() throws InterruptedException {
         client().admin().indices().prepareCreate("test")
-                .setSettings(Settings.builder()
+                .setSettings(settingsBuilder()
                         .put(SETTING_NUMBER_OF_SHARDS, between(cluster().numDataNodes(), DEFAULT_MAX_NUM_SHARDS))
                         .put(SETTING_NUMBER_OF_REPLICAS, 0)).get();
         ensureGreen();
 
         MoveAllocationCommand moveAllocationCommand = getAllocationCommand();
-
-        final Index index = client().admin().cluster().prepareState().get().getState().metaData().index("test").getIndex();
-        final ShardId commandShard = new ShardId(index, moveAllocationCommand.shardId());
 
         assertAcked(client().admin().cluster().prepareReroute().setDryRun(true).add(moveAllocationCommand));
 
@@ -151,7 +145,7 @@ public class AckIT extends ESIntegTestCase {
         boolean found = false;
         for (ShardRouting shardRouting : clusterStateResponse.getState().getRoutingNodes().routingNodeIter(moveAllocationCommand.fromNode())) {
             //the shard that we wanted to move is still on the same node, as we had dryRun flag
-            if (shardRouting.shardId().equals(commandShard)) {
+            if (shardRouting.shardId().equals(moveAllocationCommand.shardId())) {
                 assertThat(shardRouting.started(), equalTo(true));
                 found = true;
                 break;
@@ -160,7 +154,7 @@ public class AckIT extends ESIntegTestCase {
         assertThat(found, equalTo(true));
 
         for (ShardRouting shardRouting : clusterStateResponse.getState().getRoutingNodes().routingNodeIter(moveAllocationCommand.toNode())) {
-            if (shardRouting.shardId().equals(commandShard)) {
+            if (shardRouting.shardId().equals(moveAllocationCommand.shardId())) {
                 fail("shard [" + shardRouting + "] shouldn't be on node [" + moveAllocationCommand.toString() + "]");
             }
         }
@@ -168,7 +162,7 @@ public class AckIT extends ESIntegTestCase {
 
     public void testClusterRerouteNoAcknowledgementDryRun() throws InterruptedException {
         client().admin().indices().prepareCreate("test")
-                .setSettings(Settings.builder()
+                .setSettings(settingsBuilder()
                         .put(SETTING_NUMBER_OF_SHARDS, between(cluster().numDataNodes(), DEFAULT_MAX_NUM_SHARDS))
                         .put(SETTING_NUMBER_OF_REPLICAS, 0)).get();
         ensureGreen();
@@ -205,7 +199,7 @@ public class AckIT extends ESIntegTestCase {
         assertNotNull(shardToBeMoved);
 
         logger.info("==> going to move shard [{}] from [{}] to [{}]", shardToBeMoved, fromNodeId, toNodeId);
-        return new MoveAllocationCommand(shardToBeMoved.getIndexName(), shardToBeMoved.id(), fromNodeId, toNodeId);
+        return new MoveAllocationCommand(shardToBeMoved.shardId(), fromNodeId, toNodeId);
     }
 
     public void testIndicesAliasesAcknowledgement() {
@@ -269,7 +263,7 @@ public class AckIT extends ESIntegTestCase {
         createIndex("test");
         ensureGreen();
 
-        assertAcked(client().admin().indices().preparePutMapping("test").setType("test").setSource("field", "type=keyword"));
+        assertAcked(client().admin().indices().preparePutMapping("test").setType("test").setSource("field", "type=string,index=not_analyzed"));
 
         for (Client client : clients()) {
             assertThat(getLocalClusterState(client).metaData().indices().get("test").mapping("test"), notNullValue());
@@ -280,7 +274,7 @@ public class AckIT extends ESIntegTestCase {
         createIndex("test");
         ensureGreen();
 
-        PutMappingResponse putMappingResponse = client().admin().indices().preparePutMapping("test").setType("test").setSource("field", "type=keyword").setTimeout("0s").get();
+        PutMappingResponse putMappingResponse = client().admin().indices().preparePutMapping("test").setType("test").setSource("field", "type=string,index=not_analyzed").setTimeout("0s").get();
         assertThat(putMappingResponse.isAcknowledged(), equalTo(false));
     }
 

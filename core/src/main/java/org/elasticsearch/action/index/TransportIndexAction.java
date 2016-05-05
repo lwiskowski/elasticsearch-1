@@ -21,13 +21,14 @@ package org.elasticsearch.action.index;
 
 import org.elasticsearch.ExceptionsHelper;
 import org.elasticsearch.action.ActionListener;
+import org.elasticsearch.action.RoutingMissingException;
 import org.elasticsearch.action.admin.indices.create.CreateIndexRequest;
 import org.elasticsearch.action.admin.indices.create.CreateIndexResponse;
 import org.elasticsearch.action.admin.indices.create.TransportCreateIndexAction;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.AutoCreateIndex;
-import org.elasticsearch.action.support.replication.ReplicationOperation;
 import org.elasticsearch.action.support.replication.TransportReplicationAction;
+import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.action.index.MappingUpdatedAction;
 import org.elasticsearch.cluster.action.shard.ShardStateAction;
@@ -35,7 +36,6 @@ import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.metadata.MappingMetaData;
 import org.elasticsearch.cluster.metadata.MetaData;
-import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.collect.Tuple;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
@@ -48,7 +48,6 @@ import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.index.translog.Translog;
 import org.elasticsearch.indices.IndexAlreadyExistsException;
 import org.elasticsearch.indices.IndicesService;
-import org.elasticsearch.tasks.Task;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
 
@@ -69,7 +68,6 @@ public class TransportIndexAction extends TransportReplicationAction<IndexReques
     private final TransportCreateIndexAction createIndexAction;
 
     private final ClusterService clusterService;
-    private final MappingUpdatedAction mappingUpdatedAction;
 
     @Inject
     public TransportIndexAction(Settings settings, TransportService transportService, ClusterService clusterService,
@@ -77,9 +75,8 @@ public class TransportIndexAction extends TransportReplicationAction<IndexReques
                                 TransportCreateIndexAction createIndexAction, MappingUpdatedAction mappingUpdatedAction,
                                 ActionFilters actionFilters, IndexNameExpressionResolver indexNameExpressionResolver,
                                 AutoCreateIndex autoCreateIndex) {
-        super(settings, IndexAction.NAME, transportService, clusterService, indicesService, threadPool, shardStateAction,
-            actionFilters, indexNameExpressionResolver, IndexRequest::new, IndexRequest::new, ThreadPool.Names.INDEX);
-        this.mappingUpdatedAction = mappingUpdatedAction;
+        super(settings, IndexAction.NAME, transportService, clusterService, indicesService, threadPool, shardStateAction, mappingUpdatedAction,
+                actionFilters, indexNameExpressionResolver, IndexRequest::new, IndexRequest::new, ThreadPool.Names.INDEX);
         this.createIndexAction = createIndexAction;
         this.autoCreateIndex = autoCreateIndex;
         this.allowIdGeneration = settings.getAsBoolean("action.allow_id_generation", true);
@@ -87,19 +84,19 @@ public class TransportIndexAction extends TransportReplicationAction<IndexReques
     }
 
     @Override
-    protected void doExecute(Task task, final IndexRequest request, final ActionListener<IndexResponse> listener) {
+    protected void doExecute(final IndexRequest request, final ActionListener<IndexResponse> listener) {
         // if we don't have a master, we don't have metadata, that's fine, let it find a master using create index API
         ClusterState state = clusterService.state();
         if (autoCreateIndex.shouldAutoCreate(request.index(), state)) {
-            CreateIndexRequest createIndexRequest = new CreateIndexRequest();
+            CreateIndexRequest createIndexRequest = new CreateIndexRequest(request);
             createIndexRequest.index(request.index());
             createIndexRequest.mapping(request.type());
             createIndexRequest.cause("auto(index api)");
             createIndexRequest.masterNodeTimeout(request.timeout());
-            createIndexAction.execute(task, createIndexRequest, new ActionListener<CreateIndexResponse>() {
+            createIndexAction.execute(createIndexRequest, new ActionListener<CreateIndexResponse>() {
                 @Override
                 public void onResponse(CreateIndexResponse result) {
-                    innerExecute(task, request, listener);
+                    innerExecute(request, listener);
                 }
 
                 @Override
@@ -107,7 +104,7 @@ public class TransportIndexAction extends TransportReplicationAction<IndexReques
                     if (ExceptionsHelper.unwrapCause(e) instanceof IndexAlreadyExistsException) {
                         // we have the index, do it
                         try {
-                            innerExecute(task, request, listener);
+                            innerExecute(request, listener);
                         } catch (Throwable e1) {
                             listener.onFailure(e1);
                         }
@@ -117,22 +114,23 @@ public class TransportIndexAction extends TransportReplicationAction<IndexReques
                 }
             });
         } else {
-            innerExecute(task, request, listener);
+            innerExecute(request, listener);
         }
     }
 
     @Override
-    protected void resolveRequest(MetaData metaData, IndexMetaData indexMetaData, IndexRequest request) {
-        MappingMetaData mappingMd =indexMetaData.mappingOrDefault(request.type());
-        request.resolveRouting(metaData);
-        request.process(mappingMd, allowIdGeneration, indexMetaData.getIndex().getName());
-        ShardId shardId = clusterService.operationRouting().shardId(clusterService.state(),
-            indexMetaData.getIndex().getName(), request.id(), request.routing());
+    protected void resolveRequest(MetaData metaData, String concreteIndex, IndexRequest request) {
+        MappingMetaData mappingMd = null;
+        if (metaData.hasIndex(concreteIndex)) {
+            mappingMd = metaData.index(concreteIndex).mappingOrDefault(request.type());
+        }
+        request.process(metaData, mappingMd, allowIdGeneration, concreteIndex);
+        ShardId shardId = clusterService.operationRouting().shardId(clusterService.state(), concreteIndex, request.id(), request.routing());
         request.setShardId(shardId);
     }
 
-    private void innerExecute(Task task, final IndexRequest request, final ActionListener<IndexResponse> listener) {
-        super.doExecute(task, request, listener);
+    private void innerExecute(final IndexRequest request, final ActionListener<IndexResponse> listener) {
+        super.doExecute(request, listener);
     }
 
     @Override
@@ -141,7 +139,16 @@ public class TransportIndexAction extends TransportReplicationAction<IndexReques
     }
 
     @Override
-    protected Tuple<IndexResponse, IndexRequest> shardOperationOnPrimary(IndexRequest request) throws Exception {
+    protected Tuple<IndexResponse, IndexRequest> shardOperationOnPrimary(MetaData metaData, IndexRequest request) throws Throwable {
+
+        // validate, if routing is required, that we got routing
+        IndexMetaData indexMetaData = metaData.index(request.shardId().getIndex());
+        MappingMetaData mappingMd = indexMetaData.mappingOrDefault(request.type());
+        if (mappingMd != null && mappingMd.routing().required()) {
+            if (request.routing() == null) {
+                throw new RoutingMissingException(request.shardId().getIndex(), request.type(), request.id());
+            }
+        }
 
         IndexService indexService = indicesService.indexServiceSafe(request.shardId().getIndex());
         IndexShard indexShard = indexService.getShard(request.shardId().id());
@@ -169,7 +176,7 @@ public class TransportIndexAction extends TransportReplicationAction<IndexReques
      */
     public static Engine.Index executeIndexRequestOnReplica(IndexRequest request, IndexShard indexShard) {
         final ShardId shardId = indexShard.shardId();
-        SourceToParse sourceToParse = SourceToParse.source(SourceToParse.Origin.REPLICA, request.source()).index(shardId.getIndexName()).type(request.type()).id(request.id())
+        SourceToParse sourceToParse = SourceToParse.source(SourceToParse.Origin.REPLICA, request.source()).index(shardId.getIndex()).type(request.type()).id(request.id())
                 .routing(request.routing()).parent(request.parent()).timestamp(request.timestamp()).ttl(request.ttl());
 
         final Engine.Index operation = indexShard.prepareIndexOnReplica(sourceToParse, request.version(), request.versionType());
@@ -190,18 +197,19 @@ public class TransportIndexAction extends TransportReplicationAction<IndexReques
 
     /**
      * Execute the given {@link IndexRequest} on a primary shard, throwing a
-     * {@link ReplicationOperation.RetryOnPrimaryException} if the operation needs to be re-tried.
+     * {@link RetryOnPrimaryException} if the operation needs to be re-tried.
      */
-    public static WriteResult<IndexResponse> executeIndexRequestOnPrimary(IndexRequest request, IndexShard indexShard, MappingUpdatedAction mappingUpdatedAction) throws Exception {
+    public static WriteResult<IndexResponse> executeIndexRequestOnPrimary(IndexRequest request, IndexShard indexShard, MappingUpdatedAction mappingUpdatedAction) throws Throwable {
         Engine.Index operation = prepareIndexOperationOnPrimary(request, indexShard);
         Mapping update = operation.parsedDoc().dynamicMappingsUpdate();
         final ShardId shardId = indexShard.shardId();
         if (update != null) {
-            mappingUpdatedAction.updateMappingOnMaster(shardId.getIndex(), request.type(), update);
+            final String indexName = shardId.getIndex();
+            mappingUpdatedAction.updateMappingOnMasterSynchronously(indexName, request.type(), update);
             operation = prepareIndexOperationOnPrimary(request, indexShard);
             update = operation.parsedDoc().dynamicMappingsUpdate();
             if (update != null) {
-                throw new ReplicationOperation.RetryOnPrimaryException(shardId,
+                throw new RetryOnPrimaryException(shardId,
                     "Dynamic mappings are not available on the node that holds the primary yet");
             }
         }

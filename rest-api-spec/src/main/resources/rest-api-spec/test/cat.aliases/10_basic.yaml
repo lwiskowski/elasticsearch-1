@@ -60,7 +60,7 @@
                     type_1:
                         properties:
                             foo:
-                                type: text
+                                type: string
 
   - do:
         indices.put_alias:

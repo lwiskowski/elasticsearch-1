@@ -37,7 +37,6 @@ import org.elasticsearch.indices.breaker.CircuitBreakerService;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Utility class to build global ordinals.
@@ -64,14 +63,14 @@ public enum GlobalOrdinalsBuilder {
 
         if (logger.isDebugEnabled()) {
             logger.debug(
-                    "global-ordinals [{}][{}] took [{}]",
+                    "Global-ordinals[{}][{}] took {} ms",
                     indexFieldData.getFieldName(),
                     ordinalMap.getValueCount(),
-                    new TimeValue(System.nanoTime() - startTimeNS, TimeUnit.NANOSECONDS)
+                    TimeValue.nsecToMSec(System.nanoTime() - startTimeNS)
             );
         }
         return new InternalGlobalOrdinalsIndexFieldData(indexSettings, indexFieldData.getFieldName(),
-                atomicFD, ordinalMap, memorySizeInBytes
+                indexFieldData.getFieldDataType(), atomicFD, ordinalMap, memorySizeInBytes
         );
     }
 
@@ -105,7 +104,7 @@ public enum GlobalOrdinalsBuilder {
         }
         final OrdinalMap ordinalMap = OrdinalMap.build(null, subs, PackedInts.DEFAULT);
         return new InternalGlobalOrdinalsIndexFieldData(indexSettings, indexFieldData.getFieldName(),
-                atomicFD, ordinalMap, 0
+                indexFieldData.getFieldDataType(), atomicFD, ordinalMap, 0
         );
     }
 

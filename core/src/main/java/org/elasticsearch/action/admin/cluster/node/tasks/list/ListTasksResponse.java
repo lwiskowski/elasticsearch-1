@@ -19,16 +19,16 @@
 
 package org.elasticsearch.action.admin.cluster.node.tasks.list;
 
+import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
 import org.elasticsearch.action.FailedNodeException;
 import org.elasticsearch.action.TaskOperationFailure;
 import org.elasticsearch.action.support.tasks.BaseTasksResponse;
 import org.elasticsearch.cluster.node.DiscoveryNode;
-import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.XContentBuilder;
-import org.elasticsearch.tasks.TaskId;
+import org.elasticsearch.common.xcontent.XContentFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -38,7 +38,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 /**
  * Returns the list of tasks currently running on the nodes
@@ -49,13 +48,10 @@ public class ListTasksResponse extends BaseTasksResponse implements ToXContent {
 
     private Map<DiscoveryNode, List<TaskInfo>> nodes;
 
-    private List<TaskGroup> groups;
-
     public ListTasksResponse() {
     }
 
-    public ListTasksResponse(List<TaskInfo> tasks, List<TaskOperationFailure> taskFailures,
-            List<? extends FailedNodeException> nodeFailures) {
+    public ListTasksResponse(List<TaskInfo> tasks, List<TaskOperationFailure> taskFailures, List<? extends FailedNodeException> nodeFailures) {
         super(taskFailures, nodeFailures);
         this.tasks = tasks == null ? Collections.emptyList() : Collections.unmodifiableList(new ArrayList<>(tasks));
     }
@@ -99,41 +95,6 @@ public class ListTasksResponse extends BaseTasksResponse implements ToXContent {
         return nodeTasks;
     }
 
-    public List<TaskGroup> getTaskGroups() {
-        if (groups == null) {
-            buildTaskGroups();
-        }
-        return groups;
-    }
-
-    private void buildTaskGroups() {
-        Map<TaskId, TaskGroup.Builder> taskGroups = new HashMap<>();
-        List<TaskGroup.Builder> topLevelTasks = new ArrayList<>();
-        // First populate all tasks
-        for (TaskInfo taskInfo : this.tasks) {
-            taskGroups.put(taskInfo.getTaskId(), TaskGroup.builder(taskInfo));
-        }
-
-        // Now go through all task group builders and add children to their parents
-        for (TaskGroup.Builder taskGroup : taskGroups.values()) {
-            TaskId parentTaskId = taskGroup.getTaskInfo().getParentTaskId();
-            if (parentTaskId.isSet()) {
-                TaskGroup.Builder parentTask = taskGroups.get(parentTaskId);
-                if (parentTask != null) {
-                    // we found parent in the list of tasks - add it to the parent list
-                    parentTask.addGroup(taskGroup);
-                } else {
-                    // we got zombie or the parent was filtered out - add it to the the top task list
-                    topLevelTasks.add(taskGroup);
-                }
-            } else {
-                // top level task - add it to the top task list
-                topLevelTasks.add(taskGroup);
-            }
-        }
-        this.groups = Collections.unmodifiableList(topLevelTasks.stream().map(TaskGroup.Builder::build).collect(Collectors.toList()));
-    }
-
     public List<TaskInfo> getTasks() {
         return tasks;
     }
@@ -143,69 +104,56 @@ public class ListTasksResponse extends BaseTasksResponse implements ToXContent {
         if (getTaskFailures() != null && getTaskFailures().size() > 0) {
             builder.startArray("task_failures");
             for (TaskOperationFailure ex : getTaskFailures()){
-                builder.startObject();
                 builder.value(ex);
-                builder.endObject();
             }
             builder.endArray();
         }
 
         if (getNodeFailures() != null && getNodeFailures().size() > 0) {
             builder.startArray("node_failures");
-            for (FailedNodeException ex : getNodeFailures()) {
-                builder.startObject();
-                ex.toXContent(builder, params);
-                builder.endObject();
+            for (FailedNodeException ex : getNodeFailures()){
+                builder.value(ex);
             }
             builder.endArray();
         }
-        String groupBy = params.param("group_by", "nodes");
-        if ("nodes".equals(groupBy)) {
-            builder.startObject("nodes");
-            for (Map.Entry<DiscoveryNode, List<TaskInfo>> entry : getPerNodeTasks().entrySet()) {
-                DiscoveryNode node = entry.getKey();
-                builder.startObject(node.getId());
-                builder.field("name", node.getName());
-                builder.field("transport_address", node.getAddress().toString());
-                builder.field("host", node.getHostName());
-                builder.field("ip", node.getAddress());
 
-                builder.startArray("roles");
-                for (DiscoveryNode.Role role : node.getRoles()) {
-                    builder.value(role.getRoleName());
-                }
-                builder.endArray();
+        builder.startObject("nodes");
+        for (Map.Entry<DiscoveryNode, List<TaskInfo>> entry : getPerNodeTasks().entrySet()) {
+            DiscoveryNode node = entry.getKey();
+            builder.startObject(node.getId(), XContentBuilder.FieldCaseConversion.NONE);
+            builder.field("name", node.name());
+            builder.field("transport_address", node.address().toString());
+            builder.field("host", node.getHostName());
+            builder.field("ip", node.getAddress());
 
-                if (!node.getAttributes().isEmpty()) {
-                    builder.startObject("attributes");
-                    for (Map.Entry<String, String> attrEntry : node.getAttributes().entrySet()) {
-                        builder.field(attrEntry.getKey(), attrEntry.getValue());
-                    }
-                    builder.endObject();
+            if (!node.attributes().isEmpty()) {
+                builder.startObject("attributes");
+                for (ObjectObjectCursor<String, String> attr : node.attributes()) {
+                    builder.field(attr.key, attr.value, XContentBuilder.FieldCaseConversion.NONE);
                 }
-                builder.startObject("tasks");
-                for(TaskInfo task : entry.getValue()) {
-                    builder.startObject(task.getTaskId().toString());
-                    task.toXContent(builder, params);
-                    builder.endObject();
-                }
-                builder.endObject();
                 builder.endObject();
             }
-        } else if ("parents".equals(groupBy)) {
-            builder.startObject("tasks");
-            for (TaskGroup group : getTaskGroups()) {
-                builder.startObject(group.getTaskInfo().getTaskId().toString());
-                group.toXContent(builder, params);
-                builder.endObject();
+            builder.startArray("tasks");
+            for(TaskInfo task : entry.getValue()) {
+                task.toXContent(builder, params);
             }
+            builder.endArray();
             builder.endObject();
         }
+        builder.endObject();
         return builder;
     }
 
     @Override
     public String toString() {
-        return Strings.toString(this);
+        try {
+            XContentBuilder builder = XContentFactory.jsonBuilder().prettyPrint();
+            builder.startObject();
+            toXContent(builder, EMPTY_PARAMS);
+            builder.endObject();
+            return builder.string();
+        } catch (IOException e) {
+            return "{ \"error\" : \"" + e.getMessage() + "\"}";
+        }
     }
 }

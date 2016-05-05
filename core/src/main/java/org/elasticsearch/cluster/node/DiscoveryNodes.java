@@ -52,20 +52,16 @@ public class DiscoveryNodes extends AbstractDiffable<DiscoveryNodes> implements 
     private final ImmutableOpenMap<String, DiscoveryNode> nodes;
     private final ImmutableOpenMap<String, DiscoveryNode> dataNodes;
     private final ImmutableOpenMap<String, DiscoveryNode> masterNodes;
-    private final ImmutableOpenMap<String, DiscoveryNode> ingestNodes;
 
     private final String masterNodeId;
     private final String localNodeId;
     private final Version minNodeVersion;
     private final Version minNonClientNodeVersion;
 
-    private DiscoveryNodes(ImmutableOpenMap<String, DiscoveryNode> nodes, ImmutableOpenMap<String, DiscoveryNode> dataNodes,
-                           ImmutableOpenMap<String, DiscoveryNode> masterNodes, ImmutableOpenMap<String, DiscoveryNode> ingestNodes,
-                           String masterNodeId, String localNodeId, Version minNodeVersion, Version minNonClientNodeVersion) {
+    private DiscoveryNodes(ImmutableOpenMap<String, DiscoveryNode> nodes, ImmutableOpenMap<String, DiscoveryNode> dataNodes, ImmutableOpenMap<String, DiscoveryNode> masterNodes, String masterNodeId, String localNodeId, Version minNodeVersion, Version minNonClientNodeVersion) {
         this.nodes = nodes;
         this.dataNodes = dataNodes;
         this.masterNodes = masterNodes;
-        this.ingestNodes = ingestNodes;
         this.masterNodeId = masterNodeId;
         this.localNodeId = localNodeId;
         this.minNodeVersion = minNodeVersion;
@@ -78,9 +74,17 @@ public class DiscoveryNodes extends AbstractDiffable<DiscoveryNodes> implements 
     }
 
     /**
-     * Returns <tt>true</tt> if the local node is the elected master node.
+     * Is this a valid nodes that has the minimal information set. The minimal set is defined
+     * by the localNodeId being set.
      */
-    public boolean isLocalNodeElectedMaster() {
+    public boolean valid() {
+        return localNodeId != null;
+    }
+
+    /**
+     * Returns <tt>true</tt> if the local node is the master node.
+     */
+    public boolean localNodeMaster() {
         if (localNodeId == null) {
             // we don't know yet the local node id, return false
             return false;
@@ -93,8 +97,26 @@ public class DiscoveryNodes extends AbstractDiffable<DiscoveryNodes> implements 
      *
      * @return number of nodes
      */
-    public int getSize() {
+    public int size() {
         return nodes.size();
+    }
+
+    /**
+     * Get the number of known nodes
+     *
+     * @return number of nodes
+     */
+    public int getSize() {
+        return size();
+    }
+
+    /**
+     * Get a {@link Map} of the discovered nodes arranged by their ids
+     *
+     * @return {@link Map} of the discovered nodes arranged by their ids
+     */
+    public ImmutableOpenMap<String, DiscoveryNode> nodes() {
+        return this.nodes;
     }
 
     /**
@@ -103,7 +125,16 @@ public class DiscoveryNodes extends AbstractDiffable<DiscoveryNodes> implements 
      * @return {@link Map} of the discovered nodes arranged by their ids
      */
     public ImmutableOpenMap<String, DiscoveryNode> getNodes() {
-        return this.nodes;
+        return nodes();
+    }
+
+    /**
+     * Get a {@link Map} of the discovered data nodes arranged by their ids
+     *
+     * @return {@link Map} of the discovered data nodes arranged by their ids
+     */
+    public ImmutableOpenMap<String, DiscoveryNode> dataNodes() {
+        return this.dataNodes;
     }
 
     /**
@@ -112,7 +143,16 @@ public class DiscoveryNodes extends AbstractDiffable<DiscoveryNodes> implements 
      * @return {@link Map} of the discovered data nodes arranged by their ids
      */
     public ImmutableOpenMap<String, DiscoveryNode> getDataNodes() {
-        return this.dataNodes;
+        return dataNodes();
+    }
+
+    /**
+     * Get a {@link Map} of the discovered master nodes arranged by their ids
+     *
+     * @return {@link Map} of the discovered master nodes arranged by their ids
+     */
+    public ImmutableOpenMap<String, DiscoveryNode> masterNodes() {
+        return this.masterNodes;
     }
 
     /**
@@ -121,14 +161,7 @@ public class DiscoveryNodes extends AbstractDiffable<DiscoveryNodes> implements 
      * @return {@link Map} of the discovered master nodes arranged by their ids
      */
     public ImmutableOpenMap<String, DiscoveryNode> getMasterNodes() {
-        return this.masterNodes;
-    }
-
-    /**
-     * @return All the ingest nodes arranged by their ids
-     */
-    public ImmutableOpenMap<String, DiscoveryNode> getIngestNodes() {
-        return ingestNodes;
+        return masterNodes();
     }
 
     /**
@@ -136,7 +169,7 @@ public class DiscoveryNodes extends AbstractDiffable<DiscoveryNodes> implements 
      *
      * @return {@link Map} of the discovered master and data nodes arranged by their ids
      */
-    public ImmutableOpenMap<String, DiscoveryNode> getMasterAndDataNodes() {
+    public ImmutableOpenMap<String, DiscoveryNode> masterAndDataNodes() {
         ImmutableOpenMap.Builder<String, DiscoveryNode> nodes = ImmutableOpenMap.builder(dataNodes);
         nodes.putAll(masterNodes);
         return nodes.build();
@@ -167,8 +200,26 @@ public class DiscoveryNodes extends AbstractDiffable<DiscoveryNodes> implements 
      *
      * @return id of the master
      */
-    public String getMasterNodeId() {
+    public String masterNodeId() {
         return this.masterNodeId;
+    }
+
+    /**
+     * Get the id of the master node
+     *
+     * @return id of the master
+     */
+    public String getMasterNodeId() {
+        return masterNodeId();
+    }
+
+    /**
+     * Get the id of the local node
+     *
+     * @return id of the local node
+     */
+    public String localNodeId() {
+        return this.localNodeId;
     }
 
     /**
@@ -177,7 +228,16 @@ public class DiscoveryNodes extends AbstractDiffable<DiscoveryNodes> implements 
      * @return id of the local node
      */
     public String getLocalNodeId() {
-        return this.localNodeId;
+        return localNodeId();
+    }
+
+    /**
+     * Get the local node
+     *
+     * @return local node
+     */
+    public DiscoveryNode localNode() {
+        return nodes.get(localNodeId);
     }
 
     /**
@@ -186,7 +246,16 @@ public class DiscoveryNodes extends AbstractDiffable<DiscoveryNodes> implements 
      * @return local node
      */
     public DiscoveryNode getLocalNode() {
-        return nodes.get(localNodeId);
+        return localNode();
+    }
+
+    /**
+     * Get the master node
+     *
+     * @return master node
+     */
+    public DiscoveryNode masterNode() {
+        return nodes.get(masterNodeId);
     }
 
     /**
@@ -195,7 +264,7 @@ public class DiscoveryNodes extends AbstractDiffable<DiscoveryNodes> implements 
      * @return master node
      */
     public DiscoveryNode getMasterNode() {
-        return nodes.get(masterNodeId);
+        return masterNode();
     }
 
     /**
@@ -207,7 +276,7 @@ public class DiscoveryNodes extends AbstractDiffable<DiscoveryNodes> implements 
     public DiscoveryNode findByAddress(TransportAddress address) {
         for (ObjectCursor<DiscoveryNode> cursor : nodes.values()) {
             DiscoveryNode node = cursor.value;
-            if (node.getAddress().equals(address)) {
+            if (node.address().equals(address)) {
                 return node;
             }
         }
@@ -224,7 +293,7 @@ public class DiscoveryNodes extends AbstractDiffable<DiscoveryNodes> implements 
      *
      * @return the oldest version in the cluster
      */
-    public Version getSmallestVersion() {
+    public Version smallestVersion() {
        return minNodeVersion;
     }
 
@@ -233,7 +302,7 @@ public class DiscoveryNodes extends AbstractDiffable<DiscoveryNodes> implements 
      *
      * @return the oldest version in the cluster
      */
-    public Version getSmallestNonClientNodeVersion() {
+    public Version smallestNonClientNodeVersion() {
         return minNonClientNodeVersion;
     }
 
@@ -260,19 +329,19 @@ public class DiscoveryNodes extends AbstractDiffable<DiscoveryNodes> implements 
             int index = 0;
             nodesIds = new String[nodes.size()];
             for (DiscoveryNode node : this) {
-                nodesIds[index++] = node.getId();
+                nodesIds[index++] = node.id();
             }
             return nodesIds;
         } else {
             ObjectHashSet<String> resolvedNodesIds = new ObjectHashSet<>(nodesIds.length);
             for (String nodeId : nodesIds) {
                 if (nodeId.equals("_local")) {
-                    String localNodeId = getLocalNodeId();
+                    String localNodeId = localNodeId();
                     if (localNodeId != null) {
                         resolvedNodesIds.add(localNodeId);
                     }
                 } else if (nodeId.equals("_master")) {
-                    String masterNodeId = getMasterNodeId();
+                    String masterNodeId = masterNodeId();
                     if (masterNodeId != null) {
                         resolvedNodesIds.add(masterNodeId);
                     }
@@ -281,46 +350,40 @@ public class DiscoveryNodes extends AbstractDiffable<DiscoveryNodes> implements 
                 } else {
                     // not a node id, try and search by name
                     for (DiscoveryNode node : this) {
-                        if (Regex.simpleMatch(nodeId, node.getName())) {
-                            resolvedNodesIds.add(node.getId());
+                        if (Regex.simpleMatch(nodeId, node.name())) {
+                            resolvedNodesIds.add(node.id());
                         }
                     }
                     for (DiscoveryNode node : this) {
                         if (Regex.simpleMatch(nodeId, node.getHostAddress())) {
-                            resolvedNodesIds.add(node.getId());
+                            resolvedNodesIds.add(node.id());
                         } else if (Regex.simpleMatch(nodeId, node.getHostName())) {
-                            resolvedNodesIds.add(node.getId());
+                            resolvedNodesIds.add(node.id());
                         }
                     }
                     int index = nodeId.indexOf(':');
                     if (index != -1) {
                         String matchAttrName = nodeId.substring(0, index);
                         String matchAttrValue = nodeId.substring(index + 1);
-                        if (DiscoveryNode.Role.DATA.getRoleName().equals(matchAttrName)) {
+                        if ("data".equals(matchAttrName)) {
                             if (Booleans.parseBoolean(matchAttrValue, true)) {
                                 resolvedNodesIds.addAll(dataNodes.keys());
                             } else {
                                 resolvedNodesIds.removeAll(dataNodes.keys());
                             }
-                        } else if (DiscoveryNode.Role.MASTER.getRoleName().equals(matchAttrName)) {
+                        } else if ("master".equals(matchAttrName)) {
                             if (Booleans.parseBoolean(matchAttrValue, true)) {
                                 resolvedNodesIds.addAll(masterNodes.keys());
                             } else {
                                 resolvedNodesIds.removeAll(masterNodes.keys());
                             }
-                        } else if (DiscoveryNode.Role.INGEST.getRoleName().equals(matchAttrName)) {
-                            if (Booleans.parseBoolean(matchAttrValue, true)) {
-                                resolvedNodesIds.addAll(ingestNodes.keys());
-                            } else {
-                                resolvedNodesIds.removeAll(ingestNodes.keys());
-                            }
                         } else {
                             for (DiscoveryNode node : this) {
-                                for (Map.Entry<String, String> entry : node.getAttributes().entrySet()) {
-                                    String attrName = entry.getKey();
-                                    String attrValue = entry.getValue();
+                                for (ObjectObjectCursor<String, String> entry : node.attributes()) {
+                                    String attrName = entry.key;
+                                    String attrValue = entry.value;
                                     if (Regex.simpleMatch(matchAttrName, attrName) && Regex.simpleMatch(matchAttrValue, attrValue)) {
-                                        resolvedNodesIds.add(node.getId());
+                                        resolvedNodesIds.add(node.id());
                                     }
                                 }
                             }
@@ -335,7 +398,7 @@ public class DiscoveryNodes extends AbstractDiffable<DiscoveryNodes> implements 
     public DiscoveryNodes removeDeadMembers(Set<String> newNodes, String masterNodeId) {
         Builder builder = new Builder().masterNodeId(masterNodeId).localNodeId(localNodeId);
         for (DiscoveryNode node : this) {
-            if (newNodes.contains(node.getId())) {
+            if (newNodes.contains(node.id())) {
                 builder.put(node);
             }
         }
@@ -353,12 +416,12 @@ public class DiscoveryNodes extends AbstractDiffable<DiscoveryNodes> implements 
         List<DiscoveryNode> removed = new ArrayList<>();
         List<DiscoveryNode> added = new ArrayList<>();
         for (DiscoveryNode node : other) {
-            if (!this.nodeExists(node.getId())) {
+            if (!this.nodeExists(node.id())) {
                 removed.add(node);
             }
         }
         for (DiscoveryNode node : this) {
-            if (!other.nodeExists(node.getId())) {
+            if (!other.nodeExists(node.id())) {
                 added.add(node);
             }
         }
@@ -366,8 +429,8 @@ public class DiscoveryNodes extends AbstractDiffable<DiscoveryNodes> implements 
         DiscoveryNode newMasterNode = null;
         if (masterNodeId != null) {
             if (other.masterNodeId == null || !other.masterNodeId.equals(masterNodeId)) {
-                previousMasterNode = other.getMasterNode();
-                newMasterNode = getMasterNode();
+                previousMasterNode = other.masterNode();
+                newMasterNode = masterNode();
             }
         }
         return new Delta(previousMasterNode, newMasterNode, localNodeId, Collections.unmodifiableList(removed), Collections.unmodifiableList(added));
@@ -389,15 +452,19 @@ public class DiscoveryNodes extends AbstractDiffable<DiscoveryNodes> implements 
         sb.append("nodes: \n");
         for (DiscoveryNode node : this) {
             sb.append("   ").append(node);
-            if (node == getLocalNode()) {
+            if (node == localNode()) {
                 sb.append(", local");
             }
-            if (node == getMasterNode()) {
+            if (node == masterNode()) {
                 sb.append(", master");
             }
             sb.append("\n");
         }
         return sb.toString();
+    }
+
+    public Delta emptyDelta() {
+        return new Delta(null, null, localNodeId, DiscoveryNode.EMPTY_LIST, DiscoveryNode.EMPTY_LIST);
     }
 
     public static class Delta {
@@ -455,7 +522,7 @@ public class DiscoveryNodes extends AbstractDiffable<DiscoveryNodes> implements 
         public String shortSummary() {
             StringBuilder sb = new StringBuilder();
             if (!removed() && masterNodeChanged()) {
-                if (newMasterNode.getId().equals(localNodeId)) {
+                if (newMasterNode.id().equals(localNodeId)) {
                     // we are the master, no nodes we removed, we are actually the first master
                     sb.append("new_master ").append(newMasterNode());
                 } else {
@@ -483,13 +550,13 @@ public class DiscoveryNodes extends AbstractDiffable<DiscoveryNodes> implements 
             }
             if (added()) {
                 // don't print if there is one added, and it is us
-                if (!(addedNodes().size() == 1 && addedNodes().get(0).getId().equals(localNodeId))) {
+                if (!(addedNodes().size() == 1 && addedNodes().get(0).id().equals(localNodeId))) {
                     if (removed() || masterNodeChanged()) {
                         sb.append(", ");
                     }
                     sb.append("added {");
                     for (DiscoveryNode node : addedNodes()) {
-                        if (!node.getId().equals(localNodeId)) {
+                        if (!node.id().equals(localNodeId)) {
                             // don't print ourself
                             sb.append(node).append(',');
                         }
@@ -515,18 +582,18 @@ public class DiscoveryNodes extends AbstractDiffable<DiscoveryNodes> implements 
         }
     }
 
-    private DiscoveryNodes readFrom(StreamInput in, DiscoveryNode localNode) throws IOException {
+    public DiscoveryNodes readFrom(StreamInput in, DiscoveryNode localNode) throws IOException {
         Builder builder = new Builder();
         if (in.readBoolean()) {
             builder.masterNodeId(in.readString());
         }
         if (localNode != null) {
-            builder.localNodeId(localNode.getId());
+            builder.localNodeId(localNode.id());
         }
         int size = in.readVInt();
         for (int i = 0; i < size; i++) {
-            DiscoveryNode node = new DiscoveryNode(in);
-            if (localNode != null && node.getId().equals(localNode.getId())) {
+            DiscoveryNode node = DiscoveryNode.readNode(in);
+            if (localNode != null && node.id().equals(localNode.id())) {
                 // reuse the same instance of our address and local node id for faster equality
                 node = localNode;
             }
@@ -537,7 +604,7 @@ public class DiscoveryNodes extends AbstractDiffable<DiscoveryNodes> implements 
 
     @Override
     public DiscoveryNodes readFrom(StreamInput in) throws IOException {
-        return readFrom(in, getLocalNode());
+        return readFrom(in, localNode());
     }
 
     public static Builder builder() {
@@ -559,13 +626,13 @@ public class DiscoveryNodes extends AbstractDiffable<DiscoveryNodes> implements 
         }
 
         public Builder(DiscoveryNodes nodes) {
-            this.masterNodeId = nodes.getMasterNodeId();
-            this.localNodeId = nodes.getLocalNodeId();
-            this.nodes = ImmutableOpenMap.builder(nodes.getNodes());
+            this.masterNodeId = nodes.masterNodeId();
+            this.localNodeId = nodes.localNodeId();
+            this.nodes = ImmutableOpenMap.builder(nodes.nodes());
         }
 
         public Builder put(DiscoveryNode node) {
-            nodes.put(node.getId(), node);
+            nodes.put(node.id(), node);
             return this;
         }
 
@@ -587,28 +654,21 @@ public class DiscoveryNodes extends AbstractDiffable<DiscoveryNodes> implements 
         public DiscoveryNodes build() {
             ImmutableOpenMap.Builder<String, DiscoveryNode> dataNodesBuilder = ImmutableOpenMap.builder();
             ImmutableOpenMap.Builder<String, DiscoveryNode> masterNodesBuilder = ImmutableOpenMap.builder();
-            ImmutableOpenMap.Builder<String, DiscoveryNode> ingestNodesBuilder = ImmutableOpenMap.builder();
             Version minNodeVersion = Version.CURRENT;
             Version minNonClientNodeVersion = Version.CURRENT;
             for (ObjectObjectCursor<String, DiscoveryNode> nodeEntry : nodes) {
-                if (nodeEntry.value.isDataNode()) {
+                if (nodeEntry.value.dataNode()) {
                     dataNodesBuilder.put(nodeEntry.key, nodeEntry.value);
-                    minNonClientNodeVersion = Version.smallest(minNonClientNodeVersion, nodeEntry.value.getVersion());
+                    minNonClientNodeVersion = Version.smallest(minNonClientNodeVersion, nodeEntry.value.version());
                 }
-                if (nodeEntry.value.isMasterNode()) {
+                if (nodeEntry.value.masterNode()) {
                     masterNodesBuilder.put(nodeEntry.key, nodeEntry.value);
-                    minNonClientNodeVersion = Version.smallest(minNonClientNodeVersion, nodeEntry.value.getVersion());
+                    minNonClientNodeVersion = Version.smallest(minNonClientNodeVersion, nodeEntry.value.version());
                 }
-                if (nodeEntry.value.isIngestNode()) {
-                    ingestNodesBuilder.put(nodeEntry.key, nodeEntry.value);
-                }
-                minNodeVersion = Version.smallest(minNodeVersion, nodeEntry.value.getVersion());
+                minNodeVersion = Version.smallest(minNodeVersion, nodeEntry.value.version());
             }
 
-            return new DiscoveryNodes(
-                nodes.build(), dataNodesBuilder.build(), masterNodesBuilder.build(), ingestNodesBuilder.build(),
-                masterNodeId, localNodeId, minNodeVersion, minNonClientNodeVersion
-            );
+            return new DiscoveryNodes(nodes.build(), dataNodesBuilder.build(), masterNodesBuilder.build(), masterNodeId, localNodeId, minNodeVersion, minNonClientNodeVersion);
         }
 
         public static DiscoveryNodes readFrom(StreamInput in, @Nullable DiscoveryNode localNode) throws IOException {

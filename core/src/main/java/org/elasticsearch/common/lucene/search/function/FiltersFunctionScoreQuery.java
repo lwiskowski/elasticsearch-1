@@ -29,6 +29,7 @@ import org.apache.lucene.search.Query;
 import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.Weight;
 import org.apache.lucene.util.Bits;
+import org.apache.lucene.util.ToStringUtils;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Writeable;
@@ -75,7 +76,7 @@ public class FiltersFunctionScoreQuery extends Query {
         }
     }
 
-    public enum ScoreMode implements Writeable {
+    public enum ScoreMode implements Writeable<ScoreMode> {
         FIRST, AVG, MAX, SUM, MIN, MULTIPLY;
 
         @Override
@@ -83,7 +84,8 @@ public class FiltersFunctionScoreQuery extends Query {
             out.writeVInt(this.ordinal());
         }
 
-        public static ScoreMode readFromStream(StreamInput in) throws IOException {
+        @Override
+        public ScoreMode readFrom(StreamInput in) throws IOException {
             int ordinal = in.readVInt();
             if (ordinal < 0 || ordinal >= values().length) {
                 throw new IOException("Unknown ScoreMode ordinal [" + ordinal + "]");
@@ -91,12 +93,16 @@ public class FiltersFunctionScoreQuery extends Query {
             return values()[ordinal];
         }
 
+        public static ScoreMode readScoreModeFrom(StreamInput in) throws IOException {
+            return ScoreMode.MULTIPLY.readFrom(in);
+        }
+
         public static ScoreMode fromString(String scoreMode) {
             return valueOf(scoreMode.toUpperCase(Locale.ROOT));
         }
     }
 
-    final Query subQuery;
+    Query subQuery;
     final FilterFunction[] filterFunctions;
     final ScoreMode scoreMode;
     final float maxBoost;
@@ -130,7 +136,9 @@ public class FiltersFunctionScoreQuery extends Query {
         Query newQ = subQuery.rewrite(reader);
         if (newQ == subQuery)
             return this;
-        return new FiltersFunctionScoreQuery(newQ, scoreMode, filterFunctions, maxBoost, minScore, combineFunction);
+        FiltersFunctionScoreQuery bq = (FiltersFunctionScoreQuery) this.clone();
+        bq.subQuery = newQ;
+        return bq;
     }
 
     @Override
@@ -347,6 +355,7 @@ public class FiltersFunctionScoreQuery extends Query {
             sb.append("{filter(").append(filterFunction.filter).append("), function [").append(filterFunction.function).append("]}");
         }
         sb.append("])");
+        sb.append(ToStringUtils.boost(getBoost()));
         return sb.toString();
     }
 

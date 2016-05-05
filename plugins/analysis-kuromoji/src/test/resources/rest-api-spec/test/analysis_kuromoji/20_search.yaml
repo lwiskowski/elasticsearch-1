@@ -10,7 +10,7 @@
             type:
               properties:
                 text:
-                  type:     text
+                  type:     string
                   analyzer: kuromoji
   - do:
        cluster.health:

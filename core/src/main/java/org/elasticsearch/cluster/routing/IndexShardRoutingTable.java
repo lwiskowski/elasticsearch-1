@@ -26,7 +26,6 @@ import org.elasticsearch.common.collect.MapBuilder;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.util.set.Sets;
-import org.elasticsearch.index.Index;
 import org.elasticsearch.index.shard.ShardId;
 
 import java.io.IOException;
@@ -117,6 +116,40 @@ public class IndexShardRoutingTable implements Iterable<ShardRouting> {
         this.activeShards = Collections.unmodifiableList(activeShards);
         this.assignedShards = Collections.unmodifiableList(assignedShards);
         this.allInitializingShards = Collections.unmodifiableList(allInitializingShards);
+    }
+
+    /**
+     * Normalizes all shard routings to the same version.
+     */
+    public IndexShardRoutingTable normalizeVersions() {
+        if (shards.isEmpty()) {
+            return this;
+        }
+        if (shards.size() == 1) {
+            return this;
+        }
+        long highestVersion = shards.get(0).version();
+        boolean requiresNormalization = false;
+        for (int i = 1; i < shards.size(); i++) {
+            if (shards.get(i).version() != highestVersion) {
+                requiresNormalization = true;
+            }
+            if (shards.get(i).version() > highestVersion) {
+                highestVersion = shards.get(i).version();
+            }
+        }
+        if (!requiresNormalization) {
+            return this;
+        }
+        List<ShardRouting> shardRoutings = new ArrayList<>(shards.size());
+        for (int i = 0; i < shards.size(); i++) {
+            if (shards.get(i).version() == highestVersion) {
+                shardRoutings.add(shards.get(i));
+            } else {
+                shardRoutings.add(new ShardRouting(shards.get(i), highestVersion));
+            }
+        }
+        return new IndexShardRoutingTable(shardId, Collections.unmodifiableList(shardRoutings));
     }
 
     /**
@@ -366,7 +399,7 @@ public class IndexShardRoutingTable implements Iterable<ShardRouting> {
             }
         }
         if (ordered.isEmpty()) {
-            throw new IllegalArgumentException("No data node with criteria [" + nodeAttribute + "] found");
+            throw new IllegalArgumentException("No data node with critera [" + nodeAttribute + "] found");
         }
         return new PlainShardIterator(shardId, ordered);
     }
@@ -477,14 +510,14 @@ public class IndexShardRoutingTable implements Iterable<ShardRouting> {
     private static List<ShardRouting> collectAttributeShards(AttributesKey key, DiscoveryNodes nodes, ArrayList<ShardRouting> from) {
         final ArrayList<ShardRouting> to = new ArrayList<>();
         for (final String attribute : key.attributes) {
-            final String localAttributeValue = nodes.getLocalNode().getAttributes().get(attribute);
+            final String localAttributeValue = nodes.localNode().attributes().get(attribute);
             if (localAttributeValue != null) {
                 for (Iterator<ShardRouting> iterator = from.iterator(); iterator.hasNext(); ) {
                     ShardRouting fromShard = iterator.next();
                     final DiscoveryNode discoveryNode = nodes.get(fromShard.currentNodeId());
                     if (discoveryNode == null) {
                         iterator.remove(); // node is not present anymore - ignore shard
-                    } else if (localAttributeValue.equals(discoveryNode.getAttributes().get(attribute))) {
+                    } else if (localAttributeValue.equals(discoveryNode.attributes().get(attribute))) {
                         iterator.remove();
                         to.add(fromShard);
                     }
@@ -584,11 +617,11 @@ public class IndexShardRoutingTable implements Iterable<ShardRouting> {
         }
 
         public static IndexShardRoutingTable readFrom(StreamInput in) throws IOException {
-            Index index = new Index(in);
+            String index = in.readString();
             return readFromThin(in, index);
         }
 
-        public static IndexShardRoutingTable readFromThin(StreamInput in, Index index) throws IOException {
+        public static IndexShardRoutingTable readFromThin(StreamInput in, String index) throws IOException {
             int iShardId = in.readVInt();
             Builder builder = new Builder(new ShardId(index, iShardId));
 
@@ -602,7 +635,7 @@ public class IndexShardRoutingTable implements Iterable<ShardRouting> {
         }
 
         public static void writeTo(IndexShardRoutingTable indexShard, StreamOutput out) throws IOException {
-            out.writeString(indexShard.shardId().getIndex().getName());
+            out.writeString(indexShard.shardId().index().name());
             writeToThin(indexShard, out);
         }
 

@@ -31,35 +31,39 @@ import org.elasticsearch.search.fetch.FetchSubPhase;
 import org.elasticsearch.search.fetch.fielddata.FieldDataFieldsParseElement;
 import org.elasticsearch.search.fetch.script.ScriptFieldsParseElement;
 import org.elasticsearch.search.fetch.source.FetchSourceParseElement;
+import org.elasticsearch.search.highlight.HighlighterParseElement;
 import org.elasticsearch.search.internal.InternalSearchHit;
 import org.elasticsearch.search.internal.InternalSearchHits;
 import org.elasticsearch.search.internal.SearchContext;
+import org.elasticsearch.search.sort.SortParseElement;
 
 import java.io.IOException;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+
+import static java.util.Collections.singletonMap;
 
 /**
  */
 public class InnerHitsFetchSubPhase implements FetchSubPhase {
+    private final Map<String, ? extends SearchParseElement> parseElements;
 
     private FetchPhase fetchPhase;
 
     @Inject
-    public InnerHitsFetchSubPhase() {
+    public InnerHitsFetchSubPhase(SortParseElement sortParseElement, FetchSourceParseElement sourceParseElement, HighlighterParseElement highlighterParseElement, FieldDataFieldsParseElement fieldDataFieldsParseElement, ScriptFieldsParseElement scriptFieldsParseElement) {
+        parseElements = singletonMap("inner_hits", new InnerHitsParseElement(sortParseElement, sourceParseElement, highlighterParseElement,
+                fieldDataFieldsParseElement, scriptFieldsParseElement));
     }
 
     @Override
     public Map<String, ? extends SearchParseElement> parseElements() {
-        // SearchParse elements needed because everything is parsed by InnerHitBuilder and eventually put
-        // into the search context.
-        return Collections.emptyMap();
+        return parseElements;
     }
 
     @Override
     public boolean hitExecutionNeeded(SearchContext context) {
-        return context.innerHits() != null && context.innerHits().getInnerHits().size() > 0;
+        return context.innerHits() != null;
     }
 
     @Override

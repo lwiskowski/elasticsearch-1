@@ -31,24 +31,16 @@ public class FakeRestRequest extends RestRequest {
 
     private final Map<String, String> params;
 
-    private final BytesReference content;
-
     public FakeRestRequest() {
-        this(new HashMap<>());
+        this(new HashMap<String, String>(), new HashMap<String, String>());
     }
 
-    public FakeRestRequest(Map<String, String> headers) {
-        this(headers, new HashMap<>());
-    }
-
-    public FakeRestRequest(Map<String, String> headers, Map<String, String> params) {
-        this(headers, params, null);
-    }
-
-    public FakeRestRequest(Map<String, String> headers, Map<String, String> params, BytesReference content) {
+    public FakeRestRequest(Map<String, String> headers, Map<String, String> context) {
         this.headers = headers;
-        this.params = params;
-        this.content = content;
+        for (Map.Entry<String, String> entry : context.entrySet()) {
+            putInContext(entry.getKey(), entry.getValue());
+        }
+        this.params = new HashMap<>();
     }
 
     @Override
@@ -68,12 +60,12 @@ public class FakeRestRequest extends RestRequest {
 
     @Override
     public boolean hasContent() {
-        return content != null;
+        return false;
     }
 
     @Override
     public BytesReference content() {
-        return content;
+        return null;
     }
 
     @Override

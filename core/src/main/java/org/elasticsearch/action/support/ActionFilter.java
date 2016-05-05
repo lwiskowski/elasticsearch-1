@@ -40,15 +40,13 @@ public interface ActionFilter {
      * Enables filtering the execution of an action on the request side, either by sending a response through the
      * {@link ActionListener} or by continuing the execution through the given {@link ActionFilterChain chain}
      */
-    <Request extends ActionRequest<Request>, Response extends ActionResponse> void apply(Task task, String action, Request request,
-            ActionListener<Response> listener, ActionFilterChain<Request, Response> chain);
+    void apply(Task task, String action, ActionRequest<?> request, ActionListener<?> listener, ActionFilterChain chain);
 
     /**
      * Enables filtering the execution of an action on the response side, either by sending a response through the
      * {@link ActionListener} or by continuing the execution through the given {@link ActionFilterChain chain}
      */
-    <Response extends ActionResponse> void apply(String action, Response response, ActionListener<Response> listener,
-            ActionFilterChain<?, Response> chain);
+    void apply(String action, ActionResponse response, ActionListener<?> listener, ActionFilterChain chain);
 
     /**
      * A simple base class for injectable action filters that spares the implementation from handling the
@@ -62,8 +60,7 @@ public interface ActionFilter {
         }
 
         @Override
-        public final <Request extends ActionRequest<Request>, Response extends ActionResponse> void apply(Task task, String action, Request request,
-                ActionListener<Response> listener, ActionFilterChain<Request, Response> chain) {
+        public final void apply(Task task, String action, ActionRequest<?> request, ActionListener<?> listener, ActionFilterChain chain) {
             if (apply(action, request, listener)) {
                 chain.proceed(task, action, request, listener);
             }
@@ -76,8 +73,7 @@ public interface ActionFilter {
         protected abstract boolean apply(String action, ActionRequest<?> request, ActionListener<?> listener);
 
         @Override
-        public final <Response extends ActionResponse> void apply(String action, Response response, ActionListener<Response> listener,
-                ActionFilterChain<?, Response> chain) {
+        public final void apply(String action, ActionResponse response, ActionListener<?> listener, ActionFilterChain chain) {
             if (apply(action, response, listener)) {
                 chain.proceed(action, response, listener);
             }

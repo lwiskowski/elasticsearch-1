@@ -9,14 +9,12 @@ setup:
                   bar:
                       properties:
                           bar:
-                              type: text
-                              fielddata: true
+                              type: string
                               fields:
                                   completion:
                                       type: completion
                           baz:
-                              type: text
-                              fielddata: true
+                              type: string
                               fields:
                                   completion:
                                       type: completion

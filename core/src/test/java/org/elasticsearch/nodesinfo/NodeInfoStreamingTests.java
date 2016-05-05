@@ -33,7 +33,6 @@ import org.elasticsearch.common.transport.TransportAddress;
 import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.http.HttpInfo;
-import org.elasticsearch.ingest.core.IngestInfo;
 import org.elasticsearch.monitor.jvm.JvmInfo;
 import org.elasticsearch.monitor.os.DummyOsInfo;
 import org.elasticsearch.monitor.os.OsInfo;
@@ -47,13 +46,10 @@ import org.elasticsearch.transport.TransportInfo;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static java.util.Collections.emptyMap;
-import static java.util.Collections.emptySet;
 import static org.elasticsearch.common.xcontent.XContentFactory.jsonBuilder;
 import static org.hamcrest.core.IsEqual.equalTo;
 
@@ -94,7 +90,6 @@ public class NodeInfoStreamingTests extends ESTestCase {
         compareJsonOutput(nodeInfo.getNode(), readNodeInfo.getNode());
         compareJsonOutput(nodeInfo.getOs(), readNodeInfo.getOs());
         comparePluginsAndModules(nodeInfo, readNodeInfo);
-        compareJsonOutput(nodeInfo.getIngest(), readNodeInfo.getIngest());
     }
 
     private void comparePluginsAndModules(NodeInfo nodeInfo, NodeInfo readNodeInfo) throws IOException {
@@ -119,10 +114,10 @@ public class NodeInfoStreamingTests extends ESTestCase {
         assertThat(param1Builder.string(), equalTo(param2Builder.string()));
     }
 
+
     private NodeInfo createNodeInfo() {
         Build build = Build.CURRENT;
-        DiscoveryNode node = new DiscoveryNode("test_node", DummyTransportAddress.INSTANCE,
-                emptyMap(), emptySet(), VersionUtils.randomVersion(random()));
+        DiscoveryNode node = new DiscoveryNode("test_node", DummyTransportAddress.INSTANCE, VersionUtils.randomVersion(random()));
         Map<String, String> serviceAttributes = new HashMap<>();
         serviceAttributes.put("test", "attribute");
         Settings settings = Settings.builder().put("test", "setting").build();
@@ -140,7 +135,6 @@ public class NodeInfoStreamingTests extends ESTestCase {
         PluginsAndModules plugins = new PluginsAndModules();
         plugins.addModule(DummyPluginInfo.INSTANCE);
         plugins.addPlugin(DummyPluginInfo.INSTANCE);
-        IngestInfo ingestInfo = new IngestInfo(Collections.emptyList());
-        return new NodeInfo(VersionUtils.randomVersion(random()), build, node, serviceAttributes, settings, osInfo, process, jvm, threadPoolInfo, transport, htttpInfo, plugins, ingestInfo);
+        return new NodeInfo(VersionUtils.randomVersion(random()), build, node, serviceAttributes, settings, osInfo, process, jvm, threadPoolInfo, transport, htttpInfo, plugins);
     }
 }

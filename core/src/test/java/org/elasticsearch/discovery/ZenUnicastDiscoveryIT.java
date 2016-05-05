@@ -79,7 +79,7 @@ public class ZenUnicastDiscoveryIT extends ESIntegTestCase {
         int currentNumNodes = randomIntBetween(3, 5);
         final int min_master_nodes = currentNumNodes / 2 + 1;
         int currentNumOfUnicastHosts = randomIntBetween(min_master_nodes, currentNumNodes);
-        final Settings settings = Settings.builder()
+        final Settings settings = Settings.settingsBuilder()
                 .put("discovery.zen.join_timeout", TimeValue.timeValueSeconds(10))
                 .put("discovery.zen.minimum_master_nodes", min_master_nodes)
                 .build();
@@ -92,11 +92,11 @@ public class ZenUnicastDiscoveryIT extends ESIntegTestCase {
         DiscoveryNode masterDiscoNode = null;
         for (String node : nodes) {
             ClusterState state = internalCluster().client(node).admin().cluster().prepareState().setLocal(true).execute().actionGet().getState();
-            assertThat(state.nodes().getSize(), equalTo(currentNumNodes));
+            assertThat(state.nodes().size(), equalTo(currentNumNodes));
             if (masterDiscoNode == null) {
-                masterDiscoNode = state.nodes().getMasterNode();
+                masterDiscoNode = state.nodes().masterNode();
             } else {
-                assertThat(masterDiscoNode.equals(state.nodes().getMasterNode()), equalTo(true));
+                assertThat(masterDiscoNode.equals(state.nodes().masterNode()), equalTo(true));
             }
         }
     }

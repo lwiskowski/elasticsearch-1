@@ -24,6 +24,7 @@ import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Streamable;
 import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.common.xcontent.XContentBuilderString;
 import org.elasticsearch.search.aggregations.InternalAggregation.ReduceContext;
 import org.elasticsearch.search.aggregations.support.AggregationPath;
 
@@ -163,7 +164,7 @@ public class InternalAggregations implements Aggregations, ToXContent, Streamabl
 
     /** The fields required to write this addAggregation to xcontent */
     static class Fields {
-        public static final String AGGREGATIONS = "aggregations";
+        public static final XContentBuilderString AGGREGATIONS = new XContentBuilderString("aggregations");
     }
 
     @Override

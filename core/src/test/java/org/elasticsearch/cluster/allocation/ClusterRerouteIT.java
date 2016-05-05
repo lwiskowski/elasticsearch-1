@@ -42,7 +42,6 @@ import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.env.NodeEnvironment;
-import org.elasticsearch.index.Index;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.test.ESIntegTestCase;
 import org.elasticsearch.test.ESIntegTestCase.ClusterScope;
@@ -58,6 +57,7 @@ import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_BLOCKS_RE
 import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_BLOCKS_WRITE;
 import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_READ_ONLY;
 import static org.elasticsearch.cluster.routing.allocation.decider.EnableAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ENABLE_SETTING;
+import static org.elasticsearch.common.settings.Settings.settingsBuilder;
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertBlocked;
 import static org.hamcrest.Matchers.equalTo;
@@ -70,7 +70,7 @@ public class ClusterRerouteIT extends ESIntegTestCase {
     private final ESLogger logger = Loggers.getLogger(ClusterRerouteIT.class);
 
     public void testRerouteWithCommands_disableAllocationSettings() throws Exception {
-        Settings commonSettings = Settings.builder()
+        Settings commonSettings = settingsBuilder()
                 .put(EnableAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ENABLE_SETTING.getKey(), "none")
                 .put(EnableAllocationDecider.CLUSTER_ROUTING_REBALANCE_ENABLE_SETTING.getKey(), "none")
                 .build();
@@ -78,7 +78,7 @@ public class ClusterRerouteIT extends ESIntegTestCase {
     }
 
     public void testRerouteWithCommands_enableAllocationSettings() throws Exception {
-        Settings commonSettings = Settings.builder()
+        Settings commonSettings = settingsBuilder()
                 .put(CLUSTER_ROUTING_ALLOCATION_ENABLE_SETTING.getKey(), Allocation.NONE.name())
                 .build();
         rerouteWithCommands(commonSettings);
@@ -91,7 +91,7 @@ public class ClusterRerouteIT extends ESIntegTestCase {
 
         logger.info("--> create an index with 1 shard, 1 replica, nothing should allocate");
         client().admin().indices().prepareCreate("test")
-                .setSettings(Settings.builder().put("index.number_of_shards", 1))
+                .setSettings(settingsBuilder().put("index.number_of_shards", 1))
                 .execute().actionGet();
 
         ClusterState state = client().admin().cluster().prepareState().execute().actionGet().getState();
@@ -100,11 +100,11 @@ public class ClusterRerouteIT extends ESIntegTestCase {
         logger.info("--> explicitly allocate shard 1, *under dry_run*");
         state = client().admin().cluster().prepareReroute()
                 .setExplain(randomBoolean())
-                .add(new AllocateEmptyPrimaryAllocationCommand("test", 0, node_1, true))
+                .add(new AllocateEmptyPrimaryAllocationCommand(new ShardId("test", 0), node_1, true))
                 .setDryRun(true)
                 .execute().actionGet().getState();
         assertThat(state.getRoutingNodes().unassigned().size(), equalTo(1));
-        assertThat(state.getRoutingNodes().node(state.nodes().resolveNode(node_1).getId()).get(0).state(), equalTo(ShardRoutingState.INITIALIZING));
+        assertThat(state.getRoutingNodes().node(state.nodes().resolveNode(node_1).id()).get(0).state(), equalTo(ShardRoutingState.INITIALIZING));
 
         logger.info("--> get the state, verify nothing changed because of the dry run");
         state = client().admin().cluster().prepareState().execute().actionGet().getState();
@@ -113,10 +113,10 @@ public class ClusterRerouteIT extends ESIntegTestCase {
         logger.info("--> explicitly allocate shard 1, actually allocating, no dry run");
         state = client().admin().cluster().prepareReroute()
                 .setExplain(randomBoolean())
-                .add(new AllocateEmptyPrimaryAllocationCommand("test", 0, node_1, true))
+                .add(new AllocateEmptyPrimaryAllocationCommand(new ShardId("test", 0), node_1, true))
                 .execute().actionGet().getState();
         assertThat(state.getRoutingNodes().unassigned().size(), equalTo(1));
-        assertThat(state.getRoutingNodes().node(state.nodes().resolveNode(node_1).getId()).get(0).state(), equalTo(ShardRoutingState.INITIALIZING));
+        assertThat(state.getRoutingNodes().node(state.nodes().resolveNode(node_1).id()).get(0).state(), equalTo(ShardRoutingState.INITIALIZING));
 
         ClusterHealthResponse healthResponse = client().admin().cluster().prepareHealth().setWaitForEvents(Priority.LANGUID).setWaitForYellowStatus().execute().actionGet();
         assertThat(healthResponse.isTimedOut(), equalTo(false));
@@ -124,16 +124,16 @@ public class ClusterRerouteIT extends ESIntegTestCase {
         logger.info("--> get the state, verify shard 1 primary allocated");
         state = client().admin().cluster().prepareState().execute().actionGet().getState();
         assertThat(state.getRoutingNodes().unassigned().size(), equalTo(1));
-        assertThat(state.getRoutingNodes().node(state.nodes().resolveNode(node_1).getId()).get(0).state(), equalTo(ShardRoutingState.STARTED));
+        assertThat(state.getRoutingNodes().node(state.nodes().resolveNode(node_1).id()).get(0).state(), equalTo(ShardRoutingState.STARTED));
 
         logger.info("--> move shard 1 primary from node1 to node2");
         state = client().admin().cluster().prepareReroute()
                 .setExplain(randomBoolean())
-                .add(new MoveAllocationCommand("test", 0, node_1, node_2))
+                .add(new MoveAllocationCommand(new ShardId("test", 0), node_1, node_2))
                 .execute().actionGet().getState();
 
-        assertThat(state.getRoutingNodes().node(state.nodes().resolveNode(node_1).getId()).get(0).state(), equalTo(ShardRoutingState.RELOCATING));
-        assertThat(state.getRoutingNodes().node(state.nodes().resolveNode(node_2).getId()).get(0).state(), equalTo(ShardRoutingState.INITIALIZING));
+        assertThat(state.getRoutingNodes().node(state.nodes().resolveNode(node_1).id()).get(0).state(), equalTo(ShardRoutingState.RELOCATING));
+        assertThat(state.getRoutingNodes().node(state.nodes().resolveNode(node_2).id()).get(0).state(), equalTo(ShardRoutingState.INITIALIZING));
 
 
         healthResponse = client().admin().cluster().prepareHealth().setWaitForEvents(Priority.LANGUID).setWaitForYellowStatus().setWaitForRelocatingShards(0).execute().actionGet();
@@ -142,11 +142,11 @@ public class ClusterRerouteIT extends ESIntegTestCase {
         logger.info("--> get the state, verify shard 1 primary moved from node1 to node2");
         state = client().admin().cluster().prepareState().execute().actionGet().getState();
         assertThat(state.getRoutingNodes().unassigned().size(), equalTo(1));
-        assertThat(state.getRoutingNodes().node(state.nodes().resolveNode(node_2).getId()).get(0).state(), equalTo(ShardRoutingState.STARTED));
+        assertThat(state.getRoutingNodes().node(state.nodes().resolveNode(node_2).id()).get(0).state(), equalTo(ShardRoutingState.STARTED));
     }
 
     public void testRerouteWithAllocateLocalGateway_disableAllocationSettings() throws Exception {
-        Settings commonSettings = Settings.builder()
+        Settings commonSettings = settingsBuilder()
                 .put(EnableAllocationDecider.CLUSTER_ROUTING_ALLOCATION_ENABLE_SETTING.getKey(), "none")
                 .put(EnableAllocationDecider.CLUSTER_ROUTING_REBALANCE_ENABLE_SETTING.getKey(), "none")
                 .build();
@@ -154,16 +154,16 @@ public class ClusterRerouteIT extends ESIntegTestCase {
     }
 
     public void testRerouteWithAllocateLocalGateway_enableAllocationSettings() throws Exception {
-        Settings commonSettings = Settings.builder()
+        Settings commonSettings = settingsBuilder()
                 .put(CLUSTER_ROUTING_ALLOCATION_ENABLE_SETTING.getKey(), Allocation.NONE.name())
                 .build();
         rerouteWithAllocateLocalGateway(commonSettings);
     }
 
     public void testDelayWithALargeAmountOfShards() throws Exception {
-        Settings commonSettings = Settings.builder()
-                .put(ThrottlingAllocationDecider.CLUSTER_ROUTING_ALLOCATION_NODE_CONCURRENT_INCOMING_RECOVERIES_SETTING.getKey(), 1)
-                .put(ThrottlingAllocationDecider.CLUSTER_ROUTING_ALLOCATION_NODE_CONCURRENT_OUTGOING_RECOVERIES_SETTING.getKey(), 1)
+        Settings commonSettings = settingsBuilder()
+                .put(ThrottlingAllocationDecider.CLUSTER_ROUTING_ALLOCATION_NODE_CONCURRENT_INCOMING_RECOVERIES_SETTING, 1)
+                .put(ThrottlingAllocationDecider.CLUSTER_ROUTING_ALLOCATION_NODE_CONCURRENT_OUTGOING_RECOVERIES_SETTING, 1)
                 .build();
         logger.info("--> starting 4 nodes");
         String node_1 = internalCluster().startNode(commonSettings);
@@ -178,7 +178,7 @@ public class ClusterRerouteIT extends ESIntegTestCase {
         logger.info("--> create indices");
         for (int i = 0; i < 25; i++) {
             client().admin().indices().prepareCreate("test" + i)
-                    .setSettings(Settings.builder()
+                    .setSettings(settingsBuilder()
                             .put("index.number_of_shards", 5).put("index.number_of_replicas", 1)
                             .put("index.unassigned.node_left.delayed_timeout", randomIntBetween(250, 1000) + "ms"))
                     .execute().actionGet();
@@ -203,7 +203,7 @@ public class ClusterRerouteIT extends ESIntegTestCase {
 
         logger.info("--> create an index with 1 shard, 1 replica, nothing should allocate");
         client().admin().indices().prepareCreate("test")
-                .setSettings(Settings.builder().put("index.number_of_shards", 1))
+                .setSettings(settingsBuilder().put("index.number_of_shards", 1))
                 .execute().actionGet();
 
         ClusterState state = client().admin().cluster().prepareState().execute().actionGet().getState();
@@ -212,10 +212,10 @@ public class ClusterRerouteIT extends ESIntegTestCase {
         logger.info("--> explicitly allocate shard 1, actually allocating, no dry run");
         state = client().admin().cluster().prepareReroute()
                 .setExplain(randomBoolean())
-                .add(new AllocateEmptyPrimaryAllocationCommand("test", 0, node_1, true))
+                .add(new AllocateEmptyPrimaryAllocationCommand(new ShardId("test", 0), node_1, true))
                 .execute().actionGet().getState();
         assertThat(state.getRoutingNodes().unassigned().size(), equalTo(1));
-        assertThat(state.getRoutingNodes().node(state.nodes().resolveNode(node_1).getId()).get(0).state(), equalTo(ShardRoutingState.INITIALIZING));
+        assertThat(state.getRoutingNodes().node(state.nodes().resolveNode(node_1).id()).get(0).state(), equalTo(ShardRoutingState.INITIALIZING));
 
         healthResponse = client().admin().cluster().prepareHealth().setWaitForEvents(Priority.LANGUID).setWaitForYellowStatus().execute().actionGet();
         assertThat(healthResponse.isTimedOut(), equalTo(false));
@@ -223,13 +223,12 @@ public class ClusterRerouteIT extends ESIntegTestCase {
         logger.info("--> get the state, verify shard 1 primary allocated");
         state = client().admin().cluster().prepareState().execute().actionGet().getState();
         assertThat(state.getRoutingNodes().unassigned().size(), equalTo(1));
-        assertThat(state.getRoutingNodes().node(state.nodes().resolveNode(node_1).getId()).get(0).state(), equalTo(ShardRoutingState.STARTED));
+        assertThat(state.getRoutingNodes().node(state.nodes().resolveNode(node_1).id()).get(0).state(), equalTo(ShardRoutingState.STARTED));
 
         client().prepareIndex("test", "type", "1").setSource("field", "value").setRefresh(true).execute().actionGet();
-        final Index index = resolveIndex("test");
 
         logger.info("--> closing all nodes");
-        Path[] shardLocation = internalCluster().getInstance(NodeEnvironment.class, node_1).availableShardPaths(new ShardId(index, 0));
+        Path[] shardLocation = internalCluster().getInstance(NodeEnvironment.class, node_1).availableShardPaths(new ShardId("test", 0));
         assertThat(FileSystemUtils.exists(shardLocation), equalTo(true)); // make sure the data is there!
         internalCluster().closeNonSharedNodes(false); // don't wipe data directories the index needs to be there!
 
@@ -247,10 +246,10 @@ public class ClusterRerouteIT extends ESIntegTestCase {
         logger.info("--> explicitly allocate primary");
         state = client().admin().cluster().prepareReroute()
                 .setExplain(randomBoolean())
-                .add(new AllocateEmptyPrimaryAllocationCommand("test", 0, node_1, true))
+                .add(new AllocateEmptyPrimaryAllocationCommand(new ShardId("test", 0), node_1, true))
                 .execute().actionGet().getState();
         assertThat(state.getRoutingNodes().unassigned().size(), equalTo(1));
-        assertThat(state.getRoutingNodes().node(state.nodes().resolveNode(node_1).getId()).get(0).state(), equalTo(ShardRoutingState.INITIALIZING));
+        assertThat(state.getRoutingNodes().node(state.nodes().resolveNode(node_1).id()).get(0).state(), equalTo(ShardRoutingState.INITIALIZING));
 
         healthResponse = client().admin().cluster().prepareHealth().setWaitForEvents(Priority.LANGUID).setWaitForYellowStatus().execute().actionGet();
         assertThat(healthResponse.isTimedOut(), equalTo(false));
@@ -258,12 +257,12 @@ public class ClusterRerouteIT extends ESIntegTestCase {
         logger.info("--> get the state, verify shard 1 primary allocated");
         state = client().admin().cluster().prepareState().execute().actionGet().getState();
         assertThat(state.getRoutingNodes().unassigned().size(), equalTo(1));
-        assertThat(state.getRoutingNodes().node(state.nodes().resolveNode(node_1).getId()).get(0).state(), equalTo(ShardRoutingState.STARTED));
+        assertThat(state.getRoutingNodes().node(state.nodes().resolveNode(node_1).id()).get(0).state(), equalTo(ShardRoutingState.STARTED));
 
     }
 
     public void testRerouteExplain() {
-        Settings commonSettings = Settings.builder().build();
+        Settings commonSettings = settingsBuilder().build();
 
         logger.info("--> starting a node");
         String node_1 = internalCluster().startNode(commonSettings);
@@ -274,13 +273,13 @@ public class ClusterRerouteIT extends ESIntegTestCase {
 
         logger.info("--> create an index with 1 shard");
         client().admin().indices().prepareCreate("test")
-                .setSettings(Settings.builder().put("index.number_of_shards", 1).put("index.number_of_replicas", 0))
+                .setSettings(settingsBuilder().put("index.number_of_shards", 1).put("index.number_of_replicas", 0))
                 .execute().actionGet();
 
         ensureGreen("test");
 
         logger.info("--> disable allocation");
-        Settings newSettings = Settings.builder()
+        Settings newSettings = settingsBuilder()
                 .put(CLUSTER_ROUTING_ALLOCATION_ENABLE_SETTING.getKey(), Allocation.NONE.name())
                 .build();
         client().admin().cluster().prepareUpdateSettings().setTransientSettings(newSettings).execute().actionGet();
@@ -292,7 +291,7 @@ public class ClusterRerouteIT extends ESIntegTestCase {
         assertThat(healthResponse.isTimedOut(), equalTo(false));
 
         logger.info("--> try to move the shard from node1 to node2");
-        MoveAllocationCommand cmd = new MoveAllocationCommand("test", 0, node_1, node_2);
+        MoveAllocationCommand cmd = new MoveAllocationCommand(new ShardId("test", 0), node_1, node_2);
         ClusterRerouteResponse resp = client().admin().cluster().prepareReroute().add(cmd).setExplain(true).execute().actionGet();
         RoutingExplanations e = resp.getExplanations();
         assertThat(e.explanations().size(), equalTo(1));
@@ -308,7 +307,7 @@ public class ClusterRerouteIT extends ESIntegTestCase {
         List<String> nodesIds = internalCluster().startNodesAsync(2).get();
 
         logger.info("--> create an index with 1 shard and 0 replicas");
-        assertAcked(prepareCreate("test-blocks").setSettings(Settings.builder().put("index.number_of_shards", 1).put("index.number_of_replicas", 0)));
+        assertAcked(prepareCreate("test-blocks").setSettings(settingsBuilder().put("index.number_of_shards", 1).put("index.number_of_replicas", 0)));
         ensureGreen("test-blocks");
 
         logger.info("--> check that the index has 1 shard");
@@ -332,7 +331,7 @@ public class ClusterRerouteIT extends ESIntegTestCase {
             try {
                 enableIndexBlock("test-blocks", blockSetting);
                 assertAcked(client().admin().cluster().prepareReroute()
-                        .add(new MoveAllocationCommand("test-blocks", 0, nodesIds.get(toggle % 2), nodesIds.get(++toggle % 2))));
+                        .add(new MoveAllocationCommand(new ShardId("test-blocks", 0), nodesIds.get(toggle % 2), nodesIds.get(++toggle % 2))));
 
                 ClusterHealthResponse healthResponse = client().admin().cluster().prepareHealth().setWaitForYellowStatus().setWaitForRelocatingShards(0).execute().actionGet();
                 assertThat(healthResponse.isTimedOut(), equalTo(false));
@@ -345,7 +344,7 @@ public class ClusterRerouteIT extends ESIntegTestCase {
         try {
             setClusterReadOnly(true);
             assertBlocked(client().admin().cluster().prepareReroute()
-                    .add(new MoveAllocationCommand("test-blocks", 1, nodesIds.get(toggle % 2), nodesIds.get(++toggle % 2))));
+                    .add(new MoveAllocationCommand(new ShardId("test-blocks", 1), nodesIds.get(toggle % 2), nodesIds.get(++toggle % 2))));
         } finally {
             setClusterReadOnly(false);
         }

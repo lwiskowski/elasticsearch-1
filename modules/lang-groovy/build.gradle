@@ -23,13 +23,13 @@ esplugin {
 }
 
 dependencies {
-  compile 'org.codehaus.groovy:groovy:2.4.6:indy'
+  compile 'org.codehaus.groovy:groovy:2.4.4:indy'
 }
 
 integTest {
   cluster {
-    setting 'script.inline', 'true'
-    setting 'script.stored', 'true'
+    systemProperty 'es.script.inline', 'on'
+    systemProperty 'es.script.indexed', 'on'
   }
 }
 
@@ -38,17 +38,6 @@ thirdPartyAudit.excludes = [
   // for example we do not need ivy, scripts arent allowed to download code
   'com.thoughtworks.xstream.XStream', 
   'groovyjarjarasm.asm.util.Textifiable', 
-  // commons-cli is referenced by groovy, even though they supposedly
-  // jarjar it. Since we don't use the cli, we don't need the dep.
-  'org.apache.commons.cli.CommandLine',
-  'org.apache.commons.cli.CommandLineParser',
-  'org.apache.commons.cli.GnuParser',
-  'org.apache.commons.cli.HelpFormatter',
-  'org.apache.commons.cli.Option',
-  'org.apache.commons.cli.OptionBuilder',
-  'org.apache.commons.cli.Options',
-  'org.apache.commons.cli.Parser',
-  'org.apache.commons.cli.PosixParser',
   'org.apache.ivy.Ivy', 
   'org.apache.ivy.core.event.IvyListener', 
   'org.apache.ivy.core.event.download.PrepareDownloadEvent', 

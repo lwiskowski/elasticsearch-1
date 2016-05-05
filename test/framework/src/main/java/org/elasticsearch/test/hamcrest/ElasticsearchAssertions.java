@@ -56,13 +56,10 @@ import org.elasticsearch.common.io.stream.NamedWriteableRegistry;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Streamable;
-import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.plugins.PluginInfo;
 import org.elasticsearch.rest.RestStatus;
 import org.elasticsearch.search.SearchHit;
-import org.elasticsearch.search.SearchModule;
 import org.elasticsearch.search.suggest.Suggest;
-import org.elasticsearch.test.ESIntegTestCase;
 import org.elasticsearch.test.VersionUtils;
 import org.elasticsearch.test.rest.client.http.HttpResponse;
 import org.hamcrest.CoreMatchers;
@@ -147,7 +144,7 @@ public class ElasticsearchAssertions {
     }
 
     /**
-     * Checks that all shard requests of a replicated broadcast request failed due to a cluster block
+     * Checks that all shard requests of a replicated brodcast request failed due to a cluster block
      *
      * @param replicatedBroadcastResponse the response that should only contain failed shard responses
      *
@@ -648,20 +645,7 @@ public class ElasticsearchAssertions {
     }
 
     public static void assertVersionSerializable(Version version, Streamable streamable) {
-        /*
-         * If possible we fetch the NamedWriteableRegistry from the test cluster. That is the only way to make sure that we properly handle
-         * when plugins register names. If not possible we'll try and set up a registry based on whatever SearchModule registers. But that
-         * is a hack at best - it only covers some things. If you end up with errors below and get to this comment I'm sorry. Please find
-         * a way that sucks less.
-         */
-        NamedWriteableRegistry registry;
-        if (ESIntegTestCase.isInternalCluster()) {
-            registry = ESIntegTestCase.internalCluster().getInstance(NamedWriteableRegistry.class);
-        } else {
-            registry = new NamedWriteableRegistry();
-            new SearchModule(Settings.EMPTY, registry);
-        }
-        assertVersionSerializable(version, streamable, registry);
+        assertVersionSerializable(version, streamable, null);
     }
 
     public static void assertVersionSerializable(Version version, Streamable streamable, NamedWriteableRegistry namedWriteableRegistry) {
@@ -732,7 +716,7 @@ public class ElasticsearchAssertions {
 
     /**
      * Applies basic assertions on the SearchResponse. This method checks if all shards were successful, if
-     * any of the shards threw an exception and if the response is serializable.
+     * any of the shards threw an exception and if the response is serializeable.
      */
     public static SearchResponse assertSearchResponse(SearchRequestBuilder request) {
         return assertSearchResponse(request.get());
@@ -740,12 +724,88 @@ public class ElasticsearchAssertions {
 
     /**
      * Applies basic assertions on the SearchResponse. This method checks if all shards were successful, if
-     * any of the shards threw an exception and if the response is serializable.
+     * any of the shards threw an exception and if the response is serializeable.
      */
     public static SearchResponse assertSearchResponse(SearchResponse response) {
         assertNoFailures(response);
         return response;
     }
+
+    public static void assertNodeContainsPlugins(NodesInfoResponse response, String nodeId,
+                                                 List<String> expectedJvmPluginNames,
+                                                 List<String> expectedJvmPluginDescriptions,
+                                                 List<String> expectedJvmVersions,
+                                                 List<String> expectedSitePluginNames,
+                                                 List<String> expectedSitePluginDescriptions,
+                                                 List<String> expectedSiteVersions) {
+
+        Assert.assertThat(response.getNodesMap().get(nodeId), notNullValue());
+
+        PluginsAndModules plugins = response.getNodesMap().get(nodeId).getPlugins();
+        Assert.assertThat(plugins, notNullValue());
+
+        List<String> pluginNames = filterAndMap(plugins, jvmPluginPredicate, nameFunction);
+        for (String expectedJvmPluginName : expectedJvmPluginNames) {
+            Assert.assertThat(pluginNames, hasItem(expectedJvmPluginName));
+        }
+
+        List<String> pluginDescriptions = filterAndMap(plugins, jvmPluginPredicate, descriptionFunction);
+        for (String expectedJvmPluginDescription : expectedJvmPluginDescriptions) {
+            Assert.assertThat(pluginDescriptions, hasItem(expectedJvmPluginDescription));
+        }
+
+        List<String> jvmPluginVersions = filterAndMap(plugins, jvmPluginPredicate, versionFunction);
+        for (String pluginVersion : expectedJvmVersions) {
+            Assert.assertThat(jvmPluginVersions, hasItem(pluginVersion));
+        }
+
+        boolean anyHaveUrls =
+                plugins
+                        .getPluginInfos()
+                        .stream()
+                        .filter(jvmPluginPredicate.and(sitePluginPredicate.negate()))
+                        .map(urlFunction)
+                        .anyMatch(p -> p != null);
+        assertFalse(anyHaveUrls);
+
+        List<String> sitePluginNames = filterAndMap(plugins, sitePluginPredicate, nameFunction);
+
+        Assert.assertThat(sitePluginNames.isEmpty(), is(expectedSitePluginNames.isEmpty()));
+        for (String expectedSitePluginName : expectedSitePluginNames) {
+            Assert.assertThat(sitePluginNames, hasItem(expectedSitePluginName));
+        }
+
+        List<String> sitePluginDescriptions = filterAndMap(plugins, sitePluginPredicate, descriptionFunction);
+        Assert.assertThat(sitePluginDescriptions.isEmpty(), is(expectedSitePluginDescriptions.isEmpty()));
+        for (String sitePluginDescription : expectedSitePluginDescriptions) {
+            Assert.assertThat(sitePluginDescriptions, hasItem(sitePluginDescription));
+        }
+
+        List<String> sitePluginUrls = filterAndMap(plugins, sitePluginPredicate, urlFunction);
+        Assert.assertThat(sitePluginUrls, not(contains(nullValue())));
+
+        List<String> sitePluginVersions = filterAndMap(plugins, sitePluginPredicate, versionFunction);
+        Assert.assertThat(sitePluginVersions.isEmpty(), is(expectedSiteVersions.isEmpty()));
+        for (String pluginVersion : expectedSiteVersions) {
+            Assert.assertThat(sitePluginVersions, hasItem(pluginVersion));
+        }
+    }
+
+    private static List<String> filterAndMap(PluginsAndModules pluginsInfo, Predicate<PluginInfo> predicate, Function<PluginInfo, String> function) {
+        return pluginsInfo.getPluginInfos().stream().filter(predicate).map(function).collect(Collectors.toList());
+    }
+
+    private static Predicate<PluginInfo> jvmPluginPredicate = p -> p.isJvm();
+
+    private static Predicate<PluginInfo> sitePluginPredicate = p -> p.isSite();
+
+    private static Function<PluginInfo, String> nameFunction = p -> p.getName();
+
+    private static Function<PluginInfo, String> descriptionFunction = p -> p.getDescription();
+
+    private static Function<PluginInfo, String> urlFunction = p -> p.getUrl();
+
+    private static Function<PluginInfo, String> versionFunction = p -> p.getVersion();
 
     /**
      * Check if a file exists

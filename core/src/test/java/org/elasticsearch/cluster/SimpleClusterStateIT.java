@@ -26,12 +26,11 @@ import org.elasticsearch.client.Client;
 import org.elasticsearch.client.Requests;
 import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.MappingMetaData;
-import org.elasticsearch.common.UUIDs;
+import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.unit.ByteSizeValue;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.index.IndexNotFoundException;
-import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.test.ESIntegTestCase;
 import org.elasticsearch.test.hamcrest.CollectionAssertions;
 import org.junit.Before;
@@ -43,7 +42,7 @@ import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.is;
 
 /**
- * Checking simple filtering capabilities of the cluster state
+ * Checking simple filtering capabilites of the cluster state
  *
  */
 public class SimpleClusterStateIT extends ESIntegTestCase {
@@ -72,10 +71,10 @@ public class SimpleClusterStateIT extends ESIntegTestCase {
 
     public void testNodes() throws Exception {
         ClusterStateResponse clusterStateResponse = client().admin().cluster().prepareState().clear().setNodes(true).get();
-        assertThat(clusterStateResponse.getState().nodes().getNodes().size(), is(cluster().size()));
+        assertThat(clusterStateResponse.getState().nodes().nodes().size(), is(cluster().size()));
 
         ClusterStateResponse clusterStateResponseFiltered = client().admin().cluster().prepareState().clear().get();
-        assertThat(clusterStateResponseFiltered.getState().nodes().getNodes().size(), is(0));
+        assertThat(clusterStateResponseFiltered.getState().nodes().nodes().size(), is(0));
     }
 
     public void testMetadata() throws Exception {
@@ -91,8 +90,8 @@ public class SimpleClusterStateIT extends ESIntegTestCase {
                 .setTemplate("te*")
                 .setOrder(0)
                 .addMapping("type1", XContentFactory.jsonBuilder().startObject().startObject("type1").startObject("properties")
-                        .startObject("field1").field("type", "text").field("store", true).endObject()
-                        .startObject("field2").field("type", "keyword").field("store", true).endObject()
+                        .startObject("field1").field("type", "string").field("store", "yes").endObject()
+                        .startObject("field2").field("type", "string").field("store", "yes").field("index", "not_analyzed").endObject()
                         .endObject().endObject().endObject())
                 .get();
 
@@ -100,7 +99,7 @@ public class SimpleClusterStateIT extends ESIntegTestCase {
                 .setTemplate("test*")
                 .setOrder(1)
                 .addMapping("type1", XContentFactory.jsonBuilder().startObject().startObject("type1").startObject("properties")
-                        .startObject("field2").field("type", "text").field("store", "no").endObject()
+                        .startObject("field2").field("type", "string").field("store", "no").endObject()
                         .endObject().endObject().endObject())
                 .get();
 
@@ -133,7 +132,7 @@ public class SimpleClusterStateIT extends ESIntegTestCase {
         int counter = 0;
         int numberOfFields = 0;
         while (true) {
-            mapping.startObject(UUIDs.randomBase64UUID()).field("type", "text").endObject();
+            mapping.startObject(Strings.randomBase64UUID()).field("type", "string").endObject();
             counter += 10; // each field is about 10 bytes, assuming compression in place
             numberOfFields++;
             if (counter > estimatedBytesSize) {
@@ -146,9 +145,7 @@ public class SimpleClusterStateIT extends ESIntegTestCase {
         int numberOfShards = scaledRandomIntBetween(1, cluster().numDataNodes());
         // if the create index is ack'ed, then all nodes have successfully processed the cluster state
         assertAcked(client().admin().indices().prepareCreate("test")
-                .setSettings(IndexMetaData.SETTING_NUMBER_OF_SHARDS, numberOfShards,
-                        IndexMetaData.SETTING_NUMBER_OF_REPLICAS, 0,
-                        MapperService.INDEX_MAPPING_TOTAL_FIELDS_LIMIT_SETTING.getKey(), Long.MAX_VALUE)
+                .setSettings(IndexMetaData.SETTING_NUMBER_OF_SHARDS, numberOfShards, IndexMetaData.SETTING_NUMBER_OF_REPLICAS, 0)
                 .addMapping("type", mapping)
                 .setTimeout("60s").get());
         ensureGreen(); // wait for green state, so its both green, and there are no more pending events

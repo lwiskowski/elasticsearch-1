@@ -32,15 +32,15 @@ import static org.hamcrest.Matchers.is;
  */
 public class ByteSizeValueTests extends ESTestCase {
     public void testActualPeta() {
-        MatcherAssert.assertThat(new ByteSizeValue(4, ByteSizeUnit.PB).bytes(), equalTo(4503599627370496L));
+        MatcherAssert.assertThat(new ByteSizeValue(4, ByteSizeUnit.PB).bytes(), equalTo(4503599627370496l));
     }
 
     public void testActualTera() {
-        MatcherAssert.assertThat(new ByteSizeValue(4, ByteSizeUnit.TB).bytes(), equalTo(4398046511104L));
+        MatcherAssert.assertThat(new ByteSizeValue(4, ByteSizeUnit.TB).bytes(), equalTo(4398046511104l));
     }
 
     public void testActual() {
-        MatcherAssert.assertThat(new ByteSizeValue(4, ByteSizeUnit.GB).bytes(), equalTo(4294967296L));
+        MatcherAssert.assertThat(new ByteSizeValue(4, ByteSizeUnit.GB).bytes(), equalTo(4294967296l));
     }
 
     public void testSimple() {

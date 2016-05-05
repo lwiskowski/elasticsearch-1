@@ -54,7 +54,7 @@ public class RestCountAction extends BaseRestHandler {
 
     @Inject
     public RestCountAction(Settings settings, RestController controller, Client client, IndicesQueriesRegistry indicesQueriesRegistry) {
-        super(settings, client);
+        super(settings, controller, client);
         controller.registerHandler(POST, "/_count", this);
         controller.registerHandler(GET, "/_count", this);
         controller.registerHandler(POST, "/{index}/_count", this);

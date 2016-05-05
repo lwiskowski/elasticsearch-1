@@ -20,8 +20,6 @@
 package org.elasticsearch.monitor.fs;
 
 import org.elasticsearch.common.component.AbstractComponent;
-import org.elasticsearch.common.settings.Setting;
-import org.elasticsearch.common.settings.Setting.Property;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.util.SingleObjectCache;
@@ -37,16 +35,12 @@ public class FsService extends AbstractComponent {
 
     private final SingleObjectCache<FsInfo> fsStatsCache;
 
-    public final static Setting<TimeValue> REFRESH_INTERVAL_SETTING =
-        Setting.timeSetting("monitor.fs.refresh_interval", TimeValue.timeValueSeconds(1), TimeValue.timeValueSeconds(1),
-            Property.NodeScope);
-
     public FsService(Settings settings, NodeEnvironment nodeEnvironment) throws IOException {
         super(settings);
         this.probe = new FsProbe(settings, nodeEnvironment);
-        TimeValue refreshInterval = REFRESH_INTERVAL_SETTING.get(settings);
+        TimeValue refreshInterval = settings.getAsTime("monitor.fs.refresh_interval", TimeValue.timeValueSeconds(1));
         fsStatsCache = new FsInfoCache(refreshInterval, probe.stats());
-        logger.debug("using refresh_interval [{}]", refreshInterval);
+        logger.debug("Using probe [{}] with refresh_interval [{}]", probe, refreshInterval);
     }
 
     public FsInfo stats() {
@@ -64,7 +58,7 @@ public class FsService extends AbstractComponent {
                 return probe.stats();
             } catch (IOException ex) {
                 logger.warn("Failed to fetch fs stats - returning empty instance");
-                return new FsInfo(0, null);
+                return new FsInfo();
             }
         }
     }

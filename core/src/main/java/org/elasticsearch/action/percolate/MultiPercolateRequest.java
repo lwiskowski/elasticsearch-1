@@ -163,7 +163,11 @@ public class MultiPercolateRequest extends ActionRequest<MultiPercolateRequest> 
 
     @Override
     public List<? extends IndicesRequest> subRequests() {
-        return requests;
+        List<IndicesRequest> indicesRequests = new ArrayList<>();
+        for (PercolateRequest percolateRequest : this.requests) {
+            indicesRequests.addAll(percolateRequest.subRequests());
+        }
+        return indicesRequests;
     }
 
     private void parsePercolateAction(XContentParser parser, PercolateRequest percolateRequest, boolean allowExplicitIndex) throws IOException {

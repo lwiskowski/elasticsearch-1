@@ -23,10 +23,11 @@ import org.HdrHistogram.DoubleHistogram;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.xcontent.XContentBuilder;
-import org.elasticsearch.search.DocValueFormat;
 import org.elasticsearch.search.aggregations.InternalAggregation;
 import org.elasticsearch.search.aggregations.metrics.InternalNumericMetricsAggregation;
 import org.elasticsearch.search.aggregations.pipeline.PipelineAggregator;
+import org.elasticsearch.search.aggregations.support.format.ValueFormatter;
+import org.elasticsearch.search.aggregations.support.format.ValueFormatterStreams;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -42,14 +43,14 @@ abstract class AbstractInternalHDRPercentiles extends InternalNumericMetricsAggr
 
     AbstractInternalHDRPercentiles() {} // for serialization
 
-    public AbstractInternalHDRPercentiles(String name, double[] keys, DoubleHistogram state, boolean keyed, DocValueFormat format,
+    public AbstractInternalHDRPercentiles(String name, double[] keys, DoubleHistogram state, boolean keyed, ValueFormatter formatter,
             List<PipelineAggregator> pipelineAggregators,
             Map<String, Object> metaData) {
         super(name, pipelineAggregators, metaData);
         this.keys = keys;
         this.state = state;
         this.keyed = keyed;
-        this.format = format;
+        this.valueFormatter = formatter;
     }
 
     @Override
@@ -82,7 +83,7 @@ abstract class AbstractInternalHDRPercentiles extends InternalNumericMetricsAggr
 
     @Override
     protected void doReadFrom(StreamInput in) throws IOException {
-        format = in.readNamedWriteable(DocValueFormat.class);
+        valueFormatter = ValueFormatterStreams.readOptional(in);
         keys = new double[in.readInt()];
         for (int i = 0; i < keys.length; ++i) {
             keys[i] = in.readDouble();
@@ -102,7 +103,7 @@ abstract class AbstractInternalHDRPercentiles extends InternalNumericMetricsAggr
 
     @Override
     protected void doWriteTo(StreamOutput out) throws IOException {
-        out.writeNamedWriteable(format);
+        ValueFormatterStreams.writeOptional(valueFormatter, out);
         out.writeInt(keys.length);
         for (int i = 0 ; i < keys.length; ++i) {
             out.writeDouble(keys[i]);
@@ -123,8 +124,8 @@ abstract class AbstractInternalHDRPercentiles extends InternalNumericMetricsAggr
                 String key = String.valueOf(keys[i]);
                 double value = value(keys[i]);
                 builder.field(key, value);
-                if (format != DocValueFormat.RAW) {
-                    builder.field(key + "_as_string", format.format(value));
+                if (!(valueFormatter instanceof ValueFormatter.Raw)) {
+                    builder.field(key + "_as_string", valueFormatter.format(value));
                 }
             }
             builder.endObject();
@@ -135,8 +136,8 @@ abstract class AbstractInternalHDRPercentiles extends InternalNumericMetricsAggr
                 builder.startObject();
                 builder.field(CommonFields.KEY, keys[i]);
                 builder.field(CommonFields.VALUE, value);
-                if (format != DocValueFormat.RAW) {
-                    builder.field(CommonFields.VALUE_AS_STRING, format.format(value));
+                if (!(valueFormatter instanceof ValueFormatter.Raw)) {
+                    builder.field(CommonFields.VALUE_AS_STRING, valueFormatter.format(value));
                 }
                 builder.endObject();
             }

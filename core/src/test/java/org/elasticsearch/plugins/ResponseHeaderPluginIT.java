@@ -39,7 +39,7 @@ import static org.hamcrest.Matchers.equalTo;
 public class ResponseHeaderPluginIT extends ESIntegTestCase {
     @Override
     protected Settings nodeSettings(int nodeOrdinal) {
-        return Settings.builder()
+        return Settings.settingsBuilder()
                 .put(super.nodeSettings(nodeOrdinal))
                 .put("force.http.enabled", true)
                 .build();

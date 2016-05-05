@@ -23,7 +23,6 @@ import com.microsoft.azure.storage.LocationMode;
 import com.microsoft.azure.storage.StorageException;
 import org.elasticsearch.cloud.azure.storage.AzureStorageService;
 import org.elasticsearch.cloud.azure.storage.AzureStorageService.Storage;
-import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.blobstore.BlobContainer;
 import org.elasticsearch.common.blobstore.BlobMetaData;
 import org.elasticsearch.common.blobstore.BlobPath;
@@ -33,6 +32,7 @@ import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.repositories.RepositoryName;
 import org.elasticsearch.repositories.RepositorySettings;
+import org.elasticsearch.repositories.azure.AzureRepository.Defaults;
 
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -40,7 +40,7 @@ import java.net.URISyntaxException;
 import java.util.Locale;
 import java.util.Map;
 
-import static org.elasticsearch.cloud.azure.storage.AzureStorageSettings.getValue;
+import static org.elasticsearch.cloud.azure.storage.AzureStorageSettings.getRepositorySettings;
 import static org.elasticsearch.repositories.azure.AzureRepository.Repository;
 
 public class AzureBlobStore extends AbstractComponent implements BlobStore {
@@ -57,15 +57,17 @@ public class AzureBlobStore extends AbstractComponent implements BlobStore {
                           AzureStorageService client) throws URISyntaxException, StorageException {
         super(settings);
         this.client = client.start();
-        this.container = getValue(repositorySettings, Repository.CONTAINER_SETTING, Storage.CONTAINER_SETTING);
+        this.container = getRepositorySettings(repositorySettings, Repository.CONTAINER, Storage.CONTAINER, Defaults.CONTAINER);
         this.repositoryName = name.getName();
-        this.accountName = getValue(repositorySettings, Repository.ACCOUNT_SETTING, Storage.ACCOUNT_SETTING);
 
-        String modeStr = getValue(repositorySettings, Repository.LOCATION_MODE_SETTING, Storage.LOCATION_MODE_SETTING);
-        if (Strings.hasLength(modeStr)) {
-            this.locMode = LocationMode.valueOf(modeStr.toUpperCase(Locale.ROOT));
-        } else {
+        // NOTE: null account means to use the first one specified in config
+        this.accountName = getRepositorySettings(repositorySettings, Repository.ACCOUNT, Storage.ACCOUNT, null);
+
+        String modeStr = getRepositorySettings(repositorySettings, Repository.LOCATION_MODE, Storage.LOCATION_MODE, null);
+        if (modeStr == null) {
             this.locMode = LocationMode.PRIMARY_ONLY;
+        } else {
+            this.locMode = LocationMode.valueOf(modeStr.toUpperCase(Locale.ROOT));
         }
     }
 

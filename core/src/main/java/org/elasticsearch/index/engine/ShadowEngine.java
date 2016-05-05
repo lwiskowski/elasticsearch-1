@@ -30,7 +30,6 @@ import org.elasticsearch.common.lucene.Lucene;
 import org.elasticsearch.common.lucene.index.ElasticsearchDirectoryReader;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.util.concurrent.ReleasableLock;
-import org.elasticsearch.index.shard.TranslogRecoveryPerformer;
 import org.elasticsearch.index.translog.Translog;
 
 import java.io.IOException;
@@ -247,10 +246,5 @@ public class ShadowEngine extends Engine {
     @Override
     public void deactivateThrottling() {
         throw new UnsupportedOperationException("ShadowEngine has no IndexWriter");
-    }
-
-    @Override
-    public Engine recoverFromTranslog() throws IOException {
-        throw new UnsupportedOperationException("can't recover on a shadow engine");
     }
 }

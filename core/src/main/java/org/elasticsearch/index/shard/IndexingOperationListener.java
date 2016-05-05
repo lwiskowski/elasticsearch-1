@@ -38,7 +38,7 @@ public interface IndexingOperationListener {
     /**
      * Called after the indexing operation occurred.
      */
-    default void postIndex(Engine.Index index, boolean created) {}
+    default void postIndex(Engine.Index index) {}
 
     /**
      * Called after the indexing operation occurred with exception.
@@ -89,11 +89,11 @@ public interface IndexingOperationListener {
         }
 
         @Override
-        public void postIndex(Engine.Index index, boolean created) {
+        public void postIndex(Engine.Index index) {
             assert index != null;
             for (IndexingOperationListener listener : listeners) {
                 try {
-                    listener.postIndex(index, created);
+                    listener.postIndex(index);
                 } catch (Throwable t) {
                     logger.warn("postIndex listener [{}] failed", t, listener);
                 }

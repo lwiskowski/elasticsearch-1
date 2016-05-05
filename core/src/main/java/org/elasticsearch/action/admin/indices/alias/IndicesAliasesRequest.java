@@ -286,25 +286,24 @@ public class IndicesAliasesRequest extends AcknowledgedRequest<IndicesAliasesReq
             return addValidationError("Must specify at least one alias action", validationException);
         }
         for (AliasActions aliasAction : allAliasActions) {
-            if (CollectionUtils.isEmpty(aliasAction.aliases)) {
+            if (aliasAction.aliases.length == 0) {
                 validationException = addValidationError("Alias action [" + aliasAction.actionType().name().toLowerCase(Locale.ENGLISH)
-                        + "]: Property [alias/aliases] is either missing or null", validationException);
-            } else {
-                for (String alias : aliasAction.aliases) {
-                    if (!Strings.hasText(alias)) {
-                        validationException = addValidationError("Alias action [" + aliasAction.actionType().name().toLowerCase(Locale.ENGLISH)
-                            + "]: [alias/aliases] may not be empty string", validationException);
-                    }
+                        + "]: aliases may not be empty", validationException);
+            }
+            for (String alias : aliasAction.aliases) {
+                if (!Strings.hasText(alias)) {
+                    validationException = addValidationError("Alias action [" + aliasAction.actionType().name().toLowerCase(Locale.ENGLISH)
+                            + "]: [alias] may not be empty string", validationException);
                 }
             }
             if (CollectionUtils.isEmpty(aliasAction.indices)) {
                 validationException = addValidationError("Alias action [" + aliasAction.actionType().name().toLowerCase(Locale.ENGLISH)
-                        + "]: Property [index/indices] is either missing or null", validationException);
+                        + "]: Property [index] was either missing or null", validationException);
             } else {
                 for (String index : aliasAction.indices) {
                     if (!Strings.hasText(index)) {
                         validationException = addValidationError("Alias action [" + aliasAction.actionType().name().toLowerCase(Locale.ENGLISH)
-                                + "]: [index/indices] may not be empty string", validationException);
+                                + "]: [index] may not be empty string", validationException);
                     }
                 }
             }

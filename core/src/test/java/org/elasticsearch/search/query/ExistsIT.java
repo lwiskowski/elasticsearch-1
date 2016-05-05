@@ -58,21 +58,24 @@ public class ExistsIT extends ESIntegTestCase {
         XContentBuilder mapping = XContentBuilder.builder(JsonXContent.jsonXContent)
             .startObject()
                 .startObject("type")
+                    .startObject(FieldNamesFieldMapper.NAME)
+                        .field("enabled", randomBoolean())
+                    .endObject()
                     .startObject("properties")
                         .startObject("foo")
-                            .field("type", "text")
+                            .field("type", "string")
                         .endObject()
                         .startObject("bar")
                             .field("type", "object")
                             .startObject("properties")
                                 .startObject("foo")
-                                    .field("type", "text")
+                                    .field("type", "string")
                                 .endObject()
                                 .startObject("bar")
                                     .field("type", "object")
                                     .startObject("properties")
                                         .startObject("bar")
-                                            .field("type", "text")
+                                            .field("type", "string")
                                         .endObject()
                                     .endObject()
                                 .endObject()
@@ -86,10 +89,10 @@ public class ExistsIT extends ESIntegTestCase {
             .endObject();
 
         assertAcked(client().admin().indices().prepareCreate("idx").addMapping("type", mapping));
+        @SuppressWarnings("unchecked")
         Map<String, Object> barObject = new HashMap<>();
         barObject.put("foo", "bar");
         barObject.put("bar", singletonMap("bar", "foo"));
-        @SuppressWarnings("unchecked")
         final Map<String, Object>[] sources = new Map[] {
                 // simple property
                 singletonMap("foo", "bar"),

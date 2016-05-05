@@ -41,7 +41,7 @@
             type_1:
               properties:
                 field:
-                  type: text
+                  type: string
           aliases:
             test_alias: {}
             test_blias:

@@ -18,9 +18,9 @@
  */
 package org.elasticsearch.index.mapper.geo;
 
-import org.locationtech.spatial4j.shape.Point;
-import org.locationtech.spatial4j.shape.Shape;
-import org.locationtech.spatial4j.shape.jts.JtsGeometry;
+import com.spatial4j.core.shape.Point;
+import com.spatial4j.core.shape.Shape;
+import com.spatial4j.core.shape.jts.JtsGeometry;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.spatial.prefix.PrefixTreeStrategy;
@@ -30,7 +30,6 @@ import org.apache.lucene.spatial.prefix.tree.GeohashPrefixTree;
 import org.apache.lucene.spatial.prefix.tree.PackedQuadPrefixTree;
 import org.apache.lucene.spatial.prefix.tree.QuadPrefixTree;
 import org.apache.lucene.spatial.prefix.tree.SpatialPrefixTree;
-import org.elasticsearch.Version;
 import org.elasticsearch.common.Explicit;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.geo.GeoUtils;
@@ -53,14 +52,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-import static org.elasticsearch.common.xcontent.support.XContentMapValues.lenientNodeBooleanValue;
+import static org.elasticsearch.common.xcontent.support.XContentMapValues.nodeBooleanValue;
+import static org.elasticsearch.index.mapper.MapperBuilders.geoShapeField;
 
 
 /**
- * FieldMapper for indexing {@link org.locationtech.spatial4j.shape.Shape}s.
+ * FieldMapper for indexing {@link com.spatial4j.core.shape.Shape}s.
  * <p>
  * Currently Shapes can only be indexed and can only be queried using
- * {@link org.elasticsearch.index.query.GeoShapeQueryBuilder}, consequently
+ * {@link org.elasticsearch.index.query.GeoShapeQueryParser}, consequently
  * a lot of behavior in this Mapper is disabled.
  * <p>
  * Format supported:
@@ -160,10 +160,10 @@ public class GeoShapeFieldMapper extends FieldMapper {
 
         @Override
         public Mapper.Builder parse(String name, Map<String, Object> node, ParserContext parserContext) throws MapperParsingException {
-            Builder builder = new Builder(name);
+            Builder builder = geoShapeField(name);
             for (Iterator<Map.Entry<String, Object>> iterator = node.entrySet().iterator(); iterator.hasNext();) {
                 Map.Entry<String, Object> entry = iterator.next();
-                String fieldName = entry.getKey();
+                String fieldName = Strings.toUnderscoreCase(entry.getKey());
                 Object fieldNode = entry.getValue();
                 if (Names.TREE.equals(fieldName)) {
                     builder.fieldType().setTree(fieldNode.toString());
@@ -184,11 +184,11 @@ public class GeoShapeFieldMapper extends FieldMapper {
                     builder.fieldType().setStrategyName(fieldNode.toString());
                     iterator.remove();
                 } else if (Names.COERCE.equals(fieldName)) {
-                    builder.coerce(lenientNodeBooleanValue(fieldNode));
+                    builder.coerce(nodeBooleanValue(fieldNode));
                     iterator.remove();
                 } else if (Names.STRATEGY_POINTS_ONLY.equals(fieldName)
                     && builder.fieldType().strategyName.equals(SpatialStrategy.TERM.getStrategyName()) == false) {
-                    builder.fieldType().setPointsOnly(XContentMapValues.lenientNodeBooleanValue(fieldNode));
+                    builder.fieldType().setPointsOnly(XContentMapValues.nodeBooleanValue(fieldNode));
                     iterator.remove();
                 }
             }
@@ -412,6 +412,11 @@ public class GeoShapeFieldMapper extends FieldMapper {
             throw new IllegalArgumentException("Unknown prefix tree strategy [" + strategyName + "]");
         }
 
+        @Override
+        public String value(Object value) {
+            throw new UnsupportedOperationException("GeoShape fields cannot be converted to String values");
+        }
+
     }
 
     protected Explicit<Boolean> coerce;
@@ -447,8 +452,7 @@ public class GeoShapeFieldMapper extends FieldMapper {
                 return null;
             }
             for (Field field : fields) {
-                if (!customBoost() &&
-                    fieldType.boost() != 1f && Version.indexCreated(context.indexSettings()).before(Version.V_5_0_0_alpha1)) {
+                if (!customBoost()) {
                     field.setBoost(fieldType().boost());
                 }
                 context.doc().add(field);

@@ -332,7 +332,8 @@ public class OpenCloseIndexIT extends ESIntegTestCase {
                 startObject("type").
                 startObject("properties").
                 startObject("test")
-                .field("type", "keyword")
+                .field("type", "string")
+                .field("index", "not_analyzed")
                 .endObject().
                         endObject().
                         endObject()

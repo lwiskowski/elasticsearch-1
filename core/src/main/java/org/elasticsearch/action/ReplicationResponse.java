@@ -28,7 +28,7 @@ import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Streamable;
 import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.XContentBuilder;
-import org.elasticsearch.index.shard.ShardId;
+import org.elasticsearch.common.xcontent.XContentBuilderString;
 import org.elasticsearch.rest.RestStatus;
 
 import java.io.IOException;
@@ -169,13 +169,15 @@ public class ReplicationResponse extends ActionResponse {
 
         public static class Failure implements ShardOperationFailedException, ToXContent {
 
-            private ShardId shardId;
+            private String index;
+            private int shardId;
             private String nodeId;
             private Throwable cause;
             private RestStatus status;
             private boolean primary;
 
-            public Failure(ShardId  shardId, @Nullable String nodeId, Throwable cause, RestStatus status, boolean primary) {
+            public Failure(String index, int shardId, @Nullable String nodeId, Throwable cause, RestStatus status, boolean primary) {
+                this.index = index;
                 this.shardId = shardId;
                 this.nodeId = nodeId;
                 this.cause = cause;
@@ -191,7 +193,7 @@ public class ReplicationResponse extends ActionResponse {
              */
             @Override
             public String index() {
-                return shardId.getIndexName();
+                return index;
             }
 
             /**
@@ -199,10 +201,6 @@ public class ReplicationResponse extends ActionResponse {
              */
             @Override
             public int shardId() {
-                return shardId.id();
-            }
-
-            public ShardId fullShardId() {
                 return shardId;
             }
 
@@ -245,7 +243,8 @@ public class ReplicationResponse extends ActionResponse {
 
             @Override
             public void readFrom(StreamInput in) throws IOException {
-                shardId = ShardId.readShardId(in);
+                index = in.readString();
+                shardId = in.readVInt();
                 nodeId = in.readOptionalString();
                 cause = in.readThrowable();
                 status = RestStatus.readFrom(in);
@@ -254,7 +253,8 @@ public class ReplicationResponse extends ActionResponse {
 
             @Override
             public void writeTo(StreamOutput out) throws IOException {
-                shardId.writeTo(out);
+                out.writeString(index);
+                out.writeVInt(shardId);
                 out.writeOptionalString(nodeId);
                 out.writeThrowable(cause);
                 RestStatus.writeTo(out, status);
@@ -264,8 +264,8 @@ public class ReplicationResponse extends ActionResponse {
             @Override
             public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
                 builder.startObject();
-                builder.field(Fields._INDEX, shardId.getIndexName());
-                builder.field(Fields._SHARD, shardId.id());
+                builder.field(Fields._INDEX, index);
+                builder.field(Fields._SHARD, shardId);
                 builder.field(Fields._NODE, nodeId);
                 builder.field(Fields.REASON);
                 builder.startObject();
@@ -279,24 +279,24 @@ public class ReplicationResponse extends ActionResponse {
 
             private static class Fields {
 
-                private static final String _INDEX = "_index";
-                private static final String _SHARD = "_shard";
-                private static final String _NODE = "_node";
-                private static final String REASON = "reason";
-                private static final String STATUS = "status";
-                private static final String PRIMARY = "primary";
+                private static final XContentBuilderString _INDEX = new XContentBuilderString("_index");
+                private static final XContentBuilderString _SHARD = new XContentBuilderString("_shard");
+                private static final XContentBuilderString _NODE = new XContentBuilderString("_node");
+                private static final XContentBuilderString REASON = new XContentBuilderString("reason");
+                private static final XContentBuilderString STATUS = new XContentBuilderString("status");
+                private static final XContentBuilderString PRIMARY = new XContentBuilderString("primary");
 
             }
         }
 
         private static class Fields {
 
-            private static final String _SHARDS = "_shards";
-            private static final String TOTAL = "total";
-            private static final String SUCCESSFUL = "successful";
-            private static final String PENDING = "pending";
-            private static final String FAILED = "failed";
-            private static final String FAILURES = "failures";
+            private static final XContentBuilderString _SHARDS = new XContentBuilderString("_shards");
+            private static final XContentBuilderString TOTAL = new XContentBuilderString("total");
+            private static final XContentBuilderString SUCCESSFUL = new XContentBuilderString("successful");
+            private static final XContentBuilderString PENDING = new XContentBuilderString("pending");
+            private static final XContentBuilderString FAILED = new XContentBuilderString("failed");
+            private static final XContentBuilderString FAILURES = new XContentBuilderString("failures");
 
         }
     }

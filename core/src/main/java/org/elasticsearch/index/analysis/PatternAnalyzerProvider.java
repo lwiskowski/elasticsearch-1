@@ -40,7 +40,13 @@ public class PatternAnalyzerProvider extends AbstractIndexAnalyzerProvider<Analy
     public PatternAnalyzerProvider(IndexSettings indexSettings, Environment env, String name, Settings settings) {
         super(indexSettings, name, settings);
 
-        final CharArraySet defaultStopwords = CharArraySet.EMPTY_SET;
+        Version esVersion = indexSettings.getIndexVersionCreated();
+        final CharArraySet defaultStopwords;
+        if (esVersion.onOrAfter(Version.V_1_0_0_RC1)) {
+            defaultStopwords = CharArraySet.EMPTY_SET;
+        } else {
+            defaultStopwords = StopAnalyzer.ENGLISH_STOP_WORDS_SET;
+        }
         boolean lowercase = settings.getAsBoolean("lowercase", true);
         CharArraySet stopWords = Analysis.parseStopWords(env, settings, defaultStopwords);
 

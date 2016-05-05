@@ -24,27 +24,20 @@ import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.script.Script;
 import org.elasticsearch.script.ScriptService.ScriptType;
 import org.elasticsearch.script.groovy.GroovyPlugin;
-import org.elasticsearch.search.aggregations.bucket.filter.Filter;
 import org.elasticsearch.search.aggregations.bucket.global.Global;
 import org.elasticsearch.search.aggregations.bucket.histogram.Histogram;
-import org.elasticsearch.search.aggregations.bucket.terms.Terms;
-import org.elasticsearch.search.aggregations.bucket.terms.Terms.Order;
 import org.elasticsearch.search.aggregations.metrics.AbstractNumericTestCase;
 import org.elasticsearch.search.aggregations.metrics.stats.Stats;
 
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 import static org.elasticsearch.index.query.QueryBuilders.matchAllQuery;
-import static org.elasticsearch.index.query.QueryBuilders.termQuery;
-import static org.elasticsearch.search.aggregations.AggregationBuilders.filter;
 import static org.elasticsearch.search.aggregations.AggregationBuilders.global;
 import static org.elasticsearch.search.aggregations.AggregationBuilders.histogram;
 import static org.elasticsearch.search.aggregations.AggregationBuilders.stats;
-import static org.elasticsearch.search.aggregations.AggregationBuilders.terms;
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertHitCount;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
@@ -64,12 +57,12 @@ public class StatsTests extends AbstractNumericTestCase {
     public void testEmptyAggregation() throws Exception {
         SearchResponse searchResponse = client().prepareSearch("empty_bucket_idx")
                 .setQuery(matchAllQuery())
-                .addAggregation(histogram("histo").field("value").interval(1L).minDocCount(0).subAggregation(stats("stats").field("value")))
+                .addAggregation(histogram("histo").field("value").interval(1l).minDocCount(0).subAggregation(stats("stats")))
                 .execute().actionGet();
 
         assertShardExecutionState(searchResponse, 0);
 
-        assertThat(searchResponse.getHits().getTotalHits(), equalTo(2L));
+        assertThat(searchResponse.getHits().getTotalHits(), equalTo(2l));
         Histogram histo = searchResponse.getAggregations().get("histo");
         assertThat(histo, notNullValue());
         Histogram.Bucket bucket = histo.getBuckets().get(1);
@@ -78,7 +71,7 @@ public class StatsTests extends AbstractNumericTestCase {
         Stats stats = bucket.getAggregations().get("stats");
         assertThat(stats, notNullValue());
         assertThat(stats.getName(), equalTo("stats"));
-        assertThat(stats.getCount(), equalTo(0L));
+        assertThat(stats.getCount(), equalTo(0l));
         assertThat(stats.getSum(), equalTo(0.0));
         assertThat(stats.getMin(), equalTo(Double.POSITIVE_INFINITY));
         assertThat(stats.getMax(), equalTo(Double.NEGATIVE_INFINITY));
@@ -94,7 +87,7 @@ public class StatsTests extends AbstractNumericTestCase {
 
         assertShardExecutionState(searchResponse, 0);
 
-        assertThat(searchResponse.getHits().getTotalHits(), equalTo(0L));
+        assertThat(searchResponse.getHits().getTotalHits(), equalTo(0l));
 
         Stats stats = searchResponse.getAggregations().get("stats");
         assertThat(stats, notNullValue());
@@ -103,20 +96,7 @@ public class StatsTests extends AbstractNumericTestCase {
         assertThat(stats.getMin(), equalTo(Double.POSITIVE_INFINITY));
         assertThat(stats.getMax(), equalTo(Double.NEGATIVE_INFINITY));
         assertThat(stats.getSum(), equalTo(0.0));
-        assertThat(stats.getCount(), equalTo(0L));
-    }
-
-    public void testPartiallyUnmapped() {
-        Stats s1 = client().prepareSearch("idx")
-                .addAggregation(stats("stats").field("value")).get()
-                .getAggregations().get("stats");
-        Stats s2 = client().prepareSearch("idx", "idx_unmapped")
-                .addAggregation(stats("stats").field("value")).get()
-                .getAggregations().get("stats");
-        assertEquals(s1.getAvg(), s2.getAvg(), 1e-10);
-        assertEquals(s1.getCount(), s2.getCount());
-        assertEquals(s1.getMin(), s2.getMin(), 0d);
-        assertEquals(s1.getMax(), s2.getMax(), 0d);
+        assertThat(stats.getCount(), equalTo(0l));
     }
 
     @Override
@@ -137,7 +117,7 @@ public class StatsTests extends AbstractNumericTestCase {
         assertThat(stats.getMin(), equalTo(1.0));
         assertThat(stats.getMax(), equalTo(10.0));
         assertThat(stats.getSum(), equalTo((double) 1+2+3+4+5+6+7+8+9+10));
-        assertThat(stats.getCount(), equalTo(10L));
+        assertThat(stats.getCount(), equalTo(10l));
     }
 
     public void testSingleValuedField_WithFormatter() throws Exception {
@@ -158,7 +138,7 @@ public class StatsTests extends AbstractNumericTestCase {
         assertThat(stats.getMaxAsString(), equalTo("0010.0"));
         assertThat(stats.getSum(), equalTo((double) 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 + 10));
         assertThat(stats.getSumAsString(), equalTo("0055.0"));
-        assertThat(stats.getCount(), equalTo(10L));
+        assertThat(stats.getCount(), equalTo(10l));
         assertThat(stats.getCountAsString(), equalTo("0010.0"));
     }
 
@@ -172,7 +152,7 @@ public class StatsTests extends AbstractNumericTestCase {
         Global global = searchResponse.getAggregations().get("global");
         assertThat(global, notNullValue());
         assertThat(global.getName(), equalTo("global"));
-        assertThat(global.getDocCount(), equalTo(10L));
+        assertThat(global.getDocCount(), equalTo(10l));
         assertThat(global.getAggregations(), notNullValue());
         assertThat(global.getAggregations().asMap().size(), equalTo(1));
 
@@ -217,7 +197,7 @@ public class StatsTests extends AbstractNumericTestCase {
         assertThat(stats.getMin(), equalTo(1.0));
         assertThat(stats.getMax(), equalTo(10.0));
         assertThat(stats.getSum(), equalTo((double) 1+2+3+4+5+6+7+8+9+10));
-        assertThat(stats.getCount(), equalTo(10L));
+        assertThat(stats.getCount(), equalTo(10l));
     }
 
     @Override
@@ -238,7 +218,7 @@ public class StatsTests extends AbstractNumericTestCase {
         assertThat(stats.getMin(), equalTo(2.0));
         assertThat(stats.getMax(), equalTo(11.0));
         assertThat(stats.getSum(), equalTo((double) 2+3+4+5+6+7+8+9+10+11));
-        assertThat(stats.getCount(), equalTo(10L));
+        assertThat(stats.getCount(), equalTo(10l));
     }
 
     @Override
@@ -261,7 +241,7 @@ public class StatsTests extends AbstractNumericTestCase {
         assertThat(stats.getMin(), equalTo(2.0));
         assertThat(stats.getMax(), equalTo(11.0));
         assertThat(stats.getSum(), equalTo((double) 2+3+4+5+6+7+8+9+10+11));
-        assertThat(stats.getCount(), equalTo(10L));
+        assertThat(stats.getCount(), equalTo(10l));
     }
 
     @Override
@@ -282,7 +262,7 @@ public class StatsTests extends AbstractNumericTestCase {
         assertThat(stats.getMin(), equalTo(2.0));
         assertThat(stats.getMax(), equalTo(12.0));
         assertThat(stats.getSum(), equalTo((double) 2+3+4+5+6+7+8+9+10+11+3+4+5+6+7+8+9+10+11+12));
-        assertThat(stats.getCount(), equalTo(20L));
+        assertThat(stats.getCount(), equalTo(20l));
     }
 
     @Override
@@ -303,7 +283,7 @@ public class StatsTests extends AbstractNumericTestCase {
         assertThat(stats.getMin(), equalTo(1.0));
         assertThat(stats.getMax(), equalTo(11.0));
         assertThat(stats.getSum(), equalTo((double) 1+2+3+4+5+6+7+8+9+10+2+3+4+5+6+7+8+9+10+11));
-        assertThat(stats.getCount(), equalTo(20L));
+        assertThat(stats.getCount(), equalTo(20l));
     }
 
     @Override
@@ -326,7 +306,7 @@ public class StatsTests extends AbstractNumericTestCase {
         assertThat(stats.getMin(), equalTo(1.0));
         assertThat(stats.getMax(), equalTo(11.0));
         assertThat(stats.getSum(), equalTo((double) 1+2+3+4+5+6+7+8+9+10+2+3+4+5+6+7+8+9+10+11));
-        assertThat(stats.getCount(), equalTo(20L));
+        assertThat(stats.getCount(), equalTo(20l));
     }
 
     @Override
@@ -347,7 +327,7 @@ public class StatsTests extends AbstractNumericTestCase {
         assertThat(stats.getMin(), equalTo(1.0));
         assertThat(stats.getMax(), equalTo(10.0));
         assertThat(stats.getSum(), equalTo((double) 1+2+3+4+5+6+7+8+9+10));
-        assertThat(stats.getCount(), equalTo(10L));
+        assertThat(stats.getCount(), equalTo(10l));
     }
 
     @Override
@@ -370,7 +350,7 @@ public class StatsTests extends AbstractNumericTestCase {
         assertThat(stats.getMin(), equalTo(2.0));
         assertThat(stats.getMax(), equalTo(11.0));
         assertThat(stats.getSum(), equalTo((double) 2+3+4+5+6+7+8+9+10+11));
-        assertThat(stats.getCount(), equalTo(10L));
+        assertThat(stats.getCount(), equalTo(10l));
     }
 
     @Override
@@ -391,7 +371,7 @@ public class StatsTests extends AbstractNumericTestCase {
         assertThat(stats.getMin(), equalTo(2.0));
         assertThat(stats.getMax(), equalTo(12.0));
         assertThat(stats.getSum(), equalTo((double) 2+3+4+5+6+7+8+9+10+11+3+4+5+6+7+8+9+10+11+12));
-        assertThat(stats.getCount(), equalTo(20L));
+        assertThat(stats.getCount(), equalTo(20l));
     }
 
     @Override
@@ -416,48 +396,15 @@ public class StatsTests extends AbstractNumericTestCase {
         assertThat(stats.getMin(), equalTo(0.0));
         assertThat(stats.getMax(), equalTo(10.0));
         assertThat(stats.getSum(), equalTo((double) 1+2+3+4+5+6+7+8+9+10+0+1+2+3+4+5+6+7+8+9));
-        assertThat(stats.getCount(), equalTo(20L));
+        assertThat(stats.getCount(), equalTo(20l));
     }
 
-    @Override
-    public void testOrderByEmptyAggregation() throws Exception {
-        SearchResponse searchResponse = client().prepareSearch("idx").setQuery(matchAllQuery())
-                .addAggregation(terms("terms").field("value").order(Order.compound(Order.aggregation("filter>stats.avg", true)))
-                        .subAggregation(filter("filter", termQuery("value", 100)).subAggregation(stats("stats").field("value"))))
-                .get();
-
-        assertHitCount(searchResponse, 10);
-
-        Terms terms = searchResponse.getAggregations().get("terms");
-        assertThat(terms, notNullValue());
-        List<Terms.Bucket> buckets = terms.getBuckets();
-        assertThat(buckets, notNullValue());
-        assertThat(buckets.size(), equalTo(10));
-
-        for (int i = 0; i < 10; i++) {
-            Terms.Bucket bucket = buckets.get(i);
-            assertThat(bucket, notNullValue());
-            assertThat(bucket.getKeyAsNumber(), equalTo((long) i + 1));
-            assertThat(bucket.getDocCount(), equalTo(1L));
-            Filter filter = bucket.getAggregations().get("filter");
-            assertThat(filter, notNullValue());
-            assertThat(filter.getDocCount(), equalTo(0L));
-            Stats stats = filter.getAggregations().get("stats");
-            assertThat(stats, notNullValue());
-            assertThat(stats.getMin(), equalTo(Double.POSITIVE_INFINITY));
-            assertThat(stats.getMax(), equalTo(Double.NEGATIVE_INFINITY));
-            assertThat(stats.getAvg(), equalTo(Double.NaN));
-            assertThat(stats.getSum(), equalTo(0.0));
-            assertThat(stats.getCount(), equalTo(0L));
-
-        }
-    }
 
     private void assertShardExecutionState(SearchResponse response, int expectedFailures) throws Exception {
         ShardSearchFailure[] failures = response.getShardFailures();
         if (failures.length != expectedFailures) {
             for (ShardSearchFailure failure : failures) {
-                logger.error("Shard Failure: {}", failure.getCause(), failure);
+                logger.error("Shard Failure: {}", failure.reason(), failure.toString());
             }
             fail("Unexpected shard failures!");
         }

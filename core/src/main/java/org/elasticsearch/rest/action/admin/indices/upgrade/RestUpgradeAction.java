@@ -49,7 +49,7 @@ public class RestUpgradeAction extends BaseRestHandler {
 
     @Inject
     public RestUpgradeAction(Settings settings, RestController controller, Client client) {
-        super(settings, client);
+        super(settings, controller, client);
         controller.registerHandler(POST, "/_upgrade", this);
         controller.registerHandler(POST, "/{index}/_upgrade", this);
 
@@ -89,7 +89,7 @@ public class RestUpgradeAction extends BaseRestHandler {
                 buildBroadcastShardsHeader(builder, request, response);
                 builder.startObject("upgraded_indices");
                 for (Map.Entry<String, Tuple<Version, String>> entry : response.versions().entrySet()) {
-                    builder.startObject(entry.getKey());
+                    builder.startObject(entry.getKey(), XContentBuilder.FieldCaseConversion.NONE);
                     builder.field("upgrade_version", entry.getValue().v1());
                     builder.field("oldest_lucene_segment_version", entry.getValue().v2());
                     builder.endObject();

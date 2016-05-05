@@ -84,7 +84,7 @@ public class SearchScrollWithFailingNodesIT extends ESIntegTestCase {
                     .get();
             assertAllSuccessful(searchResponse);
         } while (searchResponse.getHits().hits().length > 0);
-        assertThat(numHits, equalTo(100L));
+        assertThat(numHits, equalTo(100l));
         clearScroll("_all");
 
         internalCluster().stopRandomNonMasterNode();
@@ -104,7 +104,7 @@ public class SearchScrollWithFailingNodesIT extends ESIntegTestCase {
                     .get();
             assertThat(searchResponse.getSuccessfulShards(), equalTo(numberOfSuccessfulShards));
         } while (searchResponse.getHits().hits().length > 0);
-        assertThat(numHits, greaterThan(0L));
+        assertThat(numHits, greaterThan(0l));
 
         clearScroll(searchResponse.getScrollId());
     }

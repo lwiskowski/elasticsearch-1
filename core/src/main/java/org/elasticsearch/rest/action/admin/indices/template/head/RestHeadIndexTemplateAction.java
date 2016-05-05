@@ -42,7 +42,7 @@ public class RestHeadIndexTemplateAction extends BaseRestHandler {
 
     @Inject
     public RestHeadIndexTemplateAction(Settings settings, RestController controller, Client client) {
-        super(settings, client);
+        super(settings, controller, client);
 
         controller.registerHandler(HEAD, "/_template/{name}", this);
     }

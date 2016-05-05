@@ -26,6 +26,7 @@ import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Streamable;
 import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.common.xcontent.XContentBuilderString;
 import org.elasticsearch.common.xcontent.XContentFactory;
 
 import java.io.IOException;
@@ -179,10 +180,10 @@ public class SnapshotStatus implements ToXContent, Streamable {
     }
 
     static final class Fields {
-        static final String SNAPSHOT = "snapshot";
-        static final String REPOSITORY = "repository";
-        static final String STATE = "state";
-        static final String INDICES = "indices";
+        static final XContentBuilderString SNAPSHOT = new XContentBuilderString("snapshot");
+        static final XContentBuilderString REPOSITORY = new XContentBuilderString("repository");
+        static final XContentBuilderString STATE = new XContentBuilderString("state");
+        static final XContentBuilderString INDICES = new XContentBuilderString("indices");
     }
 
     @Override

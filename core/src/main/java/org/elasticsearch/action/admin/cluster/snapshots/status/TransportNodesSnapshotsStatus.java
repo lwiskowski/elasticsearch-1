@@ -20,6 +20,7 @@
 package org.elasticsearch.action.admin.cluster.snapshots.status;
 
 import org.elasticsearch.ElasticsearchException;
+import org.elasticsearch.action.ActionRequest;
 import org.elasticsearch.action.FailedNodeException;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.nodes.BaseNodeRequest;
@@ -28,10 +29,10 @@ import org.elasticsearch.action.support.nodes.BaseNodesRequest;
 import org.elasticsearch.action.support.nodes.BaseNodesResponse;
 import org.elasticsearch.action.support.nodes.TransportNodesAction;
 import org.elasticsearch.cluster.ClusterName;
+import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.metadata.SnapshotId;
 import org.elasticsearch.cluster.node.DiscoveryNode;
-import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
@@ -107,7 +108,7 @@ public class TransportNodesSnapshotsStatus extends TransportNodesAction<Transpor
     protected NodeSnapshotStatus nodeOperation(NodeRequest request) {
         Map<SnapshotId, Map<ShardId, SnapshotIndexShardStatus>> snapshotMapBuilder = new HashMap<>();
         try {
-            String nodeId = clusterService.localNode().getId();
+            String nodeId = clusterService.localNode().id();
             for (SnapshotId snapshotId : request.snapshotIds) {
                 Map<ShardId, IndexShardSnapshotStatus> shardsStatus = snapshotShardsService.currentSnapshotShards(snapshotId);
                 if (shardsStatus == null) {
@@ -145,8 +146,8 @@ public class TransportNodesSnapshotsStatus extends TransportNodesAction<Transpor
         public Request() {
         }
 
-        public Request(String[] nodesIds) {
-            super(nodesIds);
+        public Request(ActionRequest<?> request, String[] nodesIds) {
+            super(request, nodesIds);
         }
 
         public Request snapshotIds(SnapshotId[] snapshotIds) {
@@ -213,7 +214,7 @@ public class TransportNodesSnapshotsStatus extends TransportNodesAction<Transpor
         }
 
         NodeRequest(String nodeId, TransportNodesSnapshotsStatus.Request request) {
-            super(nodeId);
+            super(request, nodeId);
             snapshotIds = request.snapshotIds;
         }
 

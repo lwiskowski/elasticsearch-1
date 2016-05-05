@@ -34,6 +34,7 @@ import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.search.join.BitSetProducer;
+import org.apache.lucene.store.BaseDirectoryWrapper;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.RAMDirectory;
 import org.apache.lucene.util.Accountable;
@@ -41,8 +42,10 @@ import org.apache.lucene.util.BitSet;
 import org.apache.lucene.util.IOUtils;
 import org.elasticsearch.common.lucene.index.ElasticsearchDirectoryReader;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.index.Index;
 import org.elasticsearch.index.IndexSettings;
 import org.elasticsearch.index.shard.ShardId;
+import org.elasticsearch.indices.IndicesWarmer;
 import org.elasticsearch.test.ESTestCase;
 import org.elasticsearch.test.IndexSettingsModule;
 
@@ -54,7 +57,9 @@ import static org.hamcrest.Matchers.equalTo;
 
 public class BitSetFilterCacheTests extends ESTestCase {
 
-    private static final IndexSettings INDEX_SETTINGS = IndexSettingsModule.newIndexSettings("test", Settings.EMPTY);
+    private static final IndexSettings INDEX_SETTINGS = IndexSettingsModule.newIndexSettings(new Index("test"), Settings.EMPTY);
+    private final IndicesWarmer warmer = new IndicesWarmer(Settings.EMPTY, null);
+
 
     private static int matchCount(BitSetProducer producer, IndexReader reader) throws IOException {
         int count = 0;
@@ -87,11 +92,11 @@ public class BitSetFilterCacheTests extends ESTestCase {
         writer.addDocument(document);
         writer.commit();
 
-        DirectoryReader reader = DirectoryReader.open(writer);
-        reader = ElasticsearchDirectoryReader.wrap(reader, new ShardId("test", "_na_", 0));
+        DirectoryReader reader = DirectoryReader.open(writer, false);
+        reader = ElasticsearchDirectoryReader.wrap(reader, new ShardId(new Index("test"), 0));
         IndexSearcher searcher = new IndexSearcher(reader);
 
-        BitsetFilterCache cache = new BitsetFilterCache(INDEX_SETTINGS, new BitsetFilterCache.Listener() {
+        BitsetFilterCache cache = new BitsetFilterCache(INDEX_SETTINGS, warmer, new BitsetFilterCache.Listener() {
             @Override
             public void onCache(ShardId shardId, Accountable accountable) {
 
@@ -112,8 +117,8 @@ public class BitSetFilterCacheTests extends ESTestCase {
 
         writer.forceMerge(1);
         reader.close();
-        reader = DirectoryReader.open(writer);
-        reader = ElasticsearchDirectoryReader.wrap(reader, new ShardId("test", "_na_", 0));
+        reader = DirectoryReader.open(writer, false);
+        reader = ElasticsearchDirectoryReader.wrap(reader, new ShardId(new Index("test"), 0));
         searcher = new IndexSearcher(reader);
 
         assertThat(matchCount(filter, reader), equalTo(3));
@@ -138,21 +143,21 @@ public class BitSetFilterCacheTests extends ESTestCase {
         document.add(new StringField("field", "value", Field.Store.NO));
         writer.addDocument(document);
         writer.commit();
-        final DirectoryReader writerReader = DirectoryReader.open(writer);
-        final IndexReader reader = ElasticsearchDirectoryReader.wrap(writerReader, new ShardId("test", "_na_", 0));
+        final DirectoryReader writerReader = DirectoryReader.open(writer, false);
+        final IndexReader reader = ElasticsearchDirectoryReader.wrap(writerReader, new ShardId("test", 0));
 
         final AtomicLong stats = new AtomicLong();
         final AtomicInteger onCacheCalls = new AtomicInteger();
         final AtomicInteger onRemoveCalls = new AtomicInteger();
 
-        final BitsetFilterCache cache = new BitsetFilterCache(INDEX_SETTINGS, new BitsetFilterCache.Listener() {
+        final BitsetFilterCache cache = new BitsetFilterCache(INDEX_SETTINGS, warmer, new BitsetFilterCache.Listener() {
             @Override
             public void onCache(ShardId shardId, Accountable accountable) {
                 onCacheCalls.incrementAndGet();
                 stats.addAndGet(accountable.ramBytesUsed());
                 if (writerReader != reader) {
                     assertNotNull(shardId);
-                    assertEquals("test", shardId.getIndexName());
+                    assertEquals("test", shardId.index().name());
                     assertEquals(0, shardId.id());
                 } else {
                     assertNull(shardId);
@@ -165,7 +170,7 @@ public class BitSetFilterCacheTests extends ESTestCase {
                 stats.addAndGet(-accountable.ramBytesUsed());
                 if (writerReader != reader) {
                     assertNotNull(shardId);
-                    assertEquals("test", shardId.getIndexName());
+                    assertEquals("test", shardId.index().name());
                     assertEquals(0, shardId.id());
                 } else {
                     assertNull(shardId);
@@ -184,7 +189,7 @@ public class BitSetFilterCacheTests extends ESTestCase {
 
     public void testSetNullListener() {
         try {
-            new BitsetFilterCache(INDEX_SETTINGS, null);
+            new BitsetFilterCache(INDEX_SETTINGS, warmer, null);
             fail("listener can't be null");
         } catch (IllegalArgumentException ex) {
             assertEquals("listener must not be null", ex.getMessage());
@@ -193,7 +198,7 @@ public class BitSetFilterCacheTests extends ESTestCase {
     }
 
     public void testRejectOtherIndex() throws IOException {
-        BitsetFilterCache cache = new BitsetFilterCache(INDEX_SETTINGS, new BitsetFilterCache.Listener() {
+        BitsetFilterCache cache = new BitsetFilterCache(INDEX_SETTINGS, warmer, new BitsetFilterCache.Listener() {
             @Override
             public void onCache(ShardId shardId, Accountable accountable) {
 
@@ -204,19 +209,19 @@ public class BitSetFilterCacheTests extends ESTestCase {
 
             }
         });
-
+        
         Directory dir = newDirectory();
         IndexWriter writer = new IndexWriter(
                 dir,
                 newIndexWriterConfig()
         );
         writer.addDocument(new Document());
-        DirectoryReader reader = DirectoryReader.open(writer);
+        DirectoryReader reader = DirectoryReader.open(writer, true);
         writer.close();
-        reader = ElasticsearchDirectoryReader.wrap(reader, new ShardId("test2", "_na_", 0));
-
+        reader = ElasticsearchDirectoryReader.wrap(reader, new ShardId(new Index("test2"), 0));
+        
         BitSetProducer producer = cache.getBitSetProducer(new MatchAllDocsQuery());
-
+        
         try {
             producer.getBitSet(reader.leaves().get(0));
             fail();

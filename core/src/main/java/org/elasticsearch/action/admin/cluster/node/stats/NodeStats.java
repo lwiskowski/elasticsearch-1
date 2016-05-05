@@ -19,6 +19,7 @@
 
 package org.elasticsearch.action.admin.cluster.node.stats;
 
+import com.carrotsearch.hppc.cursors.ObjectObjectCursor;
 import org.elasticsearch.action.support.nodes.BaseNodeResponse;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.common.Nullable;
@@ -30,7 +31,6 @@ import org.elasticsearch.discovery.DiscoveryStats;
 import org.elasticsearch.http.HttpStats;
 import org.elasticsearch.indices.NodeIndicesStats;
 import org.elasticsearch.indices.breaker.AllCircuitBreakerStats;
-import org.elasticsearch.ingest.IngestStats;
 import org.elasticsearch.monitor.fs.FsInfo;
 import org.elasticsearch.monitor.jvm.JvmStats;
 import org.elasticsearch.monitor.os.OsStats;
@@ -40,7 +40,6 @@ import org.elasticsearch.threadpool.ThreadPoolStats;
 import org.elasticsearch.transport.TransportStats;
 
 import java.io.IOException;
-import java.util.Map;
 
 /**
  * Node statistics (dynamic, changes depending on when created).
@@ -82,9 +81,6 @@ public class NodeStats extends BaseNodeResponse implements ToXContent {
     @Nullable
     private DiscoveryStats discoveryStats;
 
-    @Nullable
-    private IngestStats ingestStats;
-
     NodeStats() {
     }
 
@@ -93,8 +89,7 @@ public class NodeStats extends BaseNodeResponse implements ToXContent {
                      @Nullable FsInfo fs, @Nullable TransportStats transport, @Nullable HttpStats http,
                      @Nullable AllCircuitBreakerStats breaker,
                      @Nullable ScriptStats scriptStats,
-                     @Nullable DiscoveryStats discoveryStats,
-                     @Nullable IngestStats ingestStats) {
+                     @Nullable DiscoveryStats discoveryStats) {
         super(node);
         this.timestamp = timestamp;
         this.indices = indices;
@@ -108,7 +103,6 @@ public class NodeStats extends BaseNodeResponse implements ToXContent {
         this.breaker = breaker;
         this.scriptStats = scriptStats;
         this.discoveryStats = discoveryStats;
-        this.ingestStats = ingestStats;
     }
 
     public long getTimestamp() {
@@ -193,11 +187,6 @@ public class NodeStats extends BaseNodeResponse implements ToXContent {
         return this.discoveryStats;
     }
 
-    @Nullable
-    public IngestStats getIngestStats() {
-        return ingestStats;
-    }
-
     public static NodeStats readNodeStats(StreamInput in) throws IOException {
         NodeStats nodeInfo = new NodeStats();
         nodeInfo.readFrom(in);
@@ -224,7 +213,7 @@ public class NodeStats extends BaseNodeResponse implements ToXContent {
             threadPool = ThreadPoolStats.readThreadPoolStats(in);
         }
         if (in.readBoolean()) {
-            fs = new FsInfo(in);
+            fs = FsInfo.readFsInfo(in);
         }
         if (in.readBoolean()) {
             transport = TransportStats.readTransportStats(in);
@@ -235,7 +224,7 @@ public class NodeStats extends BaseNodeResponse implements ToXContent {
         breaker = AllCircuitBreakerStats.readOptionalAllCircuitBreakerStats(in);
         scriptStats = in.readOptionalStreamable(ScriptStats::new);
         discoveryStats = in.readOptionalStreamable(() -> new DiscoveryStats(null));
-        ingestStats = in.readOptionalWriteable(IngestStats::new);
+
     }
 
     @Override
@@ -293,27 +282,20 @@ public class NodeStats extends BaseNodeResponse implements ToXContent {
         out.writeOptionalStreamable(breaker);
         out.writeOptionalStreamable(scriptStats);
         out.writeOptionalStreamable(discoveryStats);
-        out.writeOptionalWriteable(ingestStats);
     }
 
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
         if (!params.param("node_info_format", "default").equals("none")) {
-            builder.field("name", getNode().getName());
-            builder.field("transport_address", getNode().getAddress().toString());
-            builder.field("host", getNode().getHostName());
-            builder.field("ip", getNode().getAddress());
+            builder.field("name", getNode().name(), XContentBuilder.FieldCaseConversion.NONE);
+            builder.field("transport_address", getNode().address().toString(), XContentBuilder.FieldCaseConversion.NONE);
+            builder.field("host", getNode().getHostName(), XContentBuilder.FieldCaseConversion.NONE);
+            builder.field("ip", getNode().getAddress(), XContentBuilder.FieldCaseConversion.NONE);
 
-            builder.startArray("roles");
-            for (DiscoveryNode.Role role : getNode().getRoles()) {
-                builder.value(role.getRoleName());
-            }
-            builder.endArray();
-
-            if (!getNode().getAttributes().isEmpty()) {
+            if (!getNode().attributes().isEmpty()) {
                 builder.startObject("attributes");
-                for (Map.Entry<String, String> attrEntry : getNode().getAttributes().entrySet()) {
-                    builder.field(attrEntry.getKey(), attrEntry.getValue());
+                for (ObjectObjectCursor<String, String> attr : getNode().attributes()) {
+                    builder.field(attr.key, attr.value, XContentBuilder.FieldCaseConversion.NONE);
                 }
                 builder.endObject();
             }
@@ -353,10 +335,6 @@ public class NodeStats extends BaseNodeResponse implements ToXContent {
 
         if (getDiscoveryStats() != null) {
             getDiscoveryStats().toXContent(builder, params);
-        }
-
-        if (getIngestStats() != null) {
-            getIngestStats().toXContent(builder, params);
         }
 
         return builder;

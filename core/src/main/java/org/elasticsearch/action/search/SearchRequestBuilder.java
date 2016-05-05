@@ -28,9 +28,9 @@ import org.elasticsearch.index.query.QueryBuilder;
 import org.elasticsearch.script.Script;
 import org.elasticsearch.script.Template;
 import org.elasticsearch.search.Scroll;
-import org.elasticsearch.search.aggregations.AggregatorBuilder;
-import org.elasticsearch.search.aggregations.pipeline.PipelineAggregatorBuilder;
+import org.elasticsearch.search.aggregations.AbstractAggregationBuilder;
 import org.elasticsearch.search.builder.SearchSourceBuilder;
+import org.elasticsearch.search.fetch.innerhits.InnerHitsBuilder;
 import org.elasticsearch.search.highlight.HighlightBuilder;
 import org.elasticsearch.search.rescore.RescoreBuilder;
 import org.elasticsearch.search.sort.SortBuilder;
@@ -223,7 +223,7 @@ public class SearchRequestBuilder extends ActionRequestBuilder<SearchRequest, Se
     }
 
     /**
-     * Sets the boost a specific index will receive when the query is executed against it.
+     * Sets the boost a specific index will receive when the query is executeed against it.
      *
      * @param index      The index to apply the boost against
      * @param indexBoost The boost to apply to the index
@@ -344,15 +344,6 @@ public class SearchRequestBuilder extends ActionRequestBuilder<SearchRequest, Se
     }
 
     /**
-     * Set the sort values that indicates which docs this request should "search after".
-     *
-     */
-    public SearchRequestBuilder searchAfter(Object[] values) {
-        sourceBuilder().searchAfter(values);
-        return this;
-    }
-
-    /**
      * Applies when sorting, and controls if scores will be tracked as well. Defaults to
      * <tt>false</tt>.
      */
@@ -371,17 +362,9 @@ public class SearchRequestBuilder extends ActionRequestBuilder<SearchRequest, Se
     }
 
     /**
-     * Adds an aggregation to the search operation.
+     * Adds an get to the search operation.
      */
-    public SearchRequestBuilder addAggregation(AggregatorBuilder<?> aggregation) {
-        sourceBuilder().aggregation(aggregation);
-        return this;
-    }
-
-    /**
-     * Adds an aggregation to the search operation.
-     */
-    public SearchRequestBuilder addAggregation(PipelineAggregatorBuilder aggregation) {
+    public SearchRequestBuilder addAggregation(AbstractAggregationBuilder aggregation) {
         sourceBuilder().aggregation(aggregation);
         return this;
     }
@@ -392,36 +375,43 @@ public class SearchRequestBuilder extends ActionRequestBuilder<SearchRequest, Se
     }
 
     /**
-     * Delegates to {@link SearchSourceBuilder#suggest(SuggestBuilder)}
+     * Delegates to
+     * {@link org.elasticsearch.search.suggest.SuggestBuilder#addSuggestion(org.elasticsearch.search.suggest.SuggestBuilder.SuggestionBuilder)}
+     * .
      */
     public SearchRequestBuilder suggest(SuggestBuilder suggestBuilder) {
         sourceBuilder().suggest(suggestBuilder);
         return this;
     }
 
+    public SearchRequestBuilder innerHits(InnerHitsBuilder innerHitsBuilder) {
+        sourceBuilder().innerHits(innerHitsBuilder);
+        return this;
+    }
+
     /**
      * Clears all rescorers on the builder and sets the first one.  To use multiple rescore windows use
-     * {@link #addRescorer(org.elasticsearch.search.rescore.RescoreBuilder, int)}.
+     * {@link #addRescorer(org.elasticsearch.search.rescore.RescoreBuilder.Rescorer, int)}.
      *
      * @param rescorer rescorer configuration
      * @return this for chaining
      */
-    public SearchRequestBuilder setRescorer(RescoreBuilder<?> rescorer) {
+    public SearchRequestBuilder setRescorer(RescoreBuilder.Rescorer rescorer) {
         sourceBuilder().clearRescorers();
         return addRescorer(rescorer);
     }
 
     /**
      * Clears all rescorers on the builder and sets the first one.  To use multiple rescore windows use
-     * {@link #addRescorer(org.elasticsearch.search.rescore.RescoreBuilder, int)}.
+     * {@link #addRescorer(org.elasticsearch.search.rescore.RescoreBuilder.Rescorer, int)}.
      *
      * @param rescorer rescorer configuration
      * @param window   rescore window
      * @return this for chaining
      */
-    public SearchRequestBuilder setRescorer(RescoreBuilder rescorer, int window) {
+    public SearchRequestBuilder setRescorer(RescoreBuilder.Rescorer rescorer, int window) {
         sourceBuilder().clearRescorers();
-        return addRescorer(rescorer.windowSize(window));
+        return addRescorer(rescorer, window);
     }
 
     /**
@@ -430,8 +420,8 @@ public class SearchRequestBuilder extends ActionRequestBuilder<SearchRequest, Se
      * @param rescorer rescorer configuration
      * @return this for chaining
      */
-    public SearchRequestBuilder addRescorer(RescoreBuilder<?> rescorer) {
-        sourceBuilder().addRescorer(rescorer);
+    public SearchRequestBuilder addRescorer(RescoreBuilder.Rescorer rescorer) {
+        sourceBuilder().addRescorer(new RescoreBuilder(rescorer));
         return this;
     }
 
@@ -442,8 +432,8 @@ public class SearchRequestBuilder extends ActionRequestBuilder<SearchRequest, Se
      * @param window   rescore window
      * @return this for chaining
      */
-    public SearchRequestBuilder addRescorer(RescoreBuilder<?> rescorer, int window) {
-        sourceBuilder().addRescorer(rescorer.windowSize(window));
+    public SearchRequestBuilder addRescorer(RescoreBuilder.Rescorer rescorer, int window) {
+        sourceBuilder().addRescorer(new RescoreBuilder(rescorer).windowSize(window));
         return this;
     }
 

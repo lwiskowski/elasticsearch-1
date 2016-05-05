@@ -31,37 +31,37 @@ public class GeoShapeFieldTypeTests extends FieldTypeTestCase {
 
     @Before
     public void setupProperties() {
-        addModifier(new Modifier("tree", false) {
+        addModifier(new Modifier("tree", false, true) {
             @Override
             public void modify(MappedFieldType ft) {
                 ((GeoShapeFieldMapper.GeoShapeFieldType)ft).setTree("quadtree");
             }
         });
-        addModifier(new Modifier("strategy", false) {
+        addModifier(new Modifier("strategy", false, true) {
             @Override
             public void modify(MappedFieldType ft) {
                 ((GeoShapeFieldMapper.GeoShapeFieldType)ft).setStrategyName("term");
             }
         });
-        addModifier(new Modifier("tree_levels", false) {
+        addModifier(new Modifier("tree_levels", false, true) {
             @Override
             public void modify(MappedFieldType ft) {
                 ((GeoShapeFieldMapper.GeoShapeFieldType)ft).setTreeLevels(10);
             }
         });
-        addModifier(new Modifier("precision", false) {
+        addModifier(new Modifier("precision", false, true) {
             @Override
             public void modify(MappedFieldType ft) {
                 ((GeoShapeFieldMapper.GeoShapeFieldType)ft).setPrecisionInMeters(20);
             }
         });
-        addModifier(new Modifier("distance_error_pct", true) {
+        addModifier(new Modifier("distance_error_pct", true, true) {
             @Override
             public void modify(MappedFieldType ft) {
                 ((GeoShapeFieldMapper.GeoShapeFieldType)ft).setDefaultDistanceErrorPct(0.5);
             }
         });
-        addModifier(new Modifier("orientation", true) {
+        addModifier(new Modifier("orientation", true, true) {
             @Override
             public void modify(MappedFieldType ft) {
                 ((GeoShapeFieldMapper.GeoShapeFieldType)ft).setOrientation(ShapeBuilder.Orientation.LEFT);

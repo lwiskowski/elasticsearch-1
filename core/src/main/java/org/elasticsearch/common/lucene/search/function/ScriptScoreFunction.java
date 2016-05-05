@@ -133,9 +133,4 @@ public class ScriptScoreFunction extends ScoreFunction {
         ScriptScoreFunction scriptScoreFunction = (ScriptScoreFunction) other;
         return Objects.equals(this.sScript, scriptScoreFunction.sScript);
     }
-
-    @Override
-    protected int doHashCode() {
-        return Objects.hash(sScript);
-    }
 }

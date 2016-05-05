@@ -23,7 +23,6 @@ import org.elasticsearch.common.Nullable;
 import org.elasticsearch.common.logging.ESLogger;
 import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.settings.Setting;
-import org.elasticsearch.common.settings.Setting.Property;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.settings.SettingsModule;
 import org.elasticsearch.index.IndexModule;
@@ -45,8 +44,7 @@ import java.util.Map;
 
 public class MockFSIndexStore extends IndexStore {
 
-    public static final Setting<Boolean> INDEX_CHECK_INDEX_ON_CLOSE_SETTING =
-        Setting.boolSetting("index.store.mock.check_index_on_close", true, Property.IndexScope, Property.NodeScope);
+    public static final Setting<Boolean> INDEX_CHECK_INDEX_ON_CLOSE_SETTING = Setting.boolSetting("index.store.mock.check_index_on_close", true, false, Setting.Scope.INDEX);
 
     public static class TestPlugin extends Plugin {
         @Override

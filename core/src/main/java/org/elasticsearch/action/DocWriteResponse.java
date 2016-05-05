@@ -22,6 +22,7 @@ import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.xcontent.StatusToXContent;
 import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.common.xcontent.XContentBuilderString;
 import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.rest.RestStatus;
 
@@ -52,7 +53,7 @@ public abstract class DocWriteResponse extends ReplicationResponse implements St
      * The index the document was changed in.
      */
     public String getIndex() {
-        return this.shardId.getIndexName();
+        return this.shardId.getIndex();
     }
 
 
@@ -109,16 +110,16 @@ public abstract class DocWriteResponse extends ReplicationResponse implements St
     }
 
     static final class Fields {
-        static final String _INDEX = "_index";
-        static final String _TYPE = "_type";
-        static final String _ID = "_id";
-        static final String _VERSION = "_version";
+        static final XContentBuilderString _INDEX = new XContentBuilderString("_index");
+        static final XContentBuilderString _TYPE = new XContentBuilderString("_type");
+        static final XContentBuilderString _ID = new XContentBuilderString("_id");
+        static final XContentBuilderString _VERSION = new XContentBuilderString("_version");
     }
 
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
         ReplicationResponse.ShardInfo shardInfo = getShardInfo();
-        builder.field(Fields._INDEX, shardId.getIndexName())
+        builder.field(Fields._INDEX, shardId.getIndex())
             .field(Fields._TYPE, type)
             .field(Fields._ID, id)
             .field(Fields._VERSION, version);

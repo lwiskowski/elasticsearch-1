@@ -27,13 +27,10 @@ import org.elasticsearch.cluster.routing.ShardRoutingState;
 import org.elasticsearch.cluster.routing.allocation.RerouteExplanation;
 import org.elasticsearch.cluster.routing.allocation.RoutingAllocation;
 import org.elasticsearch.cluster.routing.allocation.decider.Decision;
-import org.elasticsearch.common.ParseField;
-import org.elasticsearch.common.ParseFieldMatcher;
-import org.elasticsearch.common.ParseFieldMatcherSupplier;
-import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.xcontent.ObjectParser;
 import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.index.IndexNotFoundException;
+import org.elasticsearch.index.shard.ShardId;
 import org.elasticsearch.index.shard.ShardNotFoundException;
 
 import java.io.IOException;
@@ -44,27 +41,17 @@ import java.util.List;
  */
 public class AllocateReplicaAllocationCommand extends AbstractAllocateAllocationCommand {
     public static final String NAME = "allocate_replica";
-    public static final ParseField COMMAND_NAME_FIELD = new ParseField(NAME);
 
-    private static final ObjectParser<AllocateReplicaAllocationCommand.Builder, ParseFieldMatcherSupplier> REPLICA_PARSER =
-            createAllocateParser(NAME);
+    private static final ObjectParser<AllocateReplicaAllocationCommand.Builder, Void> REPLICA_PARSER = createAllocateParser(NAME);
 
     /**
      * Creates a new {@link AllocateReplicaAllocationCommand}
      *
-     * @param index          index of the shard to assign
-     * @param shardId        id of the shard to assign
+     * @param shardId        {@link ShardId} of the shard to assign
      * @param node           node id of the node to assign the shard to
      */
-    public AllocateReplicaAllocationCommand(String index, int shardId, String node) {
-        super(index, shardId, node);
-    }
-
-    /**
-     * Read from a stream.
-     */
-    public AllocateReplicaAllocationCommand(StreamInput in) throws IOException {
-        super(in);
+    public AllocateReplicaAllocationCommand(ShardId shardId, String node) {
+        super(shardId, node);
     }
 
     @Override
@@ -72,21 +59,24 @@ public class AllocateReplicaAllocationCommand extends AbstractAllocateAllocation
         return NAME;
     }
 
-    public static AllocateReplicaAllocationCommand fromXContent(XContentParser parser) throws IOException {
-        return new Builder().parse(parser).build();
-    }
-
     protected static class Builder extends AbstractAllocateAllocationCommand.Builder<AllocateReplicaAllocationCommand> {
 
         @Override
         public Builder parse(XContentParser parser) throws IOException {
-            return REPLICA_PARSER.parse(parser, this, () -> ParseFieldMatcher.STRICT);
+            return REPLICA_PARSER.parse(parser, this);
         }
 
         @Override
         public AllocateReplicaAllocationCommand build() {
             validate();
-            return new AllocateReplicaAllocationCommand(index, shard, node);
+            return new AllocateReplicaAllocationCommand(new ShardId(index, shard), node);
+        }
+    }
+
+    public static class Factory extends AbstractAllocateAllocationCommand.Factory<AllocateReplicaAllocationCommand> {
+        @Override
+        protected Builder newBuilder() {
+            return new Builder();
         }
     }
 
@@ -99,27 +89,27 @@ public class AllocateReplicaAllocationCommand extends AbstractAllocateAllocation
             return explainOrThrowRejectedCommand(explain, allocation, e);
         }
         final RoutingNodes routingNodes = allocation.routingNodes();
-        RoutingNode routingNode = routingNodes.node(discoNode.getId());
+        RoutingNode routingNode = routingNodes.node(discoNode.id());
         if (routingNode == null) {
             return explainOrThrowMissingRoutingNode(allocation, explain, discoNode);
         }
 
         final ShardRouting primaryShardRouting;
         try {
-            primaryShardRouting = allocation.routingTable().shardRoutingTable(index, shardId).primaryShard();
+            primaryShardRouting = allocation.routingTable().shardRoutingTable(shardId).primaryShard();
         } catch (IndexNotFoundException | ShardNotFoundException e) {
             return explainOrThrowRejectedCommand(explain, allocation, e);
         }
         if (primaryShardRouting.unassigned()) {
             return explainOrThrowRejectedCommand(explain, allocation,
-                "trying to allocate a replica shard [" + index + "][" + shardId + "], while corresponding primary shard is still unassigned");
+                "trying to allocate a replica shard " + shardId + ", while corresponding primary shard is still unassigned");
         }
 
-        List<ShardRouting> replicaShardRoutings = allocation.routingTable().shardRoutingTable(index, shardId).replicaShardsWithState(ShardRoutingState.UNASSIGNED);
+        List<ShardRouting> replicaShardRoutings = allocation.routingTable().shardRoutingTable(shardId).replicaShardsWithState(ShardRoutingState.UNASSIGNED);
         ShardRouting shardRouting;
         if (replicaShardRoutings.isEmpty()) {
             return explainOrThrowRejectedCommand(explain, allocation,
-                "all copies of [" + index + "][" + shardId + "] are already assigned. Use the move allocation command instead");
+                "all copies of " + shardId +" are already assigned. Use the move allocation command instead");
         } else {
             shardRouting = replicaShardRoutings.get(0);
         }
@@ -130,7 +120,7 @@ public class AllocateReplicaAllocationCommand extends AbstractAllocateAllocation
             if (explain) {
                 return new RerouteExplanation(this, decision);
             }
-            throw new IllegalArgumentException("[" + name() + "] allocation of [" + index + "][" + shardId + "] on node " + discoNode + " is not allowed, reason: " + decision);
+            throw new IllegalArgumentException("[" + name() + "] allocation of " + shardId + " on node " + discoNode + " is not allowed, reason: " + decision);
         }
 
         initializeUnassignedShard(allocation, routingNodes, routingNode, shardRouting);

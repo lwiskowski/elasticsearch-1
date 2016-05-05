@@ -21,7 +21,6 @@ package org.elasticsearch.messy.tests;
 
 import org.elasticsearch.action.index.IndexRequestBuilder;
 import org.elasticsearch.action.search.SearchResponse;
-import org.elasticsearch.common.bytes.BytesArray;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.script.Script;
@@ -86,10 +85,7 @@ public class BucketScriptTests extends ESIntegTestCase {
             builders.add(client().prepareIndex("idx", "type").setSource(newDocBuilder()));
         }
 
-        client().admin().cluster().preparePutStoredScript()
-                .setId("my_script")
-                .setScriptLang(GroovyScriptEngineService.NAME)
-                .setSource(new BytesArray("{ \"script\": \"_value0 + _value1 + _value2\" }")).get();
+        client().preparePutIndexedScript().setId("my_script").setScriptLang(GroovyScriptEngineService.NAME).setSource("{ \"script\": \"_value0 + _value1 + _value2\" }").get();
 
         indexRandom(true, builders);
         ensureSearchable();
@@ -117,8 +113,8 @@ public class BucketScriptTests extends ESIntegTestCase {
                                 .subAggregation(sum("field3Sum").field(FIELD_3_NAME))
                                 .subAggregation(sum("field4Sum").field(FIELD_4_NAME))
                                 .subAggregation(
-                                        bucketScript("seriesArithmetic", new Script("_value0 + _value1 + _value2", ScriptType.INLINE, null, null)
-                                                , "field2Sum", "field3Sum", "field4Sum"))).execute().actionGet();
+                                        bucketScript("seriesArithmetic").setBucketsPaths("field2Sum", "field3Sum", "field4Sum").script(
+                                                new Script("_value0 + _value1 + _value2", ScriptType.INLINE, null, null)))).execute().actionGet();
 
         assertSearchResponse(response);
 
@@ -161,8 +157,8 @@ public class BucketScriptTests extends ESIntegTestCase {
                                 .subAggregation(sum("field3Sum").field(FIELD_3_NAME))
                                 .subAggregation(sum("field4Sum").field(FIELD_4_NAME))
                                 .subAggregation(
-                                        bucketScript("seriesArithmetic", new Script("_value0 + _value1 / _value2", ScriptType.INLINE, null, null),
-                                                "field2Sum", "field3Sum", "field4Sum"))).execute().actionGet();
+                                        bucketScript("seriesArithmetic").setBucketsPaths("field2Sum", "field3Sum", "field4Sum").script(
+                                                new Script("_value0 + _value1 / _value2", ScriptType.INLINE, null, null)))).execute().actionGet();
 
         assertSearchResponse(response);
 
@@ -203,8 +199,8 @@ public class BucketScriptTests extends ESIntegTestCase {
                                 .interval(interval)
                                 .subAggregation(sum("field2Sum").field(FIELD_2_NAME))
                                 .subAggregation(
-                                        bucketScript("seriesArithmetic", new Script("_value0", ScriptType.INLINE, null, null),
-                                                "field2Sum"))).execute().actionGet();
+                                        bucketScript("seriesArithmetic").setBucketsPaths("field2Sum").script(
+                                                new Script("_value0", ScriptType.INLINE, null, null)))).execute().actionGet();
 
         assertSearchResponse(response);
 
@@ -245,7 +241,7 @@ public class BucketScriptTests extends ESIntegTestCase {
                                 .subAggregation(sum("field3Sum").field(FIELD_3_NAME))
                                 .subAggregation(sum("field4Sum").field(FIELD_4_NAME))
                                 .subAggregation(
-                                        bucketScript("seriesArithmetic", bucketsPathsMap,
+                                        bucketScript("seriesArithmetic").setBucketsPathsMap(bucketsPathsMap ).script(
                                                 new Script("foo + bar + baz", ScriptType.INLINE, null, null)))).execute().actionGet();
 
         assertSearchResponse(response);
@@ -291,8 +287,8 @@ public class BucketScriptTests extends ESIntegTestCase {
                                 .subAggregation(sum("field3Sum").field(FIELD_3_NAME))
                                 .subAggregation(sum("field4Sum").field(FIELD_4_NAME))
                                 .subAggregation(
-                                        bucketScript("seriesArithmetic", new Script("(_value0 + _value1 + _value2) * factor", ScriptType.INLINE, null, params),
-                                                "field2Sum", "field3Sum", "field4Sum"))).execute().actionGet();
+                                        bucketScript("seriesArithmetic").setBucketsPaths("field2Sum", "field3Sum", "field4Sum").script(
+                                                new Script("(_value0 + _value1 + _value2) * factor", ScriptType.INLINE, null, params)))).execute().actionGet();
 
         assertSearchResponse(response);
 
@@ -335,8 +331,8 @@ public class BucketScriptTests extends ESIntegTestCase {
                                 .subAggregation(sum("field3Sum").field(FIELD_3_NAME))
                                 .subAggregation(sum("field4Sum").field(FIELD_4_NAME))
                                 .subAggregation(
-                                        bucketScript("seriesArithmetic", new Script("_value0 + _value1 + _value2", ScriptType.INLINE, null, null),
-                                                "field2Sum", "field3Sum", "field4Sum").gapPolicy(GapPolicy.INSERT_ZEROS))).execute().actionGet();
+                                        bucketScript("seriesArithmetic").setBucketsPaths("field2Sum", "field3Sum", "field4Sum").script(
+                                                new Script("_value0 + _value1 + _value2", ScriptType.INLINE, null, null)).gapPolicy(GapPolicy.INSERT_ZEROS))).execute().actionGet();
 
         assertSearchResponse(response);
 
@@ -381,8 +377,8 @@ public class BucketScriptTests extends ESIntegTestCase {
                                 .subAggregation(sum("field3Sum").field(FIELD_3_NAME))
                                 .subAggregation(sum("field4Sum").field(FIELD_4_NAME))
                                 .subAggregation(
-                                        bucketScript("seriesArithmetic", new Script("my_script", ScriptType.STORED, null, null),
-                                                "field2Sum", "field3Sum", "field4Sum"))).execute().actionGet();
+                                        bucketScript("seriesArithmetic").setBucketsPaths("field2Sum", "field3Sum", "field4Sum").script(
+                                                new Script("my_script", ScriptType.INDEXED, null, null)))).execute().actionGet();
 
         assertSearchResponse(response);
 
@@ -425,8 +421,8 @@ public class BucketScriptTests extends ESIntegTestCase {
                                 .subAggregation(sum("field3Sum").field(FIELD_3_NAME))
                                 .subAggregation(sum("field4Sum").field(FIELD_4_NAME))
                                 .subAggregation(
-                                        bucketScript("seriesArithmetic", new Script("_value0 + _value1 + _value2", ScriptType.INLINE, null, null),
-                                                "field2Sum", "field3Sum", "field4Sum")))
+                                        bucketScript("seriesArithmetic").setBucketsPaths("field2Sum", "field3Sum", "field4Sum").script(
+                                                new Script("_value0 + _value1 + _value2", ScriptType.INLINE, null, null))))
                                 .execute().actionGet();
 
         assertSearchResponse(response);
@@ -448,8 +444,8 @@ public class BucketScriptTests extends ESIntegTestCase {
                                 .subAggregation(sum("field3Sum").field(FIELD_3_NAME))
                                 .subAggregation(sum("field4Sum").field(FIELD_4_NAME))
                                 .subAggregation(
-                                        bucketScript("seriesArithmetic", new Script("_value0 + _value1 + _value2", ScriptType.INLINE, null, null),
-                                                "field2Sum", "field3Sum", "field4Sum"))).execute().actionGet();
+                                        bucketScript("seriesArithmetic").setBucketsPaths("field2Sum", "field3Sum", "field4Sum").script(
+                                                new Script("_value0 + _value1 + _value2", ScriptType.INLINE, null, null)))).execute().actionGet();
 
         assertSearchResponse(response);
 

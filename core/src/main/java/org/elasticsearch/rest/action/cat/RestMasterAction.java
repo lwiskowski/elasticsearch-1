@@ -81,7 +81,7 @@ public class RestMasterAction extends AbstractCatAction {
         DiscoveryNodes nodes = state.getState().nodes();
 
         table.startRow();
-        DiscoveryNode master = nodes.get(nodes.getMasterNodeId());
+        DiscoveryNode master = nodes.get(nodes.masterNodeId());
         if (master == null) {
             table.addCell("-");
             table.addCell("-");

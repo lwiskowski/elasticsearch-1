@@ -25,6 +25,8 @@ import org.elasticsearch.action.ActionResponse;
 import org.elasticsearch.action.ActionRunnable;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.HandledTransportAction;
+import org.elasticsearch.action.support.ThreadedActionListener;
+import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.ClusterStateObserver;
 import org.elasticsearch.cluster.MasterNodeChangePredicate;
@@ -32,7 +34,6 @@ import org.elasticsearch.cluster.NotMasterException;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
-import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.discovery.Discovery;
@@ -112,21 +113,22 @@ public abstract class TransportMasterNodeAction<Request extends MasterNodeReques
         AsyncSingleAction(Task task, Request request, ActionListener<Response> listener) {
             this.task = task;
             this.request = request;
-            if (task != null) {
-                request.setParentTask(clusterService.localNode().getId(), task.getId());
+            // TODO do we really need to wrap it in a listener? the handlers should be cheap
+            if ((listener instanceof ThreadedActionListener) == false) {
+                listener = new ThreadedActionListener<>(logger, threadPool, ThreadPool.Names.LISTENER, listener);
             }
             this.listener = listener;
         }
 
         public void start() {
-            this.observer = new ClusterStateObserver(clusterService, request.masterNodeTimeout(), logger, threadPool.getThreadContext());
+            this.observer = new ClusterStateObserver(clusterService, request.masterNodeTimeout(), logger);
             doStart();
         }
 
         protected void doStart() {
             final ClusterState clusterState = observer.observedState();
             final DiscoveryNodes nodes = clusterState.nodes();
-            if (nodes.isLocalNodeElectedMaster() || localExecute(request)) {
+            if (nodes.localNodeMaster() || localExecute(request)) {
                 // check for block, if blocked, retry, else, execute locally
                 final ClusterBlockException blockException = checkBlock(request, clusterState);
                 if (blockException != null) {
@@ -154,7 +156,6 @@ public abstract class TransportMasterNodeAction<Request extends MasterNodeReques
                             }
                         }
                     };
-                    taskManager.registerChildTask(task, nodes.getLocalNodeId());
                     threadPool.executor(executor).execute(new ActionRunnable(delegate) {
                         @Override
                         protected void doRun() throws Exception {
@@ -163,19 +164,23 @@ public abstract class TransportMasterNodeAction<Request extends MasterNodeReques
                     });
                 }
             } else {
-                if (nodes.getMasterNode() == null) {
+                if (nodes.masterNode() == null) {
                     logger.debug("no known master node, scheduling a retry");
                     retry(null, MasterNodeChangePredicate.INSTANCE);
                 } else {
-                    taskManager.registerChildTask(task, nodes.getMasterNode().getId());
-                    transportService.sendRequest(nodes.getMasterNode(), actionName, request, new ActionListenerResponseHandler<Response>(listener, TransportMasterNodeAction.this::newResponse) {
+                    transportService.sendRequest(nodes.masterNode(), actionName, request, new ActionListenerResponseHandler<Response>(listener) {
+                        @Override
+                        public Response newInstance() {
+                            return newResponse();
+                        }
+
                         @Override
                         public void handleException(final TransportException exp) {
                             Throwable cause = exp.unwrapCause();
                             if (cause instanceof ConnectTransportException) {
                                 // we want to retry here a bit to see if a new master is elected
                                 logger.debug("connection exception while trying to forward request with action name [{}] to master node [{}], scheduling a retry. Error: [{}]",
-                                        actionName, nodes.getMasterNode(), exp.getDetailedMessage());
+                                        actionName, nodes.masterNode(), exp.getDetailedMessage());
                                 retry(cause, MasterNodeChangePredicate.INSTANCE);
                             } else {
                                 listener.onFailure(exp);

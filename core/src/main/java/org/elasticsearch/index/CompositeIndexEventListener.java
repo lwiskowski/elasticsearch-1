@@ -258,16 +258,4 @@ final class CompositeIndexEventListener implements IndexEventListener {
             }
         }
     }
-
-    @Override
-    public void onStoreClosed(ShardId shardId) {
-        for (IndexEventListener listener  : listeners) {
-            try {
-                listener.onStoreClosed(shardId);
-            } catch (Throwable t) {
-                logger.warn("failed to invoke on store closed", t);
-                throw t;
-            }
-        }
-    }
 }

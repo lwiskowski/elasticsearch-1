@@ -32,7 +32,6 @@ import org.elasticsearch.common.network.NetworkModule;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.transport.TransportAddress;
 import org.elasticsearch.discovery.DiscoveryModule;
-import org.elasticsearch.node.Node;
 import org.elasticsearch.node.internal.InternalSettingsPreparer;
 
 import java.io.Closeable;
@@ -45,15 +44,17 @@ import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
 
+import static org.elasticsearch.common.settings.Settings.settingsBuilder;
+
 /**
  * Simple helper class to start external nodes to be used within a test cluster
  */
 final class ExternalNode implements Closeable {
 
     public static final Settings REQUIRED_SETTINGS = Settings.builder()
-            .put(InternalSettingsPreparer.IGNORE_SYSTEM_PROPERTIES_SETTING.getKey(), true)
-            .put(DiscoveryModule.DISCOVERY_TYPE_SETTING.getKey(), "zen")
-            .put(Node.NODE_MODE_SETTING.getKey(), "network").build(); // we need network mode for this
+            .put(InternalSettingsPreparer.IGNORE_SYSTEM_PROPERTIES_SETTING, true)
+            .put(DiscoveryModule.DISCOVERY_TYPE_KEY, "zen")
+            .put("node.mode", "network").build(); // we need network mode for this
 
     private final Path path;
     private final Random random;
@@ -111,9 +112,9 @@ final class ExternalNode implements Closeable {
                 case "node.mode":
                 case "node.local":
                 case NetworkModule.TRANSPORT_TYPE_KEY:
-                case "discovery.type":
+                case DiscoveryModule.DISCOVERY_TYPE_KEY:
                 case NetworkModule.TRANSPORT_SERVICE_TYPE_KEY:
-                case "config.ignore_system_properties":
+                case InternalSettingsPreparer.IGNORE_SYSTEM_PROPERTIES_SETTING:
                     continue;
                 default:
                     externaNodeSettingsBuilder.put(entry.getKey(), entry.getValue());
@@ -190,10 +191,10 @@ final class ExternalNode implements Closeable {
             TransportAddress addr = nodeInfo.getTransport().getAddress().publishAddress();
             // verify that the end node setting will have network enabled.
 
-            Settings clientSettings = Settings.builder().put(externalNodeSettings)
+            Settings clientSettings = settingsBuilder().put(externalNodeSettings)
                     .put("client.transport.nodes_sampler_interval", "1s")
-                    .put("node.name", "transport_client_" + nodeInfo.getNode().getName())
-                    .put(ClusterName.CLUSTER_NAME_SETTING.getKey(), clusterName).put("client.transport.sniff", false).build();
+                    .put("name", "transport_client_" + nodeInfo.getNode().name())
+                    .put(ClusterName.SETTING, clusterName).put("client.transport.sniff", false).build();
             TransportClient client = TransportClient.builder().settings(clientSettings).build();
             client.addTransportAddress(addr);
             this.client = client;

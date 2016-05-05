@@ -20,6 +20,7 @@ package org.elasticsearch.index.search.nested;
 
 import org.apache.lucene.document.SortedNumericDocValuesField;
 import org.apache.lucene.index.IndexableField;
+import org.elasticsearch.index.fielddata.FieldDataType;
 import org.elasticsearch.index.fielddata.IndexFieldData;
 import org.elasticsearch.index.fielddata.IndexFieldData.XFieldComparatorSource.Nested;
 import org.elasticsearch.index.fielddata.IndexNumericFieldData;
@@ -31,8 +32,8 @@ import org.elasticsearch.search.MultiValueMode;
 public class LongNestedSortingTests extends AbstractNumberNestedSortingTestCase {
 
     @Override
-    protected String getFieldDataType() {
-        return "long";
+    protected FieldDataType getFieldDataType() {
+        return new FieldDataType("long");
     }
 
     @Override

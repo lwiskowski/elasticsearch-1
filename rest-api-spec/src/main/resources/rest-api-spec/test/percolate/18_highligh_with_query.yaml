@@ -9,16 +9,12 @@
                 type_1:
                     properties:
                         foo:
-                            type: text
-                queries:
-                    properties:
-                      query:
-                        type: percolator
+                            type: string
 
   - do:
       index:
         index: test_index
-        type: queries
+        type: .percolator
         id:  test_percolator
         body:
           query:
@@ -31,7 +27,7 @@
   - do:
       percolate:
         index: test_index
-        type:  type_1
+        type:  test_type
         body:
           doc:
               foo: "bar foo"

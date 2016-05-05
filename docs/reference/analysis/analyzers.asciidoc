@@ -79,7 +79,5 @@ include::analyzers/lang-analyzer.asciidoc[]
 
 include::analyzers/snowball-analyzer.asciidoc[]
 
-include::analyzers/fingerprint-analyzer.asciidoc[]
-
 include::analyzers/custom-analyzer.asciidoc[]
 

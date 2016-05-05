@@ -55,7 +55,13 @@ public class ClusterStateRequestTests extends ESTestCase {
             assertThat(deserializedCSRequest.nodes(), equalTo(clusterStateRequest.nodes()));
             assertThat(deserializedCSRequest.blocks(), equalTo(clusterStateRequest.blocks()));
             assertThat(deserializedCSRequest.indices(), equalTo(clusterStateRequest.indices()));
-            assertOptionsMatch(deserializedCSRequest.indicesOptions(), clusterStateRequest.indicesOptions());
+
+            if (testVersion.onOrAfter(Version.V_1_5_0)) {
+                assertOptionsMatch(deserializedCSRequest.indicesOptions(), clusterStateRequest.indicesOptions());
+            } else {
+                // versions before V_1_5_0 use IndicesOptions.lenientExpandOpen()
+                assertOptionsMatch(deserializedCSRequest.indicesOptions(), IndicesOptions.lenientExpandOpen());
+            }
         }
     }
 

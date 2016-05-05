@@ -35,8 +35,8 @@ public class GeoFieldDataTests extends AbstractGeoFieldDataTestCase {
     private static String FIELD_NAME = "value";
 
     @Override
-    protected String getFieldDataType() {
-        return "geo_point";
+    protected FieldDataType getFieldDataType() {
+        return new FieldDataType("geo_point");
     }
 
     @Override

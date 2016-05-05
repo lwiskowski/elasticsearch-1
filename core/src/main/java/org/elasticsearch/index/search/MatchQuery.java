@@ -45,10 +45,11 @@ import org.elasticsearch.index.query.QueryShardContext;
 import org.elasticsearch.index.query.support.QueryParsers;
 
 import java.io.IOException;
+import java.util.List;
 
 public class MatchQuery {
 
-    public static enum Type implements Writeable {
+    public static enum Type implements Writeable<Type> {
         /**
          * The text is analyzed and terms are added to a boolean query.
          */
@@ -64,11 +65,14 @@ public class MatchQuery {
 
         private final int ordinal;
 
+        private static final Type PROTOTYPE = BOOLEAN;
+
         private Type(int ordinal) {
             this.ordinal = ordinal;
         }
 
-        public static Type readFromStream(StreamInput in) throws IOException {
+        @Override
+        public Type readFrom(StreamInput in) throws IOException {
             int ord = in.readVInt();
             for (Type type : Type.values()) {
                 if (type.ordinal == ord) {
@@ -78,23 +82,30 @@ public class MatchQuery {
             throw new ElasticsearchException("unknown serialized type [" + ord + "]");
         }
 
+        public static Type readTypeFrom(StreamInput in) throws IOException {
+            return PROTOTYPE.readFrom(in);
+        }
+
         @Override
         public void writeTo(StreamOutput out) throws IOException {
             out.writeVInt(this.ordinal);
         }
     }
 
-    public static enum ZeroTermsQuery implements Writeable {
+    public static enum ZeroTermsQuery implements Writeable<ZeroTermsQuery> {
         NONE(0),
         ALL(1);
 
         private final int ordinal;
 
+        private static final ZeroTermsQuery PROTOTYPE = NONE;
+
         private ZeroTermsQuery(int ordinal) {
             this.ordinal = ordinal;
         }
 
-        public static ZeroTermsQuery readFromStream(StreamInput in) throws IOException {
+        @Override
+        public ZeroTermsQuery readFrom(StreamInput in) throws IOException {
             int ord = in.readVInt();
             for (ZeroTermsQuery zeroTermsQuery : ZeroTermsQuery.values()) {
                 if (zeroTermsQuery.ordinal == ord) {
@@ -102,6 +113,10 @@ public class MatchQuery {
                 }
             }
             throw new ElasticsearchException("unknown serialized type [" + ord + "]");
+        }
+
+        public static ZeroTermsQuery readZeroTermsQueryFrom(StreamInput in) throws IOException {
+            return PROTOTYPE.readFrom(in);
         }
 
         @Override
@@ -230,7 +245,7 @@ public class MatchQuery {
          * passing through QueryBuilder.
          */
         boolean noForcedAnalyzer = this.analyzer == null;
-        if (fieldType != null && fieldType.tokenized() == false && noForcedAnalyzer) {
+        if (fieldType != null && fieldType.useTermQueryWithQueryString() && noForcedAnalyzer) {
             return termQuery(fieldType, value);
         }
 
@@ -286,11 +301,7 @@ public class MatchQuery {
     }
 
     protected Query zeroTermsQuery() {
-        if (zeroTermsQuery == DEFAULT_ZERO_TERMS_QUERY) {
-            return Queries.newMatchNoDocsQuery("Matching no documents because no terms present.");
-        }
-
-        return Queries.newMatchAllQuery();
+        return zeroTermsQuery == DEFAULT_ZERO_TERMS_QUERY ? Queries.newMatchNoDocsQuery() : Queries.newMatchAllQuery();
     }
 
     private class MatchQueryBuilder extends QueryBuilder {
@@ -325,10 +336,10 @@ public class MatchQuery {
                 return prefixQuery;
             } else if (query instanceof MultiPhraseQuery) {
                 MultiPhraseQuery pq = (MultiPhraseQuery)query;
-                Term[][] terms = pq.getTermArrays();
+                List<Term[]> terms = pq.getTermArrays();
                 int[] positions = pq.getPositions();
-                for (int i = 0; i < terms.length; i++) {
-                    prefixQuery.add(terms[i], positions[i]);
+                for (int i = 0; i < terms.size(); i++) {
+                    prefixQuery.add(terms.get(i), positions[i]);
                 }
                 return prefixQuery;
             } else if (query instanceof TermQuery) {

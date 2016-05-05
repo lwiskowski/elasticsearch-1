@@ -24,6 +24,7 @@ import org.apache.lucene.store.AlreadyClosedException;
 import org.apache.lucene.store.OutputStreamDataOutput;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.IOUtils;
+import org.apache.lucene.util.RamUsageEstimator;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.io.Channels;
 import org.elasticsearch.common.unit.ByteSizeValue;
@@ -75,7 +76,7 @@ public class TranslogWriter extends BaseTranslogReader implements Closeable {
     }
 
     private static int getHeaderLength(int uuidLength) {
-        return CodecUtil.headerLength(TRANSLOG_CODEC) + uuidLength + Integer.BYTES;
+        return CodecUtil.headerLength(TRANSLOG_CODEC) + uuidLength + RamUsageEstimator.NUM_BYTES_INT;
     }
 
     public static TranslogWriter create(ShardId shardId, String translogUUID, long fileGeneration, Path file, ChannelFactory channelFactory, ByteSizeValue bufferSize) throws IOException {
@@ -191,17 +192,7 @@ public class TranslogWriter extends BaseTranslogReader implements Closeable {
             throw e;
         }
         if (closed.compareAndSet(false, true)) {
-            boolean success = false;
-            try {
-                final TranslogReader reader = new TranslogReader(generation, channel, path, firstOperationOffset, getWrittenOffset(), operationCounter);
-                success = true;
-                return reader;
-            } finally {
-                if (success == false) {
-                    // close the channel, as we are closed and failed to create a new reader
-                    IOUtils.closeWhileHandlingException(channel);
-                }
-            }
+            return new TranslogReader(generation, channel, path, firstOperationOffset, getWrittenOffset(), operationCounter);
         } else {
             throw new AlreadyClosedException("translog [" + getGeneration() + "] is already closed (path [" + path + "]", tragedy);
         }

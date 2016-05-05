@@ -165,10 +165,13 @@ public class ExplainRequest extends SingleShardRequest<ExplainRequest> {
         id = in.readString();
         routing = in.readOptionalString();
         preference = in.readOptionalString();
-        query = in.readNamedWriteable(QueryBuilder.class);
+        query = in.readQuery();
         filteringAlias = in.readStringArray();
-        fields = in.readOptionalStringArray();
-        fetchSourceContext = in.readOptionalStreamable(FetchSourceContext::new);
+        if (in.readBoolean()) {
+            fields = in.readStringArray();
+        }
+
+        fetchSourceContext = FetchSourceContext.optionalReadFromStream(in);
         nowInMillis = in.readVLong();
     }
 
@@ -179,10 +182,16 @@ public class ExplainRequest extends SingleShardRequest<ExplainRequest> {
         out.writeString(id);
         out.writeOptionalString(routing);
         out.writeOptionalString(preference);
-        out.writeNamedWriteable(query);
+        out.writeQuery(query);
         out.writeStringArray(filteringAlias);
-        out.writeOptionalStringArray(fields);
-        out.writeOptionalStreamable(fetchSourceContext);
+        if (fields != null) {
+            out.writeBoolean(true);
+            out.writeStringArray(fields);
+        } else {
+            out.writeBoolean(false);
+        }
+
+        FetchSourceContext.optionalWriteToStream(fetchSourceContext, out);
         out.writeVLong(nowInMillis);
     }
 }

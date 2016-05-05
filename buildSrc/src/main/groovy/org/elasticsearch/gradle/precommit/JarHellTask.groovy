@@ -21,6 +21,7 @@ package org.elasticsearch.gradle.precommit
 
 import org.elasticsearch.gradle.LoggedExec
 import org.gradle.api.file.FileCollection
+import org.gradle.api.tasks.InputFile
 import org.gradle.api.tasks.OutputFile
 
 /**
@@ -34,12 +35,14 @@ public class JarHellTask extends LoggedExec {
      * inputs (ie the jars/class files).
      */
     @OutputFile
-    File successMarker = new File(project.buildDir, 'markers/jarHell')
+    public File successMarker = new File(project.buildDir, 'markers/jarHell')
+
+    /** The classpath to run jarhell check on, defaults to the test runtime classpath */
+    @InputFile
+    public FileCollection classpath = project.sourceSets.test.runtimeClasspath
 
     public JarHellTask() {
         project.afterEvaluate {
-            FileCollection classpath = project.sourceSets.test.runtimeClasspath
-            inputs.files(classpath)
             dependsOn(classpath)
             description = "Runs CheckJarHell on ${classpath}"
             executable = new File(project.javaHome, 'bin/java')

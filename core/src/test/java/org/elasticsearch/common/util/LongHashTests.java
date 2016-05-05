@@ -22,8 +22,6 @@ package org.elasticsearch.common.util;
 import com.carrotsearch.hppc.LongLongHashMap;
 import com.carrotsearch.hppc.LongLongMap;
 import com.carrotsearch.hppc.cursors.LongLongCursor;
-import org.elasticsearch.cache.recycler.PageCacheRecycler;
-import org.elasticsearch.indices.breaker.NoneCircuitBreakerService;
 import org.elasticsearch.test.ESSingleNodeTestCase;
 
 import java.util.HashMap;
@@ -35,11 +33,6 @@ import java.util.Set;
 public class LongHashTests extends ESSingleNodeTestCase {
     LongHash hash;
 
-    private BigArrays randombigArrays() {
-        final PageCacheRecycler recycler = randomBoolean() ? null : getInstanceFromNode(PageCacheRecycler.class);
-        return new MockBigArrays(recycler, new NoneCircuitBreakerService());
-    }
-
     private void newHash() {
         if (hash != null) {
             hash.close();
@@ -47,7 +40,7 @@ public class LongHashTests extends ESSingleNodeTestCase {
 
         // Test high load factors to make sure that collision resolution works fine
         final float maxLoadFactor = 0.6f + randomFloat() * 0.39f;
-        hash = new LongHash(randomIntBetween(0, 100), maxLoadFactor, randombigArrays());
+        hash = new LongHash(randomIntBetween(0, 100), maxLoadFactor, BigArraysTests.randombigArrays());
     }
 
     @Override

@@ -78,17 +78,15 @@ class BuildPlugin implements Plugin<Project> {
         if (project.rootProject.ext.has('buildChecksDone') == false) {
             String javaHome = findJavaHome()
             File gradleJavaHome = Jvm.current().javaHome
-            String javaVendor = System.getProperty('java.vendor')
-            String javaVersion = System.getProperty('java.version')
-            String gradleJavaVersionDetails = "${javaVendor} ${javaVersion}" +
+            String gradleJavaVersionDetails = "${System.getProperty('java.vendor')} ${System.getProperty('java.version')}" +
                 " [${System.getProperty('java.vm.name')} ${System.getProperty('java.vm.version')}]"
 
             String javaVersionDetails = gradleJavaVersionDetails
+            String javaVersion = System.getProperty('java.version')
             JavaVersion javaVersionEnum = JavaVersion.current()
             if (new File(javaHome).canonicalPath != gradleJavaHome.canonicalPath) {
                 javaVersionDetails = findJavaVersionDetails(project, javaHome)
                 javaVersionEnum = JavaVersion.toVersion(findJavaSpecificationVersion(project, javaHome))
-                javaVendor = findJavaVendor(project, javaHome)
                 javaVersion = findJavaVersion(project, javaHome)
             }
 
@@ -100,12 +98,9 @@ class BuildPlugin implements Plugin<Project> {
             println "  OS Info               : ${System.getProperty('os.name')} ${System.getProperty('os.version')} (${System.getProperty('os.arch')})"
             if (gradleJavaVersionDetails != javaVersionDetails) {
                 println "  JDK Version (gradle)  : ${gradleJavaVersionDetails}"
-                println "  JAVA_HOME (gradle)    : ${gradleJavaHome}"
                 println "  JDK Version (compile) : ${javaVersionDetails}"
-                println "  JAVA_HOME (compile)   : ${javaHome}"
             } else {
                 println "  JDK Version           : ${gradleJavaVersionDetails}"
-                println "  JAVA_HOME             : ${gradleJavaHome}"
             }
 
             // enforce gradle version
@@ -117,25 +112,6 @@ class BuildPlugin implements Plugin<Project> {
             // enforce Java version
             if (javaVersionEnum < minimumJava) {
                 throw new GradleException("Java ${minimumJava} or above is required to build Elasticsearch")
-            }
-
-            // this block of code detecting buggy JDK 8 compiler versions can be removed when minimum Java version is incremented
-            assert minimumJava == JavaVersion.VERSION_1_8 : "Remove JDK compiler bug detection only applicable to JDK 8"
-            if (javaVersionEnum == JavaVersion.VERSION_1_8) {
-                if (Objects.equals("Oracle Corporation", javaVendor)) {
-                    def matcher = javaVersion =~ /1\.8\.0(?:_(\d+))?/
-                    if (matcher.matches()) {
-                        int update;
-                        if (matcher.group(1) == null) {
-                            update = 0
-                        } else {
-                            update = matcher.group(1).toInteger()
-                        }
-                        if (update < 40) {
-                            throw new GradleException("JDK ${javaVendor} ${javaVersion} has compiler bug JDK-8052388, update your JDK to at least 8u40")
-                        }
-                    }
-                }
             }
 
             project.rootProject.ext.javaHome = javaHome
@@ -175,11 +151,6 @@ class BuildPlugin implements Plugin<Project> {
     private static String findJavaSpecificationVersion(Project project, String javaHome) {
         String versionScript = 'print(java.lang.System.getProperty("java.specification.version"));'
         return runJavascript(project, javaHome, versionScript)
-    }
-
-    private static String findJavaVendor(Project project, String javaHome) {
-        String vendorScript = 'print(java.lang.System.getProperty("java.vendor"));'
-        return runJavascript(project, javaHome, vendorScript)
     }
 
     /** Finds the parsable java specification version */
@@ -310,12 +281,6 @@ class BuildPlugin implements Plugin<Project> {
     /** Adds repositores used by ES dependencies */
     static void configureRepositories(Project project) {
         RepositoryHandler repos = project.repositories
-        if (System.getProperty("repos.mavenlocal") != null) {
-            // with -Drepos.mavenlocal=true we can force checking the local .m2 repo which is
-            // useful for development ie. bwc tests where we install stuff in the local repository
-            // such that we don't have to pass hardcoded files to gradle
-            repos.mavenLocal()
-        }
         repos.mavenCentral()
         repos.maven {
             name 'sonatype-snapshots'
@@ -324,7 +289,7 @@ class BuildPlugin implements Plugin<Project> {
         String luceneVersion = VersionProperties.lucene
         if (luceneVersion.contains('-snapshot')) {
             // extract the revision number from the version with a regex matcher
-            String revision = (luceneVersion =~ /\w+-snapshot-([a-z0-9]+)/)[0][1]
+            String revision = (luceneVersion =~ /\w+-snapshot-(\d+)/)[0][1]
             repos.maven {
                 name 'lucene-snapshots'
                 url "http://s3.amazonaws.com/download.elasticsearch.org/lucenesnapshots/${revision}"
@@ -355,11 +320,6 @@ class BuildPlugin implements Plugin<Project> {
                 }
                 options.encoding = 'UTF-8'
                 //options.incremental = true
-
-                // gradle ignores target/source compatibility when it is "unnecessary", but since to compile with
-                // java 9, gradle is running in java 8, it incorrectly thinks it is unnecessary
-                assert minimumJava == JavaVersion.VERSION_1_8
-                options.compilerArgs << '-target' << '1.8' << '-source' << '1.8'
             }
         }
     }
@@ -368,17 +328,11 @@ class BuildPlugin implements Plugin<Project> {
     static void configureJarManifest(Project project) {
         project.tasks.withType(Jar) { Jar jarTask ->
             jarTask.doFirst {
-                boolean isSnapshot = VersionProperties.elasticsearch.endsWith("-SNAPSHOT");
-                String version = VersionProperties.elasticsearch;
-                if (isSnapshot) {
-                    version = version.substring(0, version.length() - 9)
-                }
                 // this doFirst is added before the info plugin, therefore it will run
                 // after the doFirst added by the info plugin, and we can override attributes
                 jarTask.manifest.attributes(
-                        'X-Compile-Elasticsearch-Version': version,
+                        'X-Compile-Elasticsearch-Version': VersionProperties.elasticsearch,
                         'X-Compile-Lucene-Version': VersionProperties.lucene,
-                        'X-Compile-Elasticsearch-Snapshot': isSnapshot,
                         'Build-Date': ZonedDateTime.now(ZoneOffset.UTC),
                         'Build-Java-Version': project.javaVersion)
                 if (jarTask.manifest.attributes.containsKey('Change') == false) {
@@ -414,14 +368,12 @@ class BuildPlugin implements Plugin<Project> {
             // we use './temp' since this is per JVM and tests are forbidden from writing to CWD
             systemProperty 'java.io.tmpdir', './temp'
             systemProperty 'java.awt.headless', 'true'
-            systemProperty 'tests.gradle', 'true'
+            systemProperty 'tests.maven', 'true' // TODO: rename this once we've switched to gradle!
             systemProperty 'tests.artifact', project.name
             systemProperty 'tests.task', path
             systemProperty 'tests.security.manager', 'true'
-            systemProperty 'jna.nosys', 'true'
             // default test sysprop values
             systemProperty 'tests.ifNoTests', 'fail'
-            // TODO: remove setting logging level via system property
             systemProperty 'es.logger.level', 'WARN'
             for (Map.Entry<String, String> property : System.properties.entrySet()) {
                 if (property.getKey().startsWith('tests.') ||

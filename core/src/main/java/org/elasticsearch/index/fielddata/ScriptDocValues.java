@@ -121,7 +121,7 @@ public interface ScriptDocValues<T> extends List<T> {
         public long getValue() {
             int numValues = values.count();
             if (numValues == 0) {
-                return 0L;
+                return 0l;
             }
             return values.valueAt(0);
         }

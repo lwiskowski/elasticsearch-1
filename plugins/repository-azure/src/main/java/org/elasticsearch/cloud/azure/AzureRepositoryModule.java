@@ -21,6 +21,7 @@ package org.elasticsearch.cloud.azure;
 
 import org.elasticsearch.cloud.azure.storage.AzureStorageService;
 import org.elasticsearch.cloud.azure.storage.AzureStorageServiceImpl;
+import org.elasticsearch.cloud.azure.storage.AzureStorageSettingsFilter;
 import org.elasticsearch.common.inject.AbstractModule;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.logging.ESLogger;
@@ -50,6 +51,9 @@ public class AzureRepositoryModule extends AbstractModule {
 
     @Override
     protected void configure() {
+        logger.debug("starting azure services");
+        bind(AzureStorageSettingsFilter.class).asEagerSingleton();
+
         // If we have settings for azure repository, let's start the azure storage service
         logger.debug("starting azure repository service");
         bind(AzureStorageService.class).to(storageServiceImpl).asEagerSingleton();

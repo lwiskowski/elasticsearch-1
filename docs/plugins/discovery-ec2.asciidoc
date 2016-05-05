@@ -11,7 +11,7 @@ This plugin can be installed using the plugin manager:
 
 [source,sh]
 ----------------------------------------------------------------
-sudo bin/elasticsearch-plugin install discovery-ec2
+sudo bin/plugin install discovery-ec2
 ----------------------------------------------------------------
 
 The plugin must be installed on every node in the cluster, and each node must
@@ -25,7 +25,7 @@ The plugin can be removed with the following command:
 
 [source,sh]
 ----------------------------------------------------------------
-sudo bin/elasticsearch-plugin remove discovery-ec2
+sudo bin/plugin remove discovery-ec2
 ----------------------------------------------------------------
 
 The node must be stopped before removing the plugin.
@@ -113,7 +113,6 @@ The available values are:
 * `ap-southeast-1`
 * `ap-southeast-2`
 * `ap-northeast` (`ap-northeast-1`)
-* `ap-northeast-2` (`ap-northeast-2`)
 * `eu-west` (`eu-west-1`)
 * `eu-central` (`eu-central-1`)
 * `sa-east` (`sa-east-1`)
@@ -205,9 +204,9 @@ as valid network host settings:
 |`_ec2:privateDns_` |The private host of the machine.
 |`_ec2:publicIpv4_` |The public IP address (ipv4) of the machine.
 |`_ec2:publicDns_` |The public host of the machine.
-|`_ec2:privateIp_` |equivalent to `_ec2:privateIpv4_`.
-|`_ec2:publicIp_` |equivalent to `_ec2:publicIpv4_`.
-|`_ec2_` |equivalent to `_ec2:privateIpv4_`.
+|`_ec2:privateIp_` |equivalent to _ec2:privateIpv4_.
+|`_ec2:publicIp_` |equivalent to _ec2:publicIpv4_.
+|`_ec2_` |equivalent to _ec2:privateIpv4_.
 |==================================================================
 
 [[discovery-ec2-permissions]]

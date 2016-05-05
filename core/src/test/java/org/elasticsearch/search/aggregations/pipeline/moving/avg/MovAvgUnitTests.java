@@ -590,12 +590,13 @@ public class MovAvgUnitTests extends ESTestCase {
     }
 
     public void testNumericValidation() {
-        List<MovAvgModel.AbstractModelParser> parsers = new ArrayList<>(3);
+        List<MovAvgModel.AbstractModelParser> parsers = new ArrayList<>(5);
 
         // Simple and Linear don't have any settings to test
-        parsers.add(EwmaModel.PARSER);
-        parsers.add(HoltWintersModel.PARSER);
-        parsers.add(HoltLinearModel.PARSER);
+        parsers.add(new EwmaModel.SingleExpModelParser());
+        parsers.add(new HoltWintersModel.HoltWintersModelParser());
+        parsers.add(new HoltLinearModel.DoubleExpModelParser());
+
 
         Object[] values = {(byte)1, 1, 1L, (short)1, (double)1};
         Map<String, Object> settings = new HashMap<>(2);
@@ -607,9 +608,10 @@ public class MovAvgUnitTests extends ESTestCase {
                 try {
                     parser.parse(settings, "pipeline", 10, ParseFieldMatcher.STRICT);
                 } catch (ParseException e) {
-                    fail(parser + " parser should not have thrown SearchParseException while parsing [" +
+                    fail(parser.getName() + " parser should not have thrown SearchParseException while parsing [" +
                             v.getClass().getSimpleName() +"]");
                 }
+
             }
         }
 
@@ -625,7 +627,7 @@ public class MovAvgUnitTests extends ESTestCase {
                 continue;
             }
 
-            fail(parser + " parser should have thrown SearchParseException while parsing [String]");
+            fail(parser.getName() + " parser should have thrown SearchParseException while parsing [String]");
         }
     }
 }

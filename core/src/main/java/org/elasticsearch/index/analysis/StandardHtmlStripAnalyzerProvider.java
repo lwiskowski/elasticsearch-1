@@ -32,10 +32,17 @@ import org.elasticsearch.index.IndexSettings;
 public class StandardHtmlStripAnalyzerProvider extends AbstractIndexAnalyzerProvider<StandardHtmlStripAnalyzer> {
 
     private final StandardHtmlStripAnalyzer analyzer;
+    private final Version esVersion;
 
     public StandardHtmlStripAnalyzerProvider(IndexSettings indexSettings, Environment env,  String name, Settings settings) {
         super(indexSettings, name, settings);
-        final CharArraySet defaultStopwords = CharArraySet.EMPTY_SET;
+        this.esVersion = indexSettings.getIndexVersionCreated();
+        final CharArraySet defaultStopwords;
+        if (esVersion.onOrAfter(Version.V_1_0_0_RC1)) {
+            defaultStopwords = CharArraySet.EMPTY_SET;
+        } else {
+            defaultStopwords = StopAnalyzer.ENGLISH_STOP_WORDS_SET;
+        }
         CharArraySet stopWords = Analysis.parseStopWords(env, settings, defaultStopwords);
         analyzer = new StandardHtmlStripAnalyzer(stopWords);
         analyzer.setVersion(version);

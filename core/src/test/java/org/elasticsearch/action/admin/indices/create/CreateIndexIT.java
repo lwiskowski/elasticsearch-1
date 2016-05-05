@@ -20,7 +20,6 @@
 package org.elasticsearch.action.admin.indices.create;
 
 import org.elasticsearch.action.ActionListener;
-import org.elasticsearch.action.UnavailableShardsException;
 import org.elasticsearch.action.admin.cluster.state.ClusterStateResponse;
 import org.elasticsearch.action.admin.indices.delete.DeleteIndexResponse;
 import org.elasticsearch.action.search.SearchResponse;
@@ -30,7 +29,6 @@ import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.cluster.metadata.MetaData;
 import org.elasticsearch.common.collect.ImmutableOpenMap;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.index.IndexNotFoundException;
 import org.elasticsearch.index.mapper.MapperParsingException;
 import org.elasticsearch.index.query.RangeQueryBuilder;
@@ -56,7 +54,7 @@ import static org.hamcrest.core.IsNull.notNullValue;
 public class CreateIndexIT extends ESIntegTestCase {
     public void testCreationDateGivenFails() {
         try {
-            prepareCreate("test").setSettings(Settings.builder().put(IndexMetaData.SETTING_CREATION_DATE, 4L)).get();
+            prepareCreate("test").setSettings(Settings.builder().put(IndexMetaData.SETTING_CREATION_DATE, 4l)).get();
             fail();
         } catch (IllegalArgumentException ex) {
             assertEquals("unknown setting [index.creation_date]", ex.getMessage());
@@ -181,6 +179,7 @@ public class CreateIndexIT extends ESIntegTestCase {
         }
     }
 
+    @AwaitsFix(bugUrl = "https://github.com/elastic/elasticsearch/issues/14932,https://github.com/elastic/elasticsearch/pull/15853" )
     public void testCreateAndDeleteIndexConcurrently() throws InterruptedException {
         createIndex("test");
         final AtomicInteger indexVersion = new AtomicInteger(0);
@@ -225,14 +224,10 @@ public class CreateIndexIT extends ESIntegTestCase {
         for (int i = 0; i < numDocs; i++) {
             try {
                 synchronized (indexVersionLock) {
-                    client().prepareIndex("test", "test").setSource("index_version", indexVersion.get())
-                        .setTimeout(TimeValue.timeValueSeconds(10)).get();
+                    client().prepareIndex("test", "test").setSource("index_version", indexVersion.get()).get();
                 }
             } catch (IndexNotFoundException inf) {
                 // fine
-            } catch (UnavailableShardsException ex) {
-                assertEquals(ex.getCause().getClass(), IndexNotFoundException.class);
-                // fine we run into a delete index while retrying
             }
         }
         latch.await();
@@ -252,13 +247,13 @@ public class CreateIndexIT extends ESIntegTestCase {
         CreateIndexRequestBuilder b = prepareCreate("test");
         b.addMapping("type1", jsonBuilder().startObject().startObject("properties")
                 .startObject("text")
-                    .field("type", "text")
+                    .field("type", "string")
                     .field("analyzer", "standard")
                     .field("search_analyzer", "whitespace")
                 .endObject().endObject().endObject());
         b.addMapping("type2", jsonBuilder().humanReadable(true).startObject().startObject("properties")
                 .startObject("text")
-                    .field("type", "text")
+                    .field("type", "string")
                 .endObject().endObject().endObject());
         try {
             b.get();

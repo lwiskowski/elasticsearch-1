@@ -22,8 +22,6 @@ package org.elasticsearch.cluster;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Streamable;
-import org.elasticsearch.common.settings.Setting;
-import org.elasticsearch.common.settings.Setting.Property;
 import org.elasticsearch.common.settings.Settings;
 
 import java.io.IOException;
@@ -33,23 +31,18 @@ import java.io.IOException;
  */
 public class ClusterName implements Streamable {
 
-    public static final Setting<String> CLUSTER_NAME_SETTING = new Setting<>("cluster.name", "elasticsearch", (s) -> {
-        if (s.isEmpty()) {
-            throw new IllegalArgumentException("[cluster.name] must not be empty");
-        }
-        return s;
-    }, Property.NodeScope);
+    public static final String SETTING = "cluster.name";
 
-
-    public static final ClusterName DEFAULT = new ClusterName(CLUSTER_NAME_SETTING.getDefault(Settings.EMPTY).intern());
+    public static final ClusterName DEFAULT = new ClusterName("elasticsearch".intern());
 
     private String value;
 
     public static ClusterName clusterNameFromSettings(Settings settings) {
-        return new ClusterName(CLUSTER_NAME_SETTING.get(settings));
+        return new ClusterName(settings.get("cluster.name", ClusterName.DEFAULT.value()));
     }
 
     private ClusterName() {
+
     }
 
     public ClusterName(String value) {

@@ -170,8 +170,17 @@ public final class SuggestUtils {
         }
     }
 
+    public static Suggest.Suggestion.Sort resolveSort(String sortVal) {
+        if ("score".equals(sortVal)) {
+            return Suggest.Suggestion.Sort.SCORE;
+        } else if ("frequency".equals(sortVal)) {
+            return Suggest.Suggestion.Sort.FREQUENCY;
+        } else {
+            throw new IllegalArgumentException("Illegal suggest sort " + sortVal);
+        }
+    }
+
     public static StringDistance resolveDistance(String distanceVal) {
-        distanceVal = distanceVal.toLowerCase(Locale.US);
         if ("internal".equals(distanceVal)) {
             return DirectSpellChecker.INTERNAL_LEVENSHTEIN;
         } else if ("damerau_levenshtein".equals(distanceVal) || "damerauLevenshtein".equals(distanceVal)) {
@@ -201,38 +210,33 @@ public final class SuggestUtils {
         public static final ParseField MIN_WORD_LENGTH = new ParseField("min_word_length", "min_word_len");
         public static final ParseField MIN_DOC_FREQ = new ParseField("min_doc_freq");
         public static final ParseField SHARD_SIZE = new ParseField("shard_size");
-        public static final ParseField ANALYZER = new ParseField("analyzer");
-        public static final ParseField FIELD = new ParseField("field");
-        public static final ParseField SIZE = new ParseField("size");
-        public static final ParseField SORT = new ParseField("sort");
-        public static final ParseField ACCURACY = new ParseField("accuracy");
    }
 
     public static boolean parseDirectSpellcheckerSettings(XContentParser parser, String fieldName,
                 DirectSpellcheckerSettings suggestion, ParseFieldMatcher parseFieldMatcher) throws IOException {
-            if (parseFieldMatcher.match(fieldName, Fields.ACCURACY)) {
+            if ("accuracy".equals(fieldName)) {
                 suggestion.accuracy(parser.floatValue());
             } else if (parseFieldMatcher.match(fieldName, Fields.SUGGEST_MODE)) {
                 suggestion.suggestMode(SuggestUtils.resolveSuggestMode(parser.text()));
-            } else if (parseFieldMatcher.match(fieldName, Fields.SORT)) {
-                suggestion.sort(SortBy.resolve(parser.text()));
+            } else if ("sort".equals(fieldName)) {
+                suggestion.sort(SuggestUtils.resolveSort(parser.text()));
             } else if (parseFieldMatcher.match(fieldName, Fields.STRING_DISTANCE)) {
-                suggestion.stringDistance(SuggestUtils.resolveDistance(parser.text()));
+            suggestion.stringDistance(SuggestUtils.resolveDistance(parser.text()));
             } else if (parseFieldMatcher.match(fieldName, Fields.MAX_EDITS)) {
-                suggestion.maxEdits(parser.intValue());
+            suggestion.maxEdits(parser.intValue());
                 if (suggestion.maxEdits() < 1 || suggestion.maxEdits() > LevenshteinAutomata.MAXIMUM_SUPPORTED_DISTANCE) {
                     throw new IllegalArgumentException("Illegal max_edits value " + suggestion.maxEdits());
                 }
             } else if (parseFieldMatcher.match(fieldName, Fields.MAX_INSPECTIONS)) {
-                suggestion.maxInspections(parser.intValue());
+            suggestion.maxInspections(parser.intValue());
             } else if (parseFieldMatcher.match(fieldName, Fields.MAX_TERM_FREQ)) {
-                suggestion.maxTermFreq(parser.floatValue());
+            suggestion.maxTermFreq(parser.floatValue());
             } else if (parseFieldMatcher.match(fieldName, Fields.PREFIX_LENGTH)) {
-                suggestion.prefixLength(parser.intValue());
+            suggestion.prefixLength(parser.intValue());
             } else if (parseFieldMatcher.match(fieldName, Fields.MIN_WORD_LENGTH)) {
-                suggestion.minWordLength(parser.intValue());
+            suggestion.minQueryLength(parser.intValue());
             } else if (parseFieldMatcher.match(fieldName, Fields.MIN_DOC_FREQ)) {
-                suggestion.minDocFreq(parser.floatValue());
+            suggestion.minDocFreq(parser.floatValue());
             } else {
                 return false;
             }
@@ -242,16 +246,16 @@ public final class SuggestUtils {
     public static boolean parseSuggestContext(XContentParser parser, MapperService mapperService, String fieldName,
             SuggestionSearchContext.SuggestionContext suggestion, ParseFieldMatcher parseFieldMatcher) throws IOException {
 
-        if (parseFieldMatcher.match(fieldName, Fields.ANALYZER)) {
+        if ("analyzer".equals(fieldName)) {
             String analyzerName = parser.text();
             Analyzer analyzer = mapperService.analysisService().analyzer(analyzerName);
             if (analyzer == null) {
                 throw new IllegalArgumentException("Analyzer [" + analyzerName + "] doesn't exists");
             }
             suggestion.setAnalyzer(analyzer);
-        } else if (parseFieldMatcher.match(fieldName, Fields.FIELD)) {
+        } else if ("field".equals(fieldName)) {
             suggestion.setField(parser.text());
-        } else if (parseFieldMatcher.match(fieldName, Fields.SIZE)) {
+        } else if ("size".equals(fieldName)) {
             suggestion.setSize(parser.intValue());
         } else if (parseFieldMatcher.match(fieldName, Fields.SHARD_SIZE)) {
             suggestion.setShardSize(parser.intValue());
@@ -259,7 +263,9 @@ public final class SuggestUtils {
            return false;
         }
         return true;
+
     }
+
 
     public static void verifySuggestion(MapperService mapperService, BytesRef globalText, SuggestionContext suggestion) {
         // Verify options and set defaults
@@ -279,6 +285,7 @@ public final class SuggestUtils {
             suggestion.setShardSize(Math.max(suggestion.getSize(), 5));
         }
     }
+
 
     public static ShingleTokenFilterFactory.Factory getShingleFilterFactory(Analyzer analyzer) {
         if (analyzer instanceof NamedAnalyzer) {

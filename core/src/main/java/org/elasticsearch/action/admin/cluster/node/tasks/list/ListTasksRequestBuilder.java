@@ -35,15 +35,7 @@ public class ListTasksRequestBuilder extends TasksRequestBuilder<ListTasksReques
      * Should detailed task information be returned.
      */
     public ListTasksRequestBuilder setDetailed(boolean detailed) {
-        request.setDetailed(detailed);
-        return this;
-    }
-
-    /**
-     * Should this request wait for all found tasks to complete?
-     */
-    public final ListTasksRequestBuilder setWaitForCompletion(boolean waitForCompletion) {
-        request.setWaitForCompletion(waitForCompletion);
+        request.detailed(detailed);
         return this;
     }
 }

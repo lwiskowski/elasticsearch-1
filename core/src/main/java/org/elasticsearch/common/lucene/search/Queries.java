@@ -23,6 +23,7 @@ import org.apache.lucene.index.Term;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanClause.Occur;
 import org.apache.lucene.search.BooleanQuery;
+import org.apache.lucene.search.BoostQuery;
 import org.apache.lucene.search.ConstantScoreQuery;
 import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.PrefixQuery;
@@ -44,8 +45,8 @@ public class Queries {
     }
 
     /** Return a query that matches no document. */
-    public static Query newMatchNoDocsQuery(String reason) {
-        return new MatchNoDocsQuery(reason);
+    public static Query newMatchNoDocsQuery() {
+        return new BooleanQuery.Builder().build();
     }
 
     public static Query newNestedFilter() {
@@ -116,6 +117,12 @@ public class Queries {
         if (minimumShouldMatch == null) {
             return query;
         }
+        // Queries with a single word expanded with synonyms 
+        // have their coordination factor disabled (@see org.apache.lucene.util.QueryBuilder#analyzeBoolean()).
+        // minimumShouldMatch should not be applicable in such case.
+        if (query.isCoordDisabled()) {
+            return query;
+        }
         int optionalClauses = 0;
         for (BooleanClause c : query.clauses()) {
             if (c.getOccur() == BooleanClause.Occur.SHOULD) {
@@ -131,7 +138,11 @@ public class Queries {
                 builder.add(clause);
             }
             builder.setMinimumNumberShouldMatch(msm);
-            return builder.build();
+            BooleanQuery bq = builder.build();
+            if (query.getBoost() != 1f) {
+                return new BoostQuery(bq, query.getBoost());
+            }
+            return bq;
         } else {
             return query;
         }

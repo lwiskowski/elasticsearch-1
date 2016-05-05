@@ -19,18 +19,20 @@
 
 package org.elasticsearch.cluster.settings;
 
-import org.elasticsearch.action.admin.cluster.node.info.NodeInfo;
-import org.elasticsearch.action.admin.cluster.node.info.NodesInfoResponse;
 import org.elasticsearch.action.admin.indices.settings.get.GetSettingsResponse;
+import org.elasticsearch.common.inject.AbstractModule;
+import org.elasticsearch.common.inject.Inject;
+import org.elasticsearch.common.inject.Module;
 import org.elasticsearch.common.settings.Setting;
-import org.elasticsearch.common.settings.Setting.Property;
 import org.elasticsearch.common.settings.Settings;
+import org.elasticsearch.common.settings.SettingsFilter;
 import org.elasticsearch.common.settings.SettingsModule;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.test.ESIntegTestCase;
 import org.elasticsearch.test.ESIntegTestCase.ClusterScope;
 
 import java.util.Collection;
+import java.util.Collections;
 
 import static org.elasticsearch.test.ESIntegTestCase.Scope.SUITE;
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
@@ -46,11 +48,6 @@ public class SettingsFilteringIT extends ESIntegTestCase {
     }
 
     public static class SettingsFilteringPlugin extends Plugin {
-        public static final Setting<Boolean> SOME_NODE_SETTING =
-            Setting.boolSetting("some.node.setting", false, Property.NodeScope, Property.Filtered);
-        public static final Setting<Boolean> SOME_OTHER_NODE_SETTING =
-            Setting.boolSetting("some.other.node.setting", false, Property.NodeScope);
-
         /**
          * The name of the plugin.
          */
@@ -67,17 +64,29 @@ public class SettingsFilteringIT extends ESIntegTestCase {
             return "Settings Filtering Plugin";
         }
 
-        @Override
-        public Settings additionalSettings() {
-            return Settings.builder().put("some.node.setting", true).put("some.other.node.setting", true).build();
+        public void onModule(SettingsModule module) {
+            module.registerSetting(Setting.groupSetting("index.filter_test.", false, Setting.Scope.INDEX));
         }
 
-        public void onModule(SettingsModule module) {
-            module.registerSetting(SOME_NODE_SETTING);
-            module.registerSetting(SOME_OTHER_NODE_SETTING);
-            module.registerSetting(Setting.groupSetting("index.filter_test.", Property.IndexScope));
-            module.registerSettingsFilter("index.filter_test.foo");
-            module.registerSettingsFilter("index.filter_test.bar*");
+        @Override
+        public Collection<Module> nodeModules() {
+            return Collections.<Module>singletonList(new SettingsFilteringModule());
+        }
+    }
+
+    public static class SettingsFilteringModule extends AbstractModule {
+
+        @Override
+        protected void configure() {
+            bind(SettingsFilteringService.class).asEagerSingleton();
+        }
+    }
+
+    public static class SettingsFilteringService {
+        @Inject
+        public SettingsFilteringService(SettingsFilter settingsFilter) {
+            settingsFilter.addFilter("index.filter_test.foo");
+            settingsFilter.addFilter("index.filter_test.bar*");
         }
     }
 
@@ -97,16 +106,5 @@ public class SettingsFilteringIT extends ESIntegTestCase {
         assertThat(settings.get("index.filter_test.bar2"), nullValue());
         assertThat(settings.get("index.filter_test.notbar"), equalTo("test"));
         assertThat(settings.get("index.filter_test.notfoo"), equalTo("test"));
-    }
-
-    public void testNodeInfoIsFiltered() {
-        NodesInfoResponse nodeInfos = client().admin().cluster().prepareNodesInfo().clear().setSettings(true).get();
-        for(NodeInfo info : nodeInfos.getNodes()) {
-            Settings settings = info.getSettings();
-            assertNotNull(settings);
-            assertNull(settings.get(SettingsFilteringPlugin.SOME_NODE_SETTING.getKey()));
-            assertTrue(settings.getAsBoolean(SettingsFilteringPlugin.SOME_OTHER_NODE_SETTING.getKey(), false));
-            assertEquals(settings.get("node.name"), info.getNode().getName());
-        }
     }
 }

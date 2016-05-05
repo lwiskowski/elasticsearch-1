@@ -138,7 +138,6 @@ public class QueryDSLDocumentationTests extends ESTestCase {
         functionScoreQuery(functions);
     }
 
-    @SuppressWarnings("deprecation") // fuzzy queries will be removed in 4.0
     public void testFuzzy() {
         fuzzyQuery("name", "kimchy");
     }
@@ -205,15 +204,15 @@ public class QueryDSLDocumentationTests extends ESTestCase {
     public void testHasChild() {
         hasChildQuery(
                 "blog_tag",
-                termQuery("tag","something"),
-                ScoreMode.None);
+                termQuery("tag","something")
+            );
     }
 
     public void testHasParent() {
         hasParentQuery(
             "blog",
-            termQuery("tag","something"),
-                false);
+            termQuery("tag","something")
+        );
     }
 
     public void testIds() {
@@ -262,8 +261,9 @@ public class QueryDSLDocumentationTests extends ESTestCase {
                 "obj1",
                 boolQuery()
                         .must(matchQuery("obj1.name", "blue"))
-                        .must(rangeQuery("obj1.count").gt(5)),
-                ScoreMode.Avg);
+                        .must(rangeQuery("obj1.count").gt(5))
+            )
+            .scoreMode(ScoreMode.Avg);
     }
 
     public void testPrefix() {
@@ -363,7 +363,7 @@ public class QueryDSLDocumentationTests extends ESTestCase {
     public void testTemplate() {
         templateQuery(
                 "gender_template",
-                ScriptType.STORED,
+                ScriptType.INDEXED,
                 new HashMap<>());
     }
 

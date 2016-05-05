@@ -20,7 +20,11 @@
       put_template:
         id: "1"
         body: { "template": { "query": { "match" : { "text": "{{my_value}}" } }, "size": "{{my_size}}" } }
-  - match: { acknowledged: true }
+  - match: { _id: "1" }
+
+  - do:
+      indices.refresh: {}
+
 
   - do:
       search_template:

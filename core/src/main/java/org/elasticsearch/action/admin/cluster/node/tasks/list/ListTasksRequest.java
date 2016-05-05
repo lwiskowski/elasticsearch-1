@@ -31,35 +31,27 @@ import java.io.IOException;
 public class ListTasksRequest extends BaseTasksRequest<ListTasksRequest> {
 
     private boolean detailed = false;
-    private boolean waitForCompletion = false;
+
+    /**
+     * Get information from nodes based on the nodes ids specified. If none are passed, information
+     * for all nodes will be returned.
+     */
+    public ListTasksRequest(String... nodesIds) {
+        super(nodesIds);
+    }
 
     /**
      * Should the detailed task information be returned.
      */
-    public boolean getDetailed() {
+    public boolean detailed() {
         return this.detailed;
     }
 
     /**
-     * Should the detailed task information be returned.
+     * Should the node settings be returned.
      */
-    public ListTasksRequest setDetailed(boolean detailed) {
+    public ListTasksRequest detailed(boolean detailed) {
         this.detailed = detailed;
-        return this;
-    }
-
-    /**
-     * Should this request wait for all found tasks to complete?
-     */
-    public boolean getWaitForCompletion() {
-        return waitForCompletion;
-    }
-
-    /**
-     * Should this request wait for all found tasks to complete?
-     */
-    public ListTasksRequest setWaitForCompletion(boolean waitForCompletion) {
-        this.waitForCompletion = waitForCompletion;
         return this;
     }
 
@@ -67,13 +59,11 @@ public class ListTasksRequest extends BaseTasksRequest<ListTasksRequest> {
     public void readFrom(StreamInput in) throws IOException {
         super.readFrom(in);
         detailed = in.readBoolean();
-        waitForCompletion = in.readBoolean();
     }
 
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         super.writeTo(out);
         out.writeBoolean(detailed);
-        out.writeBoolean(waitForCompletion);
     }
 }

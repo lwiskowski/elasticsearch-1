@@ -51,7 +51,7 @@ public class RestGetFieldMappingAction extends BaseRestHandler {
 
     @Inject
     public RestGetFieldMappingAction(Settings settings, RestController controller, Client client) {
-        super(settings, client);
+        super(settings, controller, client);
         controller.registerHandler(GET, "/_mapping/field/{fields}", this);
         controller.registerHandler(GET, "/_mapping/{type}/field/{fields}", this);
         controller.registerHandler(GET, "/{index}/_mapping/field/{fields}", this);

@@ -29,13 +29,14 @@ import static org.elasticsearch.client.Requests.flushRequest;
 import static org.elasticsearch.client.Requests.getRequest;
 import static org.elasticsearch.client.Requests.indexRequest;
 import static org.elasticsearch.client.Requests.refreshRequest;
+import static org.elasticsearch.common.settings.Settings.settingsBuilder;
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.hamcrest.Matchers.equalTo;
 
 public class SimpleRecoveryIT extends ESIntegTestCase {
     @Override
     public Settings indexSettings() {
-        return Settings.builder().put(super.indexSettings()).put(recoverySettings()).build();
+        return settingsBuilder().put(super.indexSettings()).put(recoverySettings()).build();
     }
 
     protected Settings recoverySettings() {
@@ -107,6 +108,6 @@ public class SimpleRecoveryIT extends ESIntegTestCase {
     }
 
     private String source(String id, String nameValue) {
-        return "{ \"type1\" : { \"id\" : \"" + id + "\", \"name\" : \"" + nameValue + "\" } }";
+        return "{ type1 : { \"id\" : \"" + id + "\", \"name\" : \"" + nameValue + "\" } }";
     }
 }

@@ -46,13 +46,20 @@ public class PrioritizedRunnableTests extends ESTestCase {
 
     // test age advances with System#nanoTime
     public void testGetAgeInMillisWithRealClock() throws InterruptedException {
+        long nanosecondsInMillisecond = TimeUnit.NANOSECONDS.convert(1, TimeUnit.MILLISECONDS);
         PrioritizedRunnable runnable = new PrioritizedRunnable(Priority.NORMAL) {
             @Override
             public void run() {
             }
         };
 
-        long elapsed = spinForAtLeastOneMillisecond();
+        // force at least one millisecond to elapse, but ensure the
+        // clock has enough resolution to observe the passage of time
+        long start = System.nanoTime();
+        long elapsed;
+        while ((elapsed = (System.nanoTime() - start)) < nanosecondsInMillisecond) {
+            // busy spin
+        }
 
         // creation happened before start, so age will be at least as
         // large as elapsed

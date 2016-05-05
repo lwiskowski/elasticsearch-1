@@ -30,6 +30,7 @@ import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.settings.SettingsFilter;
 import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.common.xcontent.XContentBuilderString;
 import org.elasticsearch.rest.BaseRestHandler;
 import org.elasticsearch.rest.BytesRestResponse;
 import org.elasticsearch.rest.RestChannel;
@@ -51,7 +52,7 @@ public class RestClusterStateAction extends BaseRestHandler {
 
     @Inject
     public RestClusterStateAction(Settings settings, RestController controller, Client client, SettingsFilter settingsFilter) {
-        super(settings, client);
+        super(settings, controller, client);
         controller.registerHandler(RestRequest.Method.GET, "/_cluster/state", this);
         controller.registerHandler(RestRequest.Method.GET, "/_cluster/state/{metric}", this);
         controller.registerHandler(RestRequest.Method.GET, "/_cluster/state/{metric}/{indices}", this);
@@ -97,6 +98,6 @@ public class RestClusterStateAction extends BaseRestHandler {
     }
 
     static final class Fields {
-        static final String CLUSTER_NAME = "cluster_name";
+        static final XContentBuilderString CLUSTER_NAME = new XContentBuilderString("cluster_name");
     }
 }

@@ -30,12 +30,14 @@ import org.apache.http.impl.client.HttpClients;
 import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
 import org.apache.lucene.util.IOUtils;
 import org.elasticsearch.Version;
+import org.elasticsearch.client.support.Headers;
 import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.io.PathUtils;
 import org.elasticsearch.common.logging.ESLogger;
 import org.elasticsearch.common.logging.Loggers;
+import org.elasticsearch.common.network.InetAddresses;
+import org.elasticsearch.common.network.NetworkAddress;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.common.util.concurrent.ThreadContext;
 import org.elasticsearch.common.util.set.Sets;
 import org.elasticsearch.test.rest.client.http.HttpRequestBuilder;
 import org.elasticsearch.test.rest.client.http.HttpResponse;
@@ -46,6 +48,7 @@ import javax.net.ssl.SSLContext;
 import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.InetSocketAddress;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -78,16 +81,16 @@ public class RestClient implements Closeable {
     private final String protocol;
     private final RestSpec restSpec;
     private final CloseableHttpClient httpClient;
+    private final Headers headers;
     private final URL[] urls;
     private final Version esVersion;
-    private final ThreadContext threadContext;
 
     public RestClient(RestSpec restSpec, Settings settings, URL[] urls) throws IOException, RestException {
         assert urls.length > 0;
         this.restSpec = restSpec;
+        this.headers = new Headers(settings);
         this.protocol = settings.get(PROTOCOL, "http");
         this.httpClient = createHttpClient(settings);
-        this.threadContext = new ThreadContext(settings);
         this.urls = urls;
         this.esVersion = readAndCheckVersion();
         logger.info("REST client initialized {}, elasticsearch version: [{}]", urls, esVersion);
@@ -151,7 +154,8 @@ public class RestClient implements Closeable {
 
         HttpRequestBuilder httpRequestBuilder = callApiBuilder(apiName, requestParams, body);
         for (Map.Entry<String, String> header : headers.entrySet()) {
-            logger.error("Adding header {}\n with value {}", header.getKey(), header.getValue());
+            logger.error("Adding header " + header.getKey());
+            logger.error(" with value " + header.getValue());
             httpRequestBuilder.addHeader(header.getKey(), header.getValue());
         }
         logger.debug("calling api [{}]", apiName);
@@ -248,7 +252,7 @@ public class RestClient implements Closeable {
 
     protected HttpRequestBuilder httpRequestBuilder(URL url) {
         return new HttpRequestBuilder(httpClient)
-                .addHeaders(threadContext.getHeaders())
+                .addHeaders(headers)
                 .protocol(protocol)
                 .host(url.getHost())
                 .port(url.getPort());
@@ -280,7 +284,7 @@ public class RestClient implements Closeable {
                 SSLContext sslcontext = SSLContexts.custom()
                         .loadTrustMaterial(keyStore, null)
                         .build();
-                sslsf = new SSLConnectionSocketFactory(sslcontext, StrictHostnameVerifier.INSTANCE);
+                sslsf = new SSLConnectionSocketFactory(sslcontext);
             } catch (KeyStoreException|NoSuchAlgorithmException|KeyManagementException|CertificateException e) {
                 throw new RuntimeException(e);
             }

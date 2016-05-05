@@ -22,13 +22,12 @@ package org.elasticsearch.index.codec;
 import org.apache.lucene.codecs.Codec;
 import org.apache.lucene.codecs.PostingsFormat;
 import org.apache.lucene.codecs.lucene50.Lucene50StoredFieldsFormat;
-import org.apache.lucene.codecs.lucene60.Lucene60Codec;
+import org.apache.lucene.codecs.lucene54.Lucene54Codec;
 import org.elasticsearch.common.logging.ESLogger;
 import org.elasticsearch.common.lucene.Lucene;
 import org.elasticsearch.index.mapper.MappedFieldType;
 import org.elasticsearch.index.mapper.MapperService;
 import org.elasticsearch.index.mapper.core.CompletionFieldMapper;
-import org.elasticsearch.index.mapper.core.CompletionFieldMapper2x;
 
 /**
  * {@link PerFieldMappingPostingFormatCodec This postings format} is the default
@@ -39,7 +38,7 @@ import org.elasticsearch.index.mapper.core.CompletionFieldMapper2x;
  * configured for a specific field the default postings format is used.
  */
 // LUCENE UPGRADE: make sure to move to a new codec depending on the lucene version
-public class PerFieldMappingPostingFormatCodec extends Lucene60Codec {
+public class PerFieldMappingPostingFormatCodec extends Lucene54Codec {
     private final ESLogger logger;
     private final MapperService mapperService;
 
@@ -55,14 +54,11 @@ public class PerFieldMappingPostingFormatCodec extends Lucene60Codec {
 
     @Override
     public PostingsFormat getPostingsFormatForField(String field) {
-        final MappedFieldType fieldType = mapperService.fullName(field);
-        if (fieldType == null) {
+        final MappedFieldType indexName = mapperService.fullName(field);
+        if (indexName == null) {
             logger.warn("no index mapper found for field: [{}] returning default postings format", field);
-        } else if (fieldType instanceof CompletionFieldMapper.CompletionFieldType) {
+        } else if (indexName instanceof CompletionFieldMapper.CompletionFieldType) {
             return CompletionFieldMapper.CompletionFieldType.postingsFormat();
-        } else if (fieldType instanceof CompletionFieldMapper2x.CompletionFieldType) {
-            return ((CompletionFieldMapper2x.CompletionFieldType) fieldType).postingsFormat(
-                super.getPostingsFormatForField(field));
         }
         return super.getPostingsFormatForField(field);
     }

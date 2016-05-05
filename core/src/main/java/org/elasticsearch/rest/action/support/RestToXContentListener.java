@@ -30,7 +30,7 @@ import org.elasticsearch.rest.RestStatus;
  * A REST based action listener that assumes the response is of type {@link ToXContent} and automatically
  * builds an XContent based response (wrapping the toXContent in startObject/endObject).
  */
-public class RestToXContentListener<Response extends ToXContent> extends RestResponseListener<Response> {
+public final class RestToXContentListener<Response extends ToXContent> extends RestResponseListener<Response> {
 
     public RestToXContentListener(RestChannel channel) {
         super(channel);
@@ -45,10 +45,6 @@ public class RestToXContentListener<Response extends ToXContent> extends RestRes
         builder.startObject();
         response.toXContent(builder, channel.request());
         builder.endObject();
-        return new BytesRestResponse(getStatus(response), builder);
-    }
-
-    protected RestStatus getStatus(Response response) {
-        return RestStatus.OK;
+        return new BytesRestResponse(RestStatus.OK, builder);
     }
 }

@@ -28,7 +28,6 @@ import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.IndexScopedSettings;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.common.settings.SettingsFilter;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.rest.BaseRestHandler;
 import org.elasticsearch.rest.BytesRestResponse;
@@ -44,16 +43,14 @@ import static org.elasticsearch.rest.RestStatus.OK;
 public class RestGetSettingsAction extends BaseRestHandler {
 
     private final IndexScopedSettings indexScopedSettings;
-    private final SettingsFilter settingsFilter;
 
     @Inject
-    public RestGetSettingsAction(Settings settings, RestController controller, Client client, IndexScopedSettings indexScopedSettings, final SettingsFilter settingsFilter) {
-        super(settings, client);
+    public RestGetSettingsAction(Settings settings, RestController controller, Client client, IndexScopedSettings indexScopedSettings) {
+        super(settings, controller, client);
         this.indexScopedSettings = indexScopedSettings;
         controller.registerHandler(GET, "/{index}/_settings/{name}", this);
         controller.registerHandler(GET, "/_settings/{name}", this);
         controller.registerHandler(GET, "/{index}/_setting/{name}", this);
-        this.settingsFilter = settingsFilter;
     }
 
     @Override
@@ -77,13 +74,13 @@ public class RestGetSettingsAction extends BaseRestHandler {
                     if (cursor.value.getAsMap().isEmpty()) {
                         continue;
                     }
-                    builder.startObject(cursor.key);
+                    builder.startObject(cursor.key, XContentBuilder.FieldCaseConversion.NONE);
                     builder.startObject("settings");
                     cursor.value.toXContent(builder, request);
                     builder.endObject();
                     if (renderDefaults) {
                         builder.startObject("defaults");
-                        settingsFilter.filter(indexScopedSettings.diff(cursor.value, settings)).toXContent(builder, request);
+                        indexScopedSettings.diff(cursor.value, settings).toXContent(builder, request);
                         builder.endObject();
                     }
                     builder.endObject();

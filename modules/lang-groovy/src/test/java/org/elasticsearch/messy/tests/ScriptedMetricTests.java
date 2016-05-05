@@ -20,10 +20,9 @@
 package org.elasticsearch.messy.tests;
 
 import org.elasticsearch.action.index.IndexRequestBuilder;
+import org.elasticsearch.action.indexedscripts.put.PutIndexedScriptResponse;
 import org.elasticsearch.action.search.SearchResponse;
-import org.elasticsearch.common.bytes.BytesArray;
 import org.elasticsearch.common.settings.Settings;
-import org.elasticsearch.env.Environment;
 import org.elasticsearch.plugins.Plugin;
 import org.elasticsearch.script.Script;
 import org.elasticsearch.script.ScriptService.ScriptType;
@@ -51,7 +50,6 @@ import static org.elasticsearch.index.query.QueryBuilders.matchAllQuery;
 import static org.elasticsearch.search.aggregations.AggregationBuilders.global;
 import static org.elasticsearch.search.aggregations.AggregationBuilders.histogram;
 import static org.elasticsearch.search.aggregations.AggregationBuilders.scriptedMetric;
-import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertAcked;
 import static org.elasticsearch.test.hamcrest.ElasticsearchAssertions.assertSearchResponse;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.equalTo;
@@ -102,25 +100,20 @@ public class ScriptedMetricTests extends ESIntegTestCase {
                     jsonBuilder().startObject().field("value", i * 2).endObject()));
         }
 
-        assertAcked(client().admin().cluster().preparePutStoredScript()
-                .setScriptLang(GroovyScriptEngineService.NAME)
-                .setId("initScript_indexed")
-                .setSource(new BytesArray("{\"script\":\"vars.multiplier = 3\"}")));
-
-        assertAcked(client().admin().cluster().preparePutStoredScript()
-                .setScriptLang(GroovyScriptEngineService.NAME)
-                .setId("mapScript_indexed")
-                .setSource(new BytesArray("{\"script\":\"_agg.add(vars.multiplier)\"}")));
-
-        assertAcked(client().admin().cluster().preparePutStoredScript()
-                .setScriptLang(GroovyScriptEngineService.NAME)
-                .setId("combineScript_indexed")
-                .setSource(new BytesArray("{\"script\":\"newaggregation = []; sum = 0;for (a in _agg) { sum += a}; newaggregation.add(sum); return newaggregation\"}")));
-
-        assertAcked(client().admin().cluster().preparePutStoredScript()
-                .setScriptLang(GroovyScriptEngineService.NAME)
-                .setId("reduceScript_indexed")
-                .setSource(new BytesArray("{\"script\":\"newaggregation = []; sum = 0;for (agg in _aggs) { for (a in agg) { sum += a} }; newaggregation.add(sum); return newaggregation\"}")));
+        PutIndexedScriptResponse indexScriptResponse = client().preparePutIndexedScript(GroovyScriptEngineService.NAME, "initScript_indexed", "{\"script\":\"vars.multiplier = 3\"}").get();
+        assertThat(indexScriptResponse.isCreated(), equalTo(true));
+        indexScriptResponse = client().preparePutIndexedScript(GroovyScriptEngineService.NAME, "mapScript_indexed", "{\"script\":\"_agg.add(vars.multiplier)\"}").get();
+        assertThat(indexScriptResponse.isCreated(), equalTo(true));
+        indexScriptResponse = client().preparePutIndexedScript(GroovyScriptEngineService.NAME, "combineScript_indexed",
+                "{\"script\":\"newaggregation = []; sum = 0;for (a in _agg) { sum += a}; newaggregation.add(sum); return newaggregation\"}")
+                .get();
+        assertThat(indexScriptResponse.isCreated(), equalTo(true));
+        indexScriptResponse = client().preparePutIndexedScript(
+                "groovy",
+                "reduceScript_indexed",
+                "{\"script\":\"newaggregation = []; sum = 0;for (agg in _aggs) { for (a in agg) { sum += a} }; newaggregation.add(sum); return newaggregation\"}")
+                .get();
+        assertThat(indexScriptResponse.isCreated(), equalTo(true));
 
         indexRandom(true, builders);
         ensureSearchable();
@@ -128,9 +121,9 @@ public class ScriptedMetricTests extends ESIntegTestCase {
 
     @Override
     protected Settings nodeSettings(int nodeOrdinal) {
-        Settings settings = Settings.builder()
+        Settings settings = Settings.settingsBuilder()
                 .put(super.nodeSettings(nodeOrdinal))
-                .put(Environment.PATH_CONF_SETTING.getKey(), getDataPath("/org/elasticsearch/messy/tests/conf"))
+                .put("path.conf", getDataPath("/org/elasticsearch/messy/tests/conf"))
                 .build();
         return settings;
     }
@@ -285,7 +278,7 @@ public class ScriptedMetricTests extends ESIntegTestCase {
                 // A particular shard may not have any documents stored on it so
                 // we have to assume the lower bound may be 0. The check at the
                 // bottom of the test method will make sure the count is correct
-                assertThat(numberValue.longValue(), allOf(greaterThanOrEqualTo(0L), lessThanOrEqualTo(numDocs)));
+                assertThat(numberValue.longValue(), allOf(greaterThanOrEqualTo(0l), lessThanOrEqualTo(numDocs)));
                 totalCount += numberValue.longValue();
             }
         }
@@ -335,7 +328,7 @@ public class ScriptedMetricTests extends ESIntegTestCase {
                 // A particular shard may not have any documents stored on it so
                 // we have to assume the lower bound may be 0. The check at the
                 // bottom of the test method will make sure the count is correct
-                assertThat(numberValue.longValue(), allOf(greaterThanOrEqualTo(0L), lessThanOrEqualTo(numDocs * 3)));
+                assertThat(numberValue.longValue(), allOf(greaterThanOrEqualTo(0l), lessThanOrEqualTo(numDocs * 3)));
                 totalCount += numberValue.longValue();
             }
         }
@@ -601,10 +594,10 @@ public class ScriptedMetricTests extends ESIntegTestCase {
                 .setQuery(matchAllQuery())
                 .addAggregation(
                         scriptedMetric("scripted").params(params)
-                                .initScript(new Script("initScript_indexed", ScriptType.STORED, null, null))
-                                .mapScript(new Script("mapScript_indexed", ScriptType.STORED, null, null))
-                                .combineScript(new Script("combineScript_indexed", ScriptType.STORED, null, null))
-                                .reduceScript(new Script("reduceScript_indexed", ScriptType.STORED, null, null))).execute().actionGet();
+                                .initScript(new Script("initScript_indexed", ScriptType.INDEXED, null, null))
+                                .mapScript(new Script("mapScript_indexed", ScriptType.INDEXED, null, null))
+                                .combineScript(new Script("combineScript_indexed", ScriptType.INDEXED, null, null))
+                                .reduceScript(new Script("reduceScript_indexed", ScriptType.INDEXED, null, null))).execute().actionGet();
         assertSearchResponse(response);
         assertThat(response.getHits().getTotalHits(), equalTo(numDocs));
 
@@ -693,7 +686,7 @@ public class ScriptedMetricTests extends ESIntegTestCase {
         assertThat(buckets, notNullValue());
         for (Bucket b : buckets) {
             assertThat(b, notNullValue());
-            assertThat(b.getDocCount(), equalTo(1L));
+            assertThat(b.getDocCount(), equalTo(1l));
             Aggregations subAggs = b.getAggregations();
             assertThat(subAggs, notNullValue());
             assertThat(subAggs.asList().size(), equalTo(1));
@@ -709,7 +702,7 @@ public class ScriptedMetricTests extends ESIntegTestCase {
             Object object = aggregationList.get(0);
             assertThat(object, notNullValue());
             assertThat(object, instanceOf(Number.class));
-            assertThat(((Number) object).longValue(), equalTo(3L));
+            assertThat(((Number) object).longValue(), equalTo(3l));
         }
     }
 
@@ -722,7 +715,7 @@ public class ScriptedMetricTests extends ESIntegTestCase {
 
         SearchResponse searchResponse = client().prepareSearch("empty_bucket_idx")
                 .setQuery(matchAllQuery())
-                .addAggregation(histogram("histo").field("value").interval(1L).minDocCount(0)
+                .addAggregation(histogram("histo").field("value").interval(1l).minDocCount(0)
                         .subAggregation(
                         scriptedMetric("scripted")
                                 .params(params)
@@ -736,7 +729,7 @@ public class ScriptedMetricTests extends ESIntegTestCase {
                                                                 "newaggregation = []; sum = 0;for (aggregation in _aggs) { for (a in aggregation) { sum += a} }; newaggregation.add(sum); return newaggregation"))))
                 .execute().actionGet();
 
-        assertThat(searchResponse.getHits().getTotalHits(), equalTo(2L));
+        assertThat(searchResponse.getHits().getTotalHits(), equalTo(2l));
         Histogram histo = searchResponse.getAggregations().get("histo");
         assertThat(histo, notNullValue());
         Histogram.Bucket bucket = histo.getBuckets().get(1);

@@ -20,11 +20,8 @@
 package org.elasticsearch.common.geo;
 
 import org.apache.lucene.util.BitUtil;
-
-import static org.elasticsearch.common.geo.GeoHashUtils.mortonEncode;
-import static org.elasticsearch.common.geo.GeoHashUtils.stringEncode;
-import static org.apache.lucene.spatial.util.GeoEncodingUtils.mortonUnhashLat;
-import static org.apache.lucene.spatial.util.GeoEncodingUtils.mortonUnhashLon;
+import org.apache.lucene.util.GeoHashUtils;
+import org.apache.lucene.util.GeoUtils;
 
 /**
  *
@@ -84,14 +81,14 @@ public final class GeoPoint {
     }
 
     public GeoPoint resetFromIndexHash(long hash) {
-        lon = mortonUnhashLon(hash);
-        lat = mortonUnhashLat(hash);
+        lon = GeoUtils.mortonUnhashLon(hash);
+        lat = GeoUtils.mortonUnhashLat(hash);
         return this;
     }
 
     public GeoPoint resetFromGeoHash(String geohash) {
-        final long hash = mortonEncode(geohash);
-        return this.reset(mortonUnhashLat(hash), mortonUnhashLon(hash));
+        final long hash = GeoHashUtils.mortonEncode(geohash);
+        return this.reset(GeoUtils.mortonUnhashLat(hash), GeoUtils.mortonUnhashLon(hash));
     }
 
     public GeoPoint resetFromGeoHash(long geohashLong) {
@@ -116,11 +113,11 @@ public final class GeoPoint {
     }
 
     public final String geohash() {
-        return stringEncode(lon, lat);
+        return GeoHashUtils.stringEncode(lon, lat);
     }
 
     public final String getGeohash() {
-        return stringEncode(lon, lat);
+        return GeoHashUtils.stringEncode(lon, lat);
     }
 
     @Override

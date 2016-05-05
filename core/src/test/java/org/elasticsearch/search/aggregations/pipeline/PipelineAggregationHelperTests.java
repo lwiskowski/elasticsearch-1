@@ -20,11 +20,11 @@
 package org.elasticsearch.search.aggregations.pipeline;
 
 
-import org.elasticsearch.search.aggregations.metrics.avg.AvgAggregatorBuilder;
-import org.elasticsearch.search.aggregations.metrics.max.MaxAggregatorBuilder;
-import org.elasticsearch.search.aggregations.metrics.min.MinAggregatorBuilder;
-import org.elasticsearch.search.aggregations.metrics.sum.SumAggregatorBuilder;
-import org.elasticsearch.search.aggregations.support.ValuesSourceAggregatorBuilder;
+import org.elasticsearch.search.aggregations.metrics.ValuesSourceMetricsAggregationBuilder;
+import org.elasticsearch.search.aggregations.metrics.avg.AvgBuilder;
+import org.elasticsearch.search.aggregations.metrics.max.MaxBuilder;
+import org.elasticsearch.search.aggregations.metrics.min.MinBuilder;
+import org.elasticsearch.search.aggregations.metrics.sum.SumBuilder;
 import org.elasticsearch.test.ESTestCase;
 
 import java.util.ArrayList;
@@ -109,27 +109,27 @@ public class PipelineAggregationHelperTests extends ESTestCase {
      * @param values Array of values to compute metric for
      * @param metric A metric builder which defines what kind of metric should be returned for the values
      */
-    public static double calculateMetric(double[] values, ValuesSourceAggregatorBuilder<?, ?> metric) {
+    public static double calculateMetric(double[] values, ValuesSourceMetricsAggregationBuilder<?> metric) {
 
-        if (metric instanceof MinAggregatorBuilder) {
+        if (metric instanceof MinBuilder) {
             double accumulator = Double.POSITIVE_INFINITY;
             for (double value : values) {
                 accumulator = Math.min(accumulator, value);
             }
             return accumulator;
-        } else if (metric instanceof MaxAggregatorBuilder) {
+        } else if (metric instanceof MaxBuilder) {
             double accumulator = Double.NEGATIVE_INFINITY;
             for (double value : values) {
                 accumulator = Math.max(accumulator, value);
             }
             return accumulator;
-        } else if (metric instanceof SumAggregatorBuilder) {
+        } else if (metric instanceof SumBuilder) {
             double accumulator = 0;
             for (double value : values) {
                 accumulator += value;
             }
             return accumulator;
-        } else if (metric instanceof AvgAggregatorBuilder) {
+        } else if (metric instanceof AvgBuilder) {
             double accumulator = 0;
             for (double value : values) {
                 accumulator += value;

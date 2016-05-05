@@ -25,9 +25,9 @@ import org.elasticsearch.common.io.stream.Streamable;
 import org.elasticsearch.common.unit.ByteSizeValue;
 import org.elasticsearch.common.xcontent.ToXContent;
 import org.elasticsearch.common.xcontent.XContentBuilder;
+import org.elasticsearch.common.xcontent.XContentBuilderString;
 
 import java.io.IOException;
-import java.util.Arrays;
 
 /**
  *
@@ -60,26 +60,26 @@ public class OsStats implements Streamable, ToXContent {
     }
 
     static final class Fields {
-        static final String OS = "os";
-        static final String TIMESTAMP = "timestamp";
-        static final String CPU = "cpu";
-        static final String PERCENT = "percent";
-        static final String LOAD_AVERAGE = "load_average";
-        static final String LOAD_AVERAGE_1M = new String("1m");
-        static final String LOAD_AVERAGE_5M = new String("5m");
-        static final String LOAD_AVERAGE_15M = new String("15m");
+        static final XContentBuilderString OS = new XContentBuilderString("os");
+        static final XContentBuilderString TIMESTAMP = new XContentBuilderString("timestamp");
+        static final XContentBuilderString CPU = new XContentBuilderString("cpu");
+        static final XContentBuilderString PERCENT = new XContentBuilderString("percent");
+        static final XContentBuilderString LOAD_AVERAGE = new XContentBuilderString("load_average");
+        static final XContentBuilderString LOAD_AVERAGE_1M = new XContentBuilderString("1m");
+        static final XContentBuilderString LOAD_AVERAGE_5M = new XContentBuilderString("5m");
+        static final XContentBuilderString LOAD_AVERAGE_15M = new XContentBuilderString("15m");
 
-        static final String MEM = "mem";
-        static final String SWAP = "swap";
-        static final String FREE = "free";
-        static final String FREE_IN_BYTES = "free_in_bytes";
-        static final String USED = "used";
-        static final String USED_IN_BYTES = "used_in_bytes";
-        static final String TOTAL = "total";
-        static final String TOTAL_IN_BYTES = "total_in_bytes";
+        static final XContentBuilderString MEM = new XContentBuilderString("mem");
+        static final XContentBuilderString SWAP = new XContentBuilderString("swap");
+        static final XContentBuilderString FREE = new XContentBuilderString("free");
+        static final XContentBuilderString FREE_IN_BYTES = new XContentBuilderString("free_in_bytes");
+        static final XContentBuilderString USED = new XContentBuilderString("used");
+        static final XContentBuilderString USED_IN_BYTES = new XContentBuilderString("used_in_bytes");
+        static final XContentBuilderString TOTAL = new XContentBuilderString("total");
+        static final XContentBuilderString TOTAL_IN_BYTES = new XContentBuilderString("total_in_bytes");
 
-        static final String FREE_PERCENT = "free_percent";
-        static final String USED_PERCENT = "used_percent";
+        static final XContentBuilderString FREE_PERCENT = new XContentBuilderString("free_percent");
+        static final XContentBuilderString USED_PERCENT = new XContentBuilderString("used_percent");
     }
 
     @Override
@@ -89,7 +89,7 @@ public class OsStats implements Streamable, ToXContent {
         if (cpu != null) {
             builder.startObject(Fields.CPU);
             builder.field(Fields.PERCENT, cpu.getPercent());
-            if (cpu.getLoadAverage() != null && Arrays.stream(cpu.getLoadAverage()).anyMatch(load -> load != -1)) {
+            if (cpu.getLoadAverage() != null) {
                 builder.startObject(Fields.LOAD_AVERAGE);
                 if (cpu.getLoadAverage()[0] != -1) {
                     builder.field(Fields.LOAD_AVERAGE_1M, cpu.getLoadAverage()[0]);

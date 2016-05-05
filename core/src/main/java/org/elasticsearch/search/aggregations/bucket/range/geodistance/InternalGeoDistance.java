@@ -19,7 +19,6 @@
 package org.elasticsearch.search.aggregations.bucket.range.geodistance;
 
 import org.elasticsearch.common.io.stream.StreamInput;
-import org.elasticsearch.search.DocValueFormat;
 import org.elasticsearch.search.aggregations.AggregationStreams;
 import org.elasticsearch.search.aggregations.InternalAggregation;
 import org.elasticsearch.search.aggregations.InternalAggregations;
@@ -27,8 +26,7 @@ import org.elasticsearch.search.aggregations.bucket.BucketStreamContext;
 import org.elasticsearch.search.aggregations.bucket.BucketStreams;
 import org.elasticsearch.search.aggregations.bucket.range.InternalRange;
 import org.elasticsearch.search.aggregations.pipeline.PipelineAggregator;
-import org.elasticsearch.search.aggregations.support.ValueType;
-import org.elasticsearch.search.aggregations.support.ValuesSourceType;
+import org.elasticsearch.search.aggregations.support.format.ValueFormatter;
 
 import java.io.IOException;
 import java.util.List;
@@ -53,7 +51,7 @@ public class InternalGeoDistance extends InternalRange<InternalGeoDistance.Bucke
     private final static BucketStreams.Stream<Bucket> BUCKET_STREAM = new BucketStreams.Stream<Bucket>() {
         @Override
         public Bucket readResult(StreamInput in, BucketStreamContext context) throws IOException {
-            Bucket buckets = new Bucket(context.keyed());
+            Bucket buckets = new Bucket(context.keyed(), context.formatter());
             buckets.readFrom(in);
             return buckets;
         }
@@ -61,7 +59,7 @@ public class InternalGeoDistance extends InternalRange<InternalGeoDistance.Bucke
         @Override
         public BucketStreamContext getBucketStreamContext(Bucket bucket) {
             BucketStreamContext context = new BucketStreamContext();
-            context.format(DocValueFormat.RAW);
+            context.formatter(bucket.formatter());
             context.keyed(bucket.keyed());
             return context;
         }
@@ -76,16 +74,17 @@ public class InternalGeoDistance extends InternalRange<InternalGeoDistance.Bucke
 
     static class Bucket extends InternalRange.Bucket {
 
-        Bucket(boolean keyed) {
-            super(keyed, DocValueFormat.RAW);
+        Bucket(boolean keyed, ValueFormatter formatter) {
+            super(keyed, formatter);
         }
 
-        Bucket(String key, double from, double to, long docCount, List<InternalAggregation> aggregations, boolean keyed) {
-            this(key, from, to, docCount, new InternalAggregations(aggregations), keyed);
+        Bucket(String key, double from, double to, long docCount, List<InternalAggregation> aggregations, boolean keyed,
+                ValueFormatter formatter) {
+            this(key, from, to, docCount, new InternalAggregations(aggregations), keyed, formatter);
         }
 
-        Bucket(String key, double from, double to, long docCount, InternalAggregations aggregations, boolean keyed) {
-            super(key, from, to, docCount, aggregations, keyed, DocValueFormat.RAW);
+        Bucket(String key, double from, double to, long docCount, InternalAggregations aggregations, boolean keyed, ValueFormatter formatter) {
+            super(key, from, to, docCount, aggregations, keyed, formatter);
         }
 
         @Override
@@ -96,56 +95,50 @@ public class InternalGeoDistance extends InternalRange<InternalGeoDistance.Bucke
         boolean keyed() {
             return keyed;
         }
+
+        ValueFormatter formatter() {
+            return formatter;
+        }
     }
 
     public static class Factory extends InternalRange.Factory<InternalGeoDistance.Bucket, InternalGeoDistance> {
 
         @Override
-        public Type type() {
-            return TYPE;
+        public String type() {
+            return TYPE.name();
         }
 
         @Override
-        public ValuesSourceType getValueSourceType() {
-            return ValuesSourceType.GEOPOINT;
-        }
-
-        @Override
-        public ValueType getValueType() {
-            return ValueType.GEOPOINT;
-        }
-
-        @Override
-        public InternalGeoDistance create(String name, List<Bucket> ranges, DocValueFormat format, boolean keyed,
+        public InternalGeoDistance create(String name, List<Bucket> ranges, ValueFormatter formatter, boolean keyed,
                 List<PipelineAggregator> pipelineAggregators, Map<String, Object> metaData) {
-            return new InternalGeoDistance(name, ranges, keyed, pipelineAggregators, metaData);
+            return new InternalGeoDistance(name, ranges, formatter, keyed, pipelineAggregators, metaData);
         }
 
         @Override
         public InternalGeoDistance create(List<Bucket> ranges, InternalGeoDistance prototype) {
-            return new InternalGeoDistance(prototype.name, ranges, prototype.keyed, prototype.pipelineAggregators(),
+            return new InternalGeoDistance(prototype.name, ranges, prototype.formatter, prototype.keyed, prototype.pipelineAggregators(),
                     prototype.metaData);
         }
 
         @Override
         public Bucket createBucket(String key, double from, double to, long docCount, InternalAggregations aggregations, boolean keyed,
-                DocValueFormat format) {
-            return new Bucket(key, from, to, docCount, aggregations, keyed);
+                ValueFormatter formatter) {
+            return new Bucket(key, from, to, docCount, aggregations, keyed, formatter);
         }
 
         @Override
         public Bucket createBucket(InternalAggregations aggregations, Bucket prototype) {
             return new Bucket(prototype.getKey(), ((Number) prototype.getFrom()).doubleValue(), ((Number) prototype.getTo()).doubleValue(),
-                    prototype.getDocCount(), aggregations, prototype.getKeyed());
+                    prototype.getDocCount(), aggregations, prototype.getKeyed(), prototype.getFormatter());
         }
     }
 
     InternalGeoDistance() {} // for serialization
 
-    public InternalGeoDistance(String name, List<Bucket> ranges, boolean keyed,
+    public InternalGeoDistance(String name, List<Bucket> ranges, ValueFormatter formatter, boolean keyed,
             List<PipelineAggregator> pipelineAggregators,
             Map<String, Object> metaData) {
-        super(name, ranges, DocValueFormat.RAW, keyed, pipelineAggregators, metaData);
+        super(name, ranges, formatter, keyed, pipelineAggregators, metaData);
     }
 
     @Override

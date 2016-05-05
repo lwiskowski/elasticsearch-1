@@ -30,10 +30,8 @@ import org.elasticsearch.cloud.azure.AzureServiceRemoteException;
 import org.elasticsearch.cloud.azure.management.AzureComputeService;
 import org.elasticsearch.cloud.azure.management.AzureComputeService.Discovery;
 import org.elasticsearch.cluster.node.DiscoveryNode;
-import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.component.AbstractComponent;
 import org.elasticsearch.common.inject.Inject;
-import org.elasticsearch.common.network.InetAddresses;
 import org.elasticsearch.common.network.NetworkAddress;
 import org.elasticsearch.common.network.NetworkService;
 import org.elasticsearch.common.settings.Settings;
@@ -47,9 +45,7 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.List;
-
-import static java.util.Collections.emptyMap;
-import static java.util.Collections.emptySet;
+import java.util.Locale;
 
 /**
  *
@@ -72,7 +68,7 @@ public class AzureUnicastHostsProvider extends AbstractComponent implements Unic
                     return hostType;
                 }
             }
-            throw new IllegalArgumentException("invalid value for host type [" + type + "]");
+            return null;
         }
     }
 
@@ -94,7 +90,7 @@ public class AzureUnicastHostsProvider extends AbstractComponent implements Unic
                     return deployment;
                 }
             }
-            throw new IllegalArgumentException("invalid value for deployment type [" + string + "]");
+            return null;
         }
     }
 
@@ -122,17 +118,31 @@ public class AzureUnicastHostsProvider extends AbstractComponent implements Unic
         this.networkService = networkService;
         this.version = version;
 
-        this.refreshInterval = Discovery.REFRESH_SETTING.get(settings);
+        this.refreshInterval = settings.getAsTime(Discovery.REFRESH, TimeValue.timeValueSeconds(0));
 
-        this.hostType = Discovery.HOST_TYPE_SETTING.get(settings);
-        this.publicEndpointName = Discovery.ENDPOINT_NAME_SETTING.get(settings);
+        String strHostType = settings.get(Discovery.HOST_TYPE, HostType.PRIVATE_IP.name()).toUpperCase(Locale.ROOT);
+        HostType tmpHostType = HostType.fromString(strHostType);
+        if (tmpHostType == null) {
+            logger.warn("wrong value for [{}]: [{}]. falling back to [{}]...", Discovery.HOST_TYPE,
+                    strHostType, HostType.PRIVATE_IP.name().toLowerCase(Locale.ROOT));
+            tmpHostType = HostType.PRIVATE_IP;
+        }
+        this.hostType = tmpHostType;
+        this.publicEndpointName = settings.get(Discovery.ENDPOINT_NAME, "elasticsearch");
 
         // Deployment name could be set with discovery.azure.deployment.name
         // Default to cloud.azure.management.cloud.service.name
-        this.deploymentName = Discovery.DEPLOYMENT_NAME_SETTING.get(settings);
+        this.deploymentName = settings.get(Discovery.DEPLOYMENT_NAME);
 
         // Reading deployment_slot
-        this.deploymentSlot = Discovery.DEPLOYMENT_SLOT_SETTING.get(settings).slot;
+        String strDeployment = settings.get(Discovery.DEPLOYMENT_SLOT, Deployment.PRODUCTION.deployment);
+        Deployment tmpDeployment = Deployment.fromString(strDeployment);
+        if (tmpDeployment == null) {
+            logger.warn("wrong value for [{}]: [{}]. falling back to [{}]...", Discovery.DEPLOYMENT_SLOT, strDeployment,
+                    Deployment.PRODUCTION.deployment);
+            tmpDeployment = Deployment.PRODUCTION;
+        }
+        this.deploymentSlot = tmpDeployment.slot;
     }
 
     /**
@@ -186,7 +196,7 @@ public class AzureUnicastHostsProvider extends AbstractComponent implements Unic
             }
 
             // If provided, we check the deployment name
-            if (Strings.hasLength(deploymentName) && !deploymentName.equals(deployment.getName())) {
+            if (deploymentName != null && !deploymentName.equals(deployment.getName())) {
                 logger.debug("current deployment name [{}] different from [{}]. skipping...",
                         deployment.getName(), deploymentName);
                 continue;
@@ -214,7 +224,7 @@ public class AzureUnicastHostsProvider extends AbstractComponent implements Unic
                             if (privateIp.equals(ipAddress)) {
                                 logger.trace("adding ourselves {}", NetworkAddress.format(ipAddress));
                             }
-                            networkAddress = InetAddresses.toUriString(privateIp);
+                            networkAddress = NetworkAddress.formatAddress(privateIp);
                         } else {
                             logger.trace("no private ip provided. ignoring [{}]...", instance.getInstanceName());
                         }
@@ -227,8 +237,7 @@ public class AzureUnicastHostsProvider extends AbstractComponent implements Unic
                                 continue;
                             }
 
-                            networkAddress = NetworkAddress.format(new InetSocketAddress(endpoint.getVirtualIPAddress(),
-                                    endpoint.getPort()));
+                            networkAddress = NetworkAddress.formatAddress(new InetSocketAddress(endpoint.getVirtualIPAddress(), endpoint.getPort()));
                         }
 
                         if (networkAddress == null) {
@@ -252,8 +261,8 @@ public class AzureUnicastHostsProvider extends AbstractComponent implements Unic
                     TransportAddress[] addresses = transportService.addressesFromString(networkAddress, 1);
                     for (TransportAddress address : addresses) {
                         logger.trace("adding {}, transport_address {}", networkAddress, address);
-                        cachedDiscoNodes.add(new DiscoveryNode("#cloud-" + instance.getInstanceName(), address, emptyMap(),
-                                emptySet(), version.minimumCompatibilityVersion()));
+                        cachedDiscoNodes.add(new DiscoveryNode("#cloud-" + instance.getInstanceName(), address,
+                            version.minimumCompatibilityVersion()));
                     }
                 } catch (Exception e) {
                     logger.warn("can not convert [{}] to transport address. skipping. [{}]", networkAddress, e.getMessage());

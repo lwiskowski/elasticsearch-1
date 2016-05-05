@@ -20,17 +20,18 @@
 package org.elasticsearch.action.search;
 
 import org.elasticsearch.action.ActionListener;
+import org.elasticsearch.action.search.type.ScrollIdForNode;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.HandledTransportAction;
+import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
 import org.elasticsearch.cluster.node.DiscoveryNode;
 import org.elasticsearch.cluster.node.DiscoveryNodes;
-import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.util.concurrent.CountDown;
-import org.elasticsearch.search.action.SearchTransportService;
+import org.elasticsearch.search.action.SearchServiceTransportAction;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportResponse;
 import org.elasticsearch.transport.TransportService;
@@ -40,22 +41,22 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.elasticsearch.action.search.TransportSearchHelper.parseScrollId;
+import static org.elasticsearch.action.search.type.TransportSearchHelper.parseScrollId;
 
 /**
  */
 public class TransportClearScrollAction extends HandledTransportAction<ClearScrollRequest, ClearScrollResponse> {
 
     private final ClusterService clusterService;
-    private final SearchTransportService searchTransportService;
+    private final SearchServiceTransportAction searchServiceTransportAction;
 
     @Inject
     public TransportClearScrollAction(Settings settings, TransportService transportService, ThreadPool threadPool,
-                                      ClusterService clusterService, SearchTransportService searchTransportService,
+                                      ClusterService clusterService, SearchServiceTransportAction searchServiceTransportAction,
                                       ActionFilters actionFilters, IndexNameExpressionResolver indexNameExpressionResolver) {
         super(settings, ClearScrollAction.NAME, threadPool, transportService, actionFilters, indexNameExpressionResolver, ClearScrollRequest::new);
         this.clusterService = clusterService;
-        this.searchTransportService = searchTransportService;
+        this.searchServiceTransportAction = searchServiceTransportAction;
     }
 
     @Override
@@ -64,8 +65,10 @@ public class TransportClearScrollAction extends HandledTransportAction<ClearScro
     }
 
     private class Async {
+
         final DiscoveryNodes nodes;
         final CountDown expectedOps;
+        final ClearScrollRequest request;
         final List<ScrollIdForNode[]> contexts = new ArrayList<>();
         final ActionListener<ClearScrollResponse> listener;
         final AtomicReference<Throwable> expHolder;
@@ -75,7 +78,7 @@ public class TransportClearScrollAction extends HandledTransportAction<ClearScro
             int expectedOps = 0;
             this.nodes = clusterState.nodes();
             if (request.getScrollIds().size() == 1 && "_all".equals(request.getScrollIds().get(0))) {
-                expectedOps = nodes.getSize();
+                expectedOps = nodes.size();
             } else {
                 for (String parsedScrollId : request.getScrollIds()) {
                     ScrollIdForNode[] context = parseScrollId(parsedScrollId).getContext();
@@ -83,6 +86,8 @@ public class TransportClearScrollAction extends HandledTransportAction<ClearScro
                     this.contexts.add(context);
                 }
             }
+
+            this.request = request;
             this.listener = listener;
             this.expHolder = new AtomicReference<>();
             this.expectedOps = new CountDown(expectedOps);
@@ -96,7 +101,7 @@ public class TransportClearScrollAction extends HandledTransportAction<ClearScro
 
             if (contexts.isEmpty()) {
                 for (final DiscoveryNode node : nodes) {
-                    searchTransportService.sendClearAllScrollContexts(node, new ActionListener<TransportResponse>() {
+                    searchServiceTransportAction.sendClearAllScrollContexts(node, request, new ActionListener<TransportResponse>() {
                         @Override
                         public void onResponse(TransportResponse response) {
                             onFreedContext(true);
@@ -117,9 +122,9 @@ public class TransportClearScrollAction extends HandledTransportAction<ClearScro
                             continue;
                         }
 
-                        searchTransportService.sendFreeContext(node, target.getScrollId(), new ActionListener<SearchTransportService.SearchFreeContextResponse>() {
+                        searchServiceTransportAction.sendFreeContext(node, target.getScrollId(), request, new ActionListener<SearchServiceTransportAction.SearchFreeContextResponse>() {
                             @Override
-                            public void onResponse(SearchTransportService.SearchFreeContextResponse freed) {
+                            public void onResponse(SearchServiceTransportAction.SearchFreeContextResponse freed) {
                                 onFreedContext(freed.isFreed());
                             }
 

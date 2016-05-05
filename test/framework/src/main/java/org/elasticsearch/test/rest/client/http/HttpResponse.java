@@ -61,7 +61,7 @@ public class HttpResponse {
                 try {
                     httpResponse.close();
                 } catch (IOException e) {
-                    logger.error("Failed closing response", e);
+                    logger.error(e.getMessage(), e);
                 }
             }
         } else {

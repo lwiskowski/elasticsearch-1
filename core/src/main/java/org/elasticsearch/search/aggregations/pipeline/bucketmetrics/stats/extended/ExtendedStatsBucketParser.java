@@ -20,7 +20,10 @@
 package org.elasticsearch.search.aggregations.pipeline.bucketmetrics.stats.extended;
 
 import org.elasticsearch.common.ParseField;
+import org.elasticsearch.search.aggregations.pipeline.BucketHelpers.GapPolicy;
+import org.elasticsearch.search.aggregations.pipeline.PipelineAggregatorFactory;
 import org.elasticsearch.search.aggregations.pipeline.bucketmetrics.BucketMetricsParser;
+import org.elasticsearch.search.aggregations.support.format.ValueFormatter;
 
 import java.text.ParseException;
 import java.util.Map;
@@ -29,10 +32,15 @@ public class ExtendedStatsBucketParser extends BucketMetricsParser {
     static final ParseField SIGMA = new ParseField("sigma");
 
     @Override
-    protected ExtendedStatsBucketPipelineAggregatorBuilder buildFactory(String pipelineAggregatorName,
-            String bucketsPath, Map<String, Object> unparsedParams) throws ParseException {
+    public String type() {
+        return ExtendedStatsBucketPipelineAggregator.TYPE.name();
+    }
 
-        Double sigma = null;
+    @Override
+    protected PipelineAggregatorFactory buildFactory(String pipelineAggregatorName, String[] bucketsPaths, GapPolicy gapPolicy,
+            ValueFormatter formatter, Map<String, Object> unparsedParams) throws ParseException {
+
+        double sigma = 2.0;
         Object param = unparsedParams.get(SIGMA.getPreferredName());
 
         if (param != null) {
@@ -44,11 +52,6 @@ public class ExtendedStatsBucketParser extends BucketMetricsParser {
                         + param.getClass().getSimpleName() + "` provided instead", 0);
             }
         }
-        ExtendedStatsBucketPipelineAggregatorBuilder factory =
-                new ExtendedStatsBucketPipelineAggregatorBuilder(pipelineAggregatorName, bucketsPath);
-        if (sigma != null) {
-            factory.sigma(sigma);
-        }
-        return factory;
+        return new ExtendedStatsBucketPipelineAggregator.Factory(pipelineAggregatorName, bucketsPaths, sigma, gapPolicy, formatter);
     }
 }

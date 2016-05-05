@@ -44,14 +44,13 @@ public abstract class HandledTransportAction<Request extends ActionRequest<Reque
     class TransportHandler implements TransportRequestHandler<Request> {
 
         @Override
-        public final void messageReceived(Request request, TransportChannel channel) throws Exception {
-            throw new UnsupportedOperationException("the task parameter is required for this operation");
+        public final void messageReceived(final Request request, final TransportChannel channel, Task task) throws Exception {
+            messageReceived(request, channel);
         }
 
         @Override
-        public final void messageReceived(final Request request, final TransportChannel channel, Task task) throws Exception {
-            // We already got the task created on the netty layer - no need to create it again on the transport layer
-            execute(task, request, new ActionListener<Response>() {
+        public final void messageReceived(Request request, TransportChannel channel) throws Exception {
+            execute(request, new ActionListener<Response>() {
                 @Override
                 public void onResponse(Response response) {
                     try {

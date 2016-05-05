@@ -20,11 +20,10 @@ package org.elasticsearch.search.suggest;
 
 import com.carrotsearch.hppc.ObjectLongHashMap;
 import com.carrotsearch.randomizedtesting.generators.RandomStrings;
-
 import org.apache.lucene.analysis.TokenStreamToAutomaton;
 import org.apache.lucene.search.suggest.document.ContextSuggestField;
 import org.apache.lucene.util.LuceneTestCase.SuppressCodecs;
-import org.elasticsearch.Version;
+import org.elasticsearch.action.ShardOperationFailedException;
 import org.elasticsearch.action.admin.indices.forcemerge.ForceMergeResponse;
 import org.elasticsearch.action.admin.indices.mapping.put.PutMappingResponse;
 import org.elasticsearch.action.admin.indices.segments.IndexShardSegments;
@@ -32,36 +31,30 @@ import org.elasticsearch.action.admin.indices.segments.ShardSegments;
 import org.elasticsearch.action.admin.indices.stats.IndicesStatsResponse;
 import org.elasticsearch.action.index.IndexRequestBuilder;
 import org.elasticsearch.action.percolate.PercolateResponse;
-import org.elasticsearch.action.search.ReduceSearchPhaseException;
 import org.elasticsearch.action.search.SearchPhaseExecutionException;
-import org.elasticsearch.action.search.SearchResponse;
+import org.elasticsearch.action.suggest.SuggestRequest;
+import org.elasticsearch.action.suggest.SuggestResponse;
 import org.elasticsearch.client.Requests;
-import org.elasticsearch.cluster.metadata.IndexMetaData;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.unit.Fuzziness;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.index.mapper.MapperParsingException;
-import org.elasticsearch.index.percolator.PercolatorFieldMapper;
-import org.elasticsearch.plugins.Plugin;
+import org.elasticsearch.percolator.PercolatorService;
 import org.elasticsearch.search.aggregations.AggregationBuilders;
 import org.elasticsearch.search.aggregations.Aggregator.SubAggCollectionMode;
 import org.elasticsearch.search.sort.FieldSortBuilder;
 import org.elasticsearch.search.suggest.completion.CompletionStats;
 import org.elasticsearch.search.suggest.completion.CompletionSuggestion;
 import org.elasticsearch.search.suggest.completion.CompletionSuggestionBuilder;
-import org.elasticsearch.search.suggest.completion.FuzzyOptions;
+import org.elasticsearch.search.suggest.completion.CompletionSuggestionBuilder.FuzzyOptionsBuilder;
 import org.elasticsearch.search.suggest.completion.context.CategoryContextMapping;
 import org.elasticsearch.search.suggest.completion.context.ContextMapping;
 import org.elasticsearch.search.suggest.completion.context.GeoContextMapping;
 import org.elasticsearch.test.ESIntegTestCase;
-import org.elasticsearch.test.InternalSettingsPlugin;
-import org.elasticsearch.test.VersionUtils;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -69,6 +62,7 @@ import java.util.Map;
 
 import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_NUMBER_OF_REPLICAS;
 import static org.elasticsearch.cluster.metadata.IndexMetaData.SETTING_NUMBER_OF_SHARDS;
+import static org.elasticsearch.common.settings.Settings.settingsBuilder;
 import static org.elasticsearch.common.util.CollectionUtils.iterableAsArrayList;
 import static org.elasticsearch.common.xcontent.XContentFactory.jsonBuilder;
 import static org.elasticsearch.index.query.QueryBuilders.matchAllQuery;
@@ -87,15 +81,10 @@ import static org.hamcrest.Matchers.notNullValue;
 
 @SuppressCodecs("*") // requires custom completion format
 public class CompletionSuggestSearchIT extends ESIntegTestCase {
-    private final String INDEX = RandomStrings.randomAsciiOfLength(random(), 10).toLowerCase(Locale.ROOT);
-    private final String TYPE = RandomStrings.randomAsciiOfLength(random(), 10).toLowerCase(Locale.ROOT);
-    private final String FIELD = RandomStrings.randomAsciiOfLength(random(), 10).toLowerCase(Locale.ROOT);
+    private final String INDEX = RandomStrings.randomAsciiOfLength(getRandom(), 10).toLowerCase(Locale.ROOT);
+    private final String TYPE = RandomStrings.randomAsciiOfLength(getRandom(), 10).toLowerCase(Locale.ROOT);
+    private final String FIELD = RandomStrings.randomAsciiOfLength(getRandom(), 10).toLowerCase(Locale.ROOT);
     private final CompletionMappingBuilder completionMappingBuilder = new CompletionMappingBuilder();
-
-    @Override
-    protected Collection<Class<? extends Plugin>> nodePlugins() {
-        return pluginList(InternalSettingsPlugin.class);
-    }
 
     public void testPrefix() throws Exception {
         final CompletionMappingBuilder mapping = new CompletionMappingBuilder();
@@ -114,7 +103,7 @@ public class CompletionSuggestSearchIT extends ESIntegTestCase {
                     ));
         }
         indexRandom(true, indexRequestBuilders);
-        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD).prefix("sugg");
+        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion("foo").field(FIELD).prefix("sugg");
         assertSuggestions("foo", prefix, "suggestion10", "suggestion9", "suggestion8", "suggestion7", "suggestion6");
     }
 
@@ -135,7 +124,7 @@ public class CompletionSuggestSearchIT extends ESIntegTestCase {
                     ));
         }
         indexRandom(true, indexRequestBuilders);
-        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD).regex("sugg.*es");
+        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion("foo").field(FIELD).regex("sugg.*es");
         assertSuggestions("foo", prefix, "sugg10estion", "sugg9estion", "sugg8estion", "sugg7estion", "sugg6estion");
     }
 
@@ -156,60 +145,8 @@ public class CompletionSuggestSearchIT extends ESIntegTestCase {
                     ));
         }
         indexRandom(true, indexRequestBuilders);
-        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD).prefix("sugg", Fuzziness.ONE);
+        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion("foo").field(FIELD).prefix("sugg", Fuzziness.ONE);
         assertSuggestions("foo", prefix, "sugxgestion10", "sugxgestion9", "sugxgestion8", "sugxgestion7", "sugxgestion6");
-    }
-
-    public void testMixedCompletion() throws Exception {
-        final CompletionMappingBuilder mapping = new CompletionMappingBuilder();
-        createIndexAndMapping(mapping);
-        String otherIndex = INDEX + "_1";
-        assertAcked(client().admin().indices().prepareCreate(otherIndex)
-            .setSettings(Settings.builder().put(indexSettings()).put(IndexMetaData.SETTING_VERSION_CREATED,
-                VersionUtils.randomVersionBetween(random(), Version.V_2_0_0, Version.V_2_3_1).id))
-            .addMapping(TYPE, jsonBuilder().startObject()
-                .startObject(TYPE).startObject("properties")
-                .startObject(FIELD)
-                .field("type", "completion")
-                .field("analyzer", mapping.indexAnalyzer)
-                .field("search_analyzer", mapping.searchAnalyzer)
-                .field("preserve_separators", mapping.preserveSeparators)
-                .field("preserve_position_increments", mapping.preservePositionIncrements)
-                .endObject()
-                .endObject().endObject()
-                .endObject())
-            .get());
-        int numDocs = 10;
-        List<IndexRequestBuilder> indexRequestBuilders = new ArrayList<>();
-        for (int i = 1; i <= numDocs; i++) {
-            indexRequestBuilders.add(client().prepareIndex(otherIndex, TYPE, "" + i)
-                .setSource(jsonBuilder()
-                    .startObject()
-                    .startObject(FIELD)
-                    .field("input", "suggestion" + i)
-                    .field("weight", i)
-                    .endObject()
-                    .endObject()
-                ));
-            indexRequestBuilders.add(client().prepareIndex(INDEX, TYPE, "" + i)
-                .setSource(jsonBuilder()
-                    .startObject()
-                    .startObject(FIELD)
-                    .field("input", "suggestion" + i)
-                    .field("weight", i)
-                    .endObject()
-                    .endObject()
-                ));
-        }
-        indexRandom(true, indexRequestBuilders);
-        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD).text("sugg");
-        try {
-            client().prepareSearch(INDEX, otherIndex).suggest(new SuggestBuilder().addSuggestion("foo", prefix))
-                .execute().actionGet();
-            fail("querying on mixed completion suggester should throw an error");
-        } catch (ReduceSearchPhaseException e) {
-            assertThat(e.getCause().getMessage(), containsString("detected mixed suggestion results"));
-        }
     }
 
     public void testEarlyTermination() throws Exception {
@@ -234,13 +171,13 @@ public class CompletionSuggestSearchIT extends ESIntegTestCase {
         for (int i = 0; i < size; i++) {
             outputs[i] = "suggestion" + (numDocs - i);
         }
-        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD).prefix("sug").size(size);
+        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion("foo").field(FIELD).prefix("sug").size(size);
         assertSuggestions("foo", prefix, outputs);
 
-        CompletionSuggestionBuilder regex = SuggestBuilders.completionSuggestion(FIELD).regex("su[g|s]g").size(size);
+        CompletionSuggestionBuilder regex = SuggestBuilders.completionSuggestion("foo").field(FIELD).regex("su[g|s]g").size(size);
         assertSuggestions("foo", regex, outputs);
 
-        CompletionSuggestionBuilder fuzzyPrefix = SuggestBuilders.completionSuggestion(FIELD).prefix("sugg", Fuzziness.ONE).size(size);
+        CompletionSuggestionBuilder fuzzyPrefix = SuggestBuilders.completionSuggestion("foo").field(FIELD).prefix("sugg", Fuzziness.ONE).size(size);
         assertSuggestions("foo", fuzzyPrefix, outputs);
     }
 
@@ -259,17 +196,41 @@ public class CompletionSuggestSearchIT extends ESIntegTestCase {
         }
         indexRandom(true, indexRequestBuilders);
 
-        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD).prefix("sugg").
-            size(numDocs).payload(Collections.singletonList("count"));
-        SearchResponse searchResponse = client().prepareSearch(INDEX).suggest(new SuggestBuilder().addSuggestion("foo", prefix))
-            .execute().actionGet();
-        assertNoFailures(searchResponse);
-        CompletionSuggestion completionSuggestion = searchResponse.getSuggest().getSuggestion("foo");
+        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion("foo").field(FIELD).prefix("sugg").size(numDocs).payload("count");
+        SuggestResponse suggestResponse = client().prepareSuggest(INDEX).addSuggestion(prefix).execute().actionGet();
+        assertNoFailures(suggestResponse);
+        CompletionSuggestion completionSuggestion = suggestResponse.getSuggest().getSuggestion("foo");
         CompletionSuggestion.Entry options = completionSuggestion.getEntries().get(0);
         assertThat(options.getOptions().size(), equalTo(numDocs));
         for (CompletionSuggestion.Entry.Option option : options) {
             Map<String, List<Object>> payloads = option.getPayload();
             assertThat(payloads.keySet(), contains("count"));
+        }
+    }
+
+    public void testMalformedRequestPayload() throws Exception {
+        final CompletionMappingBuilder mapping = new CompletionMappingBuilder();
+        createIndexAndMapping(mapping);
+        SuggestRequest request = new SuggestRequest(INDEX);
+        XContentBuilder suggest = jsonBuilder().startObject()
+                .startObject("bad-payload")
+                .field("prefix", "sug")
+                .startObject("completion")
+                .field("field", FIELD)
+                .startArray("payload")
+                .startObject()
+                .field("payload", "field")
+                .endObject()
+                .endArray()
+                .endObject()
+                .endObject().endObject();
+        request.suggest(suggest.bytes());
+        ensureGreen();
+
+        SuggestResponse suggestResponse = client().suggest(request).get();
+        assertThat(suggestResponse.getSuccessfulShards(), equalTo(0));
+        for (ShardOperationFailedException exception : suggestResponse.getShardFailures()) {
+            assertThat(exception.reason(), containsString("ParsingException[[completion] failed to parse field [payload]]; nested: IllegalStateException[expected value but got [START_OBJECT]]"));
         }
     }
 
@@ -281,12 +242,10 @@ public class CompletionSuggestSearchIT extends ESIntegTestCase {
                 client().prepareIndex(INDEX, TYPE, "2").setSource(FIELD, "suggestion")
         );
         indexRandom(true, indexRequestBuilders);
-        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD).prefix("sugg")
-            .payload(Collections.singletonList("test_field"));
-        SearchResponse searchResponse = client().prepareSearch(INDEX).suggest(new SuggestBuilder().addSuggestion("foo", prefix))
-            .execute().actionGet();
-        assertNoFailures(searchResponse);
-        CompletionSuggestion completionSuggestion = searchResponse.getSuggest().getSuggestion("foo");
+        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion("foo").field(FIELD).prefix("sugg").payload("test_field");
+        SuggestResponse suggestResponse = client().prepareSuggest(INDEX).addSuggestion(prefix).execute().actionGet();
+        assertNoFailures(suggestResponse);
+        CompletionSuggestion completionSuggestion = suggestResponse.getSuggest().getSuggestion("foo");
         CompletionSuggestion.Entry options = completionSuggestion.getEntries().get(0);
         assertThat(options.getOptions().size(), equalTo(2));
         for (CompletionSuggestion.Entry.Option option : options.getOptions()) {
@@ -320,12 +279,10 @@ public class CompletionSuggestSearchIT extends ESIntegTestCase {
         indexRequestBuilders.add(client().prepareIndex(INDEX, TYPE, "2").setSource(source));
         indexRandom(true, indexRequestBuilders);
 
-        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD).prefix("sugg")
-            .payload(Arrays.asList("title", "count"));
-        SearchResponse searchResponse = client().prepareSearch(INDEX).suggest(new SuggestBuilder().addSuggestion("foo", prefix))
-            .execute().actionGet();
-        assertNoFailures(searchResponse);
-        CompletionSuggestion completionSuggestion = searchResponse.getSuggest().getSuggestion("foo");
+        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion("foo").field(FIELD).prefix("sugg").payload("title", "count");
+        SuggestResponse suggestResponse = client().prepareSuggest(INDEX).addSuggestion(prefix).execute().actionGet();
+        assertNoFailures(suggestResponse);
+        CompletionSuggestion completionSuggestion = suggestResponse.getSuggest().getSuggestion("foo");
         List<CompletionSuggestion.Entry.Option> options = completionSuggestion.getEntries().get(0).getOptions();
         assertThat(options.size(), equalTo(2));
         assertThat(options.get(0).getText().toString(), equalTo("suggestion"));
@@ -336,12 +293,12 @@ public class CompletionSuggestSearchIT extends ESIntegTestCase {
         Map<String, List<Object>> firstPayload = options.get(0).getPayload();
         assertThat(firstPayload.keySet(), containsInAnyOrder("title", "count"));
         assertThat((String) firstPayload.get("title").get(0), equalTo("title2"));
-        assertThat((long) firstPayload.get("count").get(0), equalTo(2L));
+        assertThat((long) firstPayload.get("count").get(0), equalTo(2l));
 
         Map<String, List<Object>> secondPayload = options.get(1).getPayload();
         assertThat(secondPayload.keySet(), containsInAnyOrder("title", "count"));
         assertThat((String) secondPayload.get("title").get(0), equalTo("title1"));
-        assertThat((long) secondPayload.get("count").get(0), equalTo(1L));
+        assertThat((long) secondPayload.get("count").get(0), equalTo(1l));
     }
 
     public void testSuggestWithPayload() throws Exception {
@@ -367,17 +324,15 @@ public class CompletionSuggestSearchIT extends ESIntegTestCase {
 
         int suggestionSize = randomIntBetween(1, numDocs);
         int numRequestedPayloadFields = randomIntBetween(2, numPayloadFields);
-        List<String> payloadFields = new ArrayList<>(numRequestedPayloadFields);
+        String[] payloadFields = new String[numRequestedPayloadFields];
         for (int i = 0; i < numRequestedPayloadFields; i++) {
-            payloadFields.add("test_field" + i + ".keyword");
+            payloadFields[i] = "test_field" + i;
         }
 
-        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion(FIELD).prefix("sugg")
-            .size(suggestionSize).payload(payloadFields);
-        SearchResponse searchResponse = client().prepareSearch(INDEX).suggest(new SuggestBuilder().addSuggestion("foo", prefix))
-            .execute().actionGet();
-        assertNoFailures(searchResponse);
-        CompletionSuggestion completionSuggestion = searchResponse.getSuggest().getSuggestion("foo");
+        CompletionSuggestionBuilder prefix = SuggestBuilders.completionSuggestion("foo").field(FIELD).prefix("sugg").size(suggestionSize).payload(payloadFields);
+        SuggestResponse suggestResponse = client().prepareSuggest(INDEX).addSuggestion(prefix).execute().actionGet();
+        assertNoFailures(suggestResponse);
+        CompletionSuggestion completionSuggestion = suggestResponse.getSuggest().getSuggestion("foo");
         CompletionSuggestion.Entry options = completionSuggestion.getEntries().get(0);
         assertThat(options.getOptions().size(), equalTo(suggestionSize));
         int id = numDocs;
@@ -385,7 +340,7 @@ public class CompletionSuggestSearchIT extends ESIntegTestCase {
             assertThat(option.getText().toString(), equalTo("suggestion" + id));
             assertThat(option.getPayload().size(), equalTo(numRequestedPayloadFields));
             for (int i = 0; i < numRequestedPayloadFields; i++) {
-                List<Object> fieldValue = option.getPayload().get("test_field" + i + ".keyword");
+                List<Object> fieldValue = option.getPayload().get("test_field" + i);
                 assertNotNull(fieldValue);
                 assertThat(fieldValue.size(), equalTo(1));
                 assertThat((String)fieldValue.get(0), equalTo(i + "value" + id));
@@ -413,9 +368,8 @@ public class CompletionSuggestSearchIT extends ESIntegTestCase {
             client().prepareIndex(INDEX, TYPE, "" + i)
                     .setSource(source).execute().actionGet();
         }
-        client().admin().indices().preparePutMapping(INDEX).setType("query").setSource("query", "type=percolator").get();
 
-        client().prepareIndex(INDEX, "query", "4")
+        client().prepareIndex(INDEX, PercolatorService.TYPE_NAME, "4")
                 .setSource(jsonBuilder().startObject().field("query", matchAllQuery()).endObject())
                 .execute().actionGet();
 
@@ -424,7 +378,7 @@ public class CompletionSuggestSearchIT extends ESIntegTestCase {
         PercolateResponse response = client().preparePercolate().setIndices(INDEX).setDocumentType(TYPE)
                 .setGetRequest(Requests.getRequest(INDEX).type(TYPE).id("1"))
                 .execute().actionGet();
-        assertThat(response.getCount(), equalTo(1L));
+        assertThat(response.getCount(), equalTo(1l));
     }
 
     public void testThatWeightsAreWorking() throws Exception {
@@ -474,17 +428,17 @@ public class CompletionSuggestSearchIT extends ESIntegTestCase {
 
         refresh();
 
-        SearchResponse searchResponse = client().prepareSearch(INDEX).suggest(
-            new SuggestBuilder().addSuggestion("testSuggestions", new CompletionSuggestionBuilder(FIELD).text("test").size(10))
+        SuggestResponse suggestResponse = client().prepareSuggest(INDEX).addSuggestion(
+                new CompletionSuggestionBuilder("testSuggestions").field(FIELD).text("test").size(10)
         ).execute().actionGet();
 
-        assertSuggestions(searchResponse, "testSuggestions", "testing");
-        Suggest.Suggestion.Entry.Option option = searchResponse.getSuggest().getSuggestion("testSuggestions").getEntries().get(0).getOptions().get(0);
+        assertSuggestions(suggestResponse, "testSuggestions", "testing");
+        Suggest.Suggestion.Entry.Option option = suggestResponse.getSuggest().getSuggestion("testSuggestions").getEntries().get(0).getOptions().get(0);
         assertThat(option, is(instanceOf(CompletionSuggestion.Entry.Option.class)));
         CompletionSuggestion.Entry.Option prefixOption = (CompletionSuggestion.Entry.Option) option;
 
         assertThat(prefixOption.getText().string(), equalTo("testing"));
-        assertThat((long) prefixOption.getScore(), equalTo(10L));
+        assertThat((long) prefixOption.getScore(), equalTo(10l));
     }
 
 
@@ -626,7 +580,7 @@ public class CompletionSuggestSearchIT extends ESIntegTestCase {
     }
 
     public void testThatSynonymsWork() throws Exception {
-        Settings.Builder settingsBuilder = Settings.builder()
+        Settings.Builder settingsBuilder = settingsBuilder()
                 .put("analysis.analyzer.suggest_analyzer_synonyms.type", "custom")
                 .put("analysis.analyzer.suggest_analyzer_synonyms.tokenizer", "standard")
                 .putArray("analysis.analyzer.suggest_analyzer_synonyms.filter", "standard", "lowercase", "my_synonyms")
@@ -653,7 +607,7 @@ public class CompletionSuggestSearchIT extends ESIntegTestCase {
                 .startObject(TYPE)
                 .startObject("properties")
                 .startObject(FIELD)
-                .field("type", "text")
+                .field("type", "string")
                 .endObject()
                 .endObject()
                 .endObject()
@@ -665,7 +619,7 @@ public class CompletionSuggestSearchIT extends ESIntegTestCase {
         PutMappingResponse putMappingResponse = client().admin().indices().preparePutMapping(INDEX).setType(TYPE).setSource(jsonBuilder().startObject()
                 .startObject(TYPE).startObject("properties")
                 .startObject(FIELD)
-                .field("type", "text")
+                .field("type", "string")
                 .startObject("fields")
                 .startObject("suggest").field("type", "completion").field("analyzer", "simple").endObject()
                 .endObject()
@@ -675,16 +629,16 @@ public class CompletionSuggestSearchIT extends ESIntegTestCase {
                 .get();
         assertThat(putMappingResponse.isAcknowledged(), is(true));
 
-        SearchResponse searchResponse = client().prepareSearch(INDEX).suggest(
-            new SuggestBuilder().addSuggestion("suggs", SuggestBuilders.completionSuggestion(FIELD + ".suggest").text("f").size(10))
+        SuggestResponse suggestResponse = client().prepareSuggest(INDEX).addSuggestion(
+                SuggestBuilders.completionSuggestion("suggs").field(FIELD + ".suggest").text("f").size(10)
         ).execute().actionGet();
-        assertSuggestions(searchResponse, "suggs");
+        assertSuggestions(suggestResponse, "suggs");
 
         client().prepareIndex(INDEX, TYPE, "1").setRefresh(true).setSource(jsonBuilder().startObject().field(FIELD, "Foo Fighters").endObject()).get();
         ensureGreen(INDEX);
 
-        SearchResponse afterReindexingResponse = client().prepareSearch(INDEX).suggest(
-            new SuggestBuilder().addSuggestion("suggs", SuggestBuilders.completionSuggestion(FIELD + ".suggest").text("f").size(10))
+        SuggestResponse afterReindexingResponse = client().prepareSuggest(INDEX).addSuggestion(
+                SuggestBuilders.completionSuggestion("suggs").field(FIELD + ".suggest").text("f").size(10)
         ).execute().actionGet();
         assertSuggestions(afterReindexingResponse, "suggs", "Foo Fighters");
     }
@@ -700,15 +654,15 @@ public class CompletionSuggestSearchIT extends ESIntegTestCase {
 
         refresh();
 
-        SearchResponse searchResponse = client().prepareSearch(INDEX).suggest(
-            new SuggestBuilder().addSuggestion("foo", SuggestBuilders.completionSuggestion(FIELD).prefix("Nirv").size(10))
+        SuggestResponse suggestResponse = client().prepareSuggest(INDEX).addSuggestion(
+                SuggestBuilders.completionSuggestion("foo").field(FIELD).prefix("Nirv").size(10)
         ).execute().actionGet();
-        assertSuggestions(searchResponse, false, "foo", "Nirvana");
+        assertSuggestions(suggestResponse, false, "foo", "Nirvana");
 
-        searchResponse = client().prepareSearch(INDEX).suggest(
-            new SuggestBuilder().addSuggestion("foo", SuggestBuilders.completionSuggestion(FIELD).prefix("Nirw", Fuzziness.ONE).size(10))
+        suggestResponse = client().prepareSuggest(INDEX).addSuggestion(
+                SuggestBuilders.completionSuggestion("foo").field(FIELD).prefix("Nirw", Fuzziness.ONE).size(10)
         ).execute().actionGet();
-        assertSuggestions(searchResponse, false, "foo", "Nirvana");
+        assertSuggestions(suggestResponse, false, "foo", "Nirvana");
     }
 
     public void testThatFuzzySuggesterSupportsEditDistances() throws Exception {
@@ -723,16 +677,16 @@ public class CompletionSuggestSearchIT extends ESIntegTestCase {
         refresh();
 
         // edit distance 1
-        SearchResponse searchResponse = client().prepareSearch(INDEX).suggest(
-            new SuggestBuilder().addSuggestion("foo", SuggestBuilders.completionSuggestion(FIELD).prefix("Norw", Fuzziness.ONE).size(10))
+        SuggestResponse suggestResponse = client().prepareSuggest(INDEX).addSuggestion(
+                SuggestBuilders.completionSuggestion("foo").field(FIELD).prefix("Norw", Fuzziness.ONE).size(10)
         ).execute().actionGet();
-        assertSuggestions(searchResponse, false, "foo");
+        assertSuggestions(suggestResponse, false, "foo");
 
         // edit distance 2
-        searchResponse = client().prepareSearch(INDEX).suggest(
-            new SuggestBuilder().addSuggestion("foo", SuggestBuilders.completionSuggestion(FIELD).prefix("Norw", Fuzziness.TWO).size(10))
+        suggestResponse = client().prepareSuggest(INDEX).addSuggestion(
+                SuggestBuilders.completionSuggestion("foo").field(FIELD).prefix("Norw", Fuzziness.TWO).size(10)
         ).execute().actionGet();
-        assertSuggestions(searchResponse, false, "foo", "Nirvana");
+        assertSuggestions(suggestResponse, false, "foo", "Nirvana");
     }
 
     public void testThatFuzzySuggesterSupportsTranspositions() throws Exception {
@@ -746,16 +700,15 @@ public class CompletionSuggestSearchIT extends ESIntegTestCase {
 
         refresh();
 
-        SearchResponse searchResponse = client().prepareSearch(INDEX).suggest(
-            new SuggestBuilder().addSuggestion("foo",
-                SuggestBuilders.completionSuggestion(FIELD).prefix("Nriv", FuzzyOptions.builder().setTranspositions(false).build()).size(10))
+        SuggestResponse suggestResponse = client().prepareSuggest(INDEX).addSuggestion(
+                SuggestBuilders.completionSuggestion("foo").field(FIELD).prefix("Nriv", new FuzzyOptionsBuilder().setTranspositions(false)).size(10)
         ).execute().actionGet();
-        assertSuggestions(searchResponse, false, "foo");
+        assertSuggestions(suggestResponse, false, "foo");
 
-        searchResponse = client().prepareSearch(INDEX).suggest(
-            new SuggestBuilder().addSuggestion("foo", SuggestBuilders.completionSuggestion(FIELD).prefix("Nriv", Fuzziness.ONE).size(10))
+        suggestResponse = client().prepareSuggest(INDEX).addSuggestion(
+                SuggestBuilders.completionSuggestion("foo").field(FIELD).prefix("Nriv", Fuzziness.ONE).size(10)
         ).execute().actionGet();
-        assertSuggestions(searchResponse, false, "foo", "Nirvana");
+        assertSuggestions(suggestResponse, false, "foo", "Nirvana");
     }
 
     public void testThatFuzzySuggesterSupportsMinPrefixLength() throws Exception {
@@ -769,17 +722,15 @@ public class CompletionSuggestSearchIT extends ESIntegTestCase {
 
         refresh();
 
-        SearchResponse searchResponse = client().prepareSearch(INDEX).suggest(
-            new SuggestBuilder().addSuggestion("foo",
-                SuggestBuilders.completionSuggestion(FIELD).prefix("Nriva", FuzzyOptions.builder().setFuzzyMinLength(6).build()).size(10))
+        SuggestResponse suggestResponse = client().prepareSuggest(INDEX).addSuggestion(
+                SuggestBuilders.completionSuggestion("foo").field(FIELD).prefix("Nriva", new FuzzyOptionsBuilder().setFuzzyMinLength(6)).size(10)
         ).execute().actionGet();
-        assertSuggestions(searchResponse, false, "foo");
+        assertSuggestions(suggestResponse, false, "foo");
 
-        searchResponse = client().prepareSearch(INDEX).suggest(
-            new SuggestBuilder().addSuggestion("foo",
-                SuggestBuilders.completionSuggestion(FIELD).prefix("Nrivan", FuzzyOptions.builder().setFuzzyMinLength(6).build()).size(10))
+        suggestResponse = client().prepareSuggest(INDEX).addSuggestion(
+                SuggestBuilders.completionSuggestion("foo").field(FIELD).prefix("Nrivan", new FuzzyOptionsBuilder().setFuzzyMinLength(6)).size(10)
         ).execute().actionGet();
-        assertSuggestions(searchResponse, false, "foo", "Nirvana");
+        assertSuggestions(suggestResponse, false, "foo", "Nirvana");
     }
 
     public void testThatFuzzySuggesterSupportsNonPrefixLength() throws Exception {
@@ -793,17 +744,15 @@ public class CompletionSuggestSearchIT extends ESIntegTestCase {
 
         refresh();
 
-        SearchResponse searchResponse = client().prepareSearch(INDEX).suggest(
-            new SuggestBuilder().addSuggestion("foo",
-                SuggestBuilders.completionSuggestion(FIELD).prefix("Nirw", FuzzyOptions.builder().setFuzzyPrefixLength(4).build()).size(10))
+        SuggestResponse suggestResponse = client().prepareSuggest(INDEX).addSuggestion(
+                SuggestBuilders.completionSuggestion("foo").field(FIELD).prefix("Nirw", new FuzzyOptionsBuilder().setFuzzyPrefixLength(4)).size(10)
         ).execute().actionGet();
-        assertSuggestions(searchResponse, false, "foo");
+        assertSuggestions(suggestResponse, false, "foo");
 
-        searchResponse = client().prepareSearch(INDEX).suggest(
-            new SuggestBuilder().addSuggestion("foo",
-                SuggestBuilders.completionSuggestion(FIELD).prefix("Nirvo", FuzzyOptions.builder().setFuzzyPrefixLength(4).build()).size(10))
+        suggestResponse = client().prepareSuggest(INDEX).addSuggestion(
+                SuggestBuilders.completionSuggestion("foo").field(FIELD).prefix("Nirvo", new FuzzyOptionsBuilder().setFuzzyPrefixLength(4)).size(10)
         ).execute().actionGet();
-        assertSuggestions(searchResponse, false, "foo", "Nirvana");
+        assertSuggestions(suggestResponse, false, "foo", "Nirvana");
     }
 
     public void testThatFuzzySuggesterIsUnicodeAware() throws Exception {
@@ -819,26 +768,26 @@ public class CompletionSuggestSearchIT extends ESIntegTestCase {
 
         // suggestion with a character, which needs unicode awareness
         org.elasticsearch.search.suggest.completion.CompletionSuggestionBuilder completionSuggestionBuilder =
-                SuggestBuilders.completionSuggestion(FIELD).prefix("öööи", FuzzyOptions.builder().setUnicodeAware(true).build()).size(10);
+                SuggestBuilders.completionSuggestion("foo").field(FIELD).prefix("öööи", new FuzzyOptionsBuilder().setUnicodeAware(true)).size(10);
 
-        SearchResponse searchResponse = client().prepareSearch(INDEX).suggest(new SuggestBuilder().addSuggestion("foo", completionSuggestionBuilder)).execute().actionGet();
-        assertSuggestions(searchResponse, false, "foo", "ööööö");
+        SuggestResponse suggestResponse = client().prepareSuggest(INDEX).addSuggestion(completionSuggestionBuilder).execute().actionGet();
+        assertSuggestions(suggestResponse, false, "foo", "ööööö");
 
         // removing unicode awareness leads to no result
-        completionSuggestionBuilder = SuggestBuilders.completionSuggestion(FIELD).prefix("öööи", FuzzyOptions.builder().setUnicodeAware(false).build()).size(10);
-        searchResponse = client().prepareSearch(INDEX).suggest(new SuggestBuilder().addSuggestion("foo", completionSuggestionBuilder)).execute().actionGet();
-        assertSuggestions(searchResponse, false, "foo");
+        completionSuggestionBuilder = SuggestBuilders.completionSuggestion("foo").field(FIELD).prefix("öööи", new FuzzyOptionsBuilder().setUnicodeAware(false)).size(10);
+        suggestResponse = client().prepareSuggest(INDEX).addSuggestion(completionSuggestionBuilder).execute().actionGet();
+        assertSuggestions(suggestResponse, false, "foo");
 
         // increasing edit distance instead of unicode awareness works again, as this is only a single character
-        completionSuggestionBuilder = SuggestBuilders.completionSuggestion(FIELD).prefix("öööи", FuzzyOptions.builder().setUnicodeAware(false).setFuzziness(Fuzziness.TWO).build()).size(10);
-        searchResponse = client().prepareSearch(INDEX).suggest(new SuggestBuilder().addSuggestion("foo", completionSuggestionBuilder)).execute().actionGet();
-        assertSuggestions(searchResponse, false, "foo", "ööööö");
+        completionSuggestionBuilder = SuggestBuilders.completionSuggestion("foo").field(FIELD).prefix("öööи", new FuzzyOptionsBuilder().setUnicodeAware(false).setFuzziness(Fuzziness.TWO)).size(10);
+        suggestResponse = client().prepareSuggest(INDEX).addSuggestion(completionSuggestionBuilder).execute().actionGet();
+        assertSuggestions(suggestResponse, false, "foo", "ööööö");
     }
 
     public void testThatStatsAreWorking() throws Exception {
         String otherField = "testOtherField";
         client().admin().indices().prepareCreate(INDEX)
-                .setSettings(Settings.builder().put("index.number_of_replicas", 0).put("index.number_of_shards", 2))
+                .setSettings(Settings.settingsBuilder().put("index.number_of_replicas", 0).put("index.number_of_shards", 2))
                 .execute().actionGet();
         ensureGreen();
         PutMappingResponse putMappingResponse = client().admin().indices().preparePutMapping(INDEX).setType(TYPE).setSource(jsonBuilder().startObject()
@@ -860,8 +809,8 @@ public class CompletionSuggestSearchIT extends ESIntegTestCase {
         refresh();
         ensureGreen();
         // load the fst index into ram
-        client().prepareSearch(INDEX).suggest(new SuggestBuilder().addSuggestion("foo", SuggestBuilders.completionSuggestion(FIELD).prefix("f"))).get();
-        client().prepareSearch(INDEX).suggest(new SuggestBuilder().addSuggestion("foo", SuggestBuilders.completionSuggestion(otherField).prefix("f"))).get();
+        client().prepareSuggest(INDEX).addSuggestion(SuggestBuilders.completionSuggestion("foo").field(FIELD).prefix("f")).get();
+        client().prepareSuggest(INDEX).addSuggestion(SuggestBuilders.completionSuggestion("foo").field(otherField).prefix("f")).get();
 
         // Get all stats
         IndicesStatsResponse indicesStatsResponse = client().admin().indices().prepareStats(INDEX).setIndices(INDEX).setCompletion(true).get();
@@ -898,12 +847,12 @@ public class CompletionSuggestSearchIT extends ESIntegTestCase {
             fail("Expected an exception due to trying to sort on completion field, but did not happen");
         } catch (SearchPhaseExecutionException e) {
             assertThat(e.status().getStatus(), is(400));
-            assertThat(e.toString(), containsString("Fielddata is not supported on field [" + FIELD + "] of type [completion]"));
+            assertThat(e.toString(), containsString("Sorting not supported for field[" + FIELD + "]"));
         }
     }
 
     public void testThatSuggestStopFilterWorks() throws Exception {
-        Settings.Builder settingsBuilder = Settings.builder()
+        Settings.Builder settingsBuilder = settingsBuilder()
                 .put("index.analysis.analyzer.stoptest.tokenizer", "standard")
                 .putArray("index.analysis.analyzer.stoptest.filter", "standard", "suggest_stop_filter")
                 .put("index.analysis.filter.suggest_stop_filter.type", "stop")
@@ -957,42 +906,43 @@ public class CompletionSuggestSearchIT extends ESIntegTestCase {
         }
     }
 
-    public void assertSuggestions(String suggestionName, SuggestionBuilder suggestBuilder, String... suggestions) {
-        SearchResponse searchResponse = client().prepareSearch(INDEX).suggest(new SuggestBuilder().addSuggestion(suggestionName, suggestBuilder)).execute().actionGet();
-        assertSuggestions(searchResponse, suggestionName, suggestions);
-    }
 
+    public void assertSuggestions(String suggestionName, SuggestBuilder.SuggestionBuilder suggestBuilder, String... suggestions) {
+        SuggestResponse suggestResponse = client().prepareSuggest(INDEX).addSuggestion(suggestBuilder
+        ).execute().actionGet();
+        assertSuggestions(suggestResponse, suggestionName, suggestions);
+
+    }
     public void assertSuggestions(String suggestion, String... suggestions) {
         String suggestionName = RandomStrings.randomAsciiOfLength(random(), 10);
-        CompletionSuggestionBuilder suggestionBuilder = SuggestBuilders.completionSuggestion(FIELD).text(suggestion).size(10);
+        CompletionSuggestionBuilder suggestionBuilder = SuggestBuilders.completionSuggestion(suggestionName).field(FIELD).text(suggestion).size(10);
         assertSuggestions(suggestionName, suggestionBuilder, suggestions);
     }
 
     public void assertSuggestionsNotInOrder(String suggestString, String... suggestions) {
         String suggestionName = RandomStrings.randomAsciiOfLength(random(), 10);
-        SearchResponse searchResponse = client().prepareSearch(INDEX).suggest(
-            new SuggestBuilder().addSuggestion(suggestionName,
-                SuggestBuilders.completionSuggestion(FIELD).text(suggestString).size(10))
+        SuggestResponse suggestResponse = client().prepareSuggest(INDEX).addSuggestion(
+                SuggestBuilders.completionSuggestion(suggestionName).field(FIELD).text(suggestString).size(10)
         ).execute().actionGet();
 
-        assertSuggestions(searchResponse, false, suggestionName, suggestions);
+        assertSuggestions(suggestResponse, false, suggestionName, suggestions);
     }
 
-    static void assertSuggestions(SearchResponse searchResponse, String name, String... suggestions) {
-        assertSuggestions(searchResponse, true, name, suggestions);
+    static void assertSuggestions(SuggestResponse suggestResponse, String name, String... suggestions) {
+        assertSuggestions(suggestResponse, true, name, suggestions);
     }
 
-    private static void assertSuggestions(SearchResponse searchResponse, boolean suggestionOrderStrict, String name, String... suggestions) {
-        assertAllSuccessful(searchResponse);
+    private static void assertSuggestions(SuggestResponse suggestResponse, boolean suggestionOrderStrict, String name, String... suggestions) {
+        assertAllSuccessful(suggestResponse);
 
         List<String> suggestionNames = new ArrayList<>();
-        for (Suggest.Suggestion<? extends Suggest.Suggestion.Entry<? extends Suggest.Suggestion.Entry.Option>> suggestion : iterableAsArrayList(searchResponse.getSuggest())) {
+        for (Suggest.Suggestion<? extends Suggest.Suggestion.Entry<? extends Suggest.Suggestion.Entry.Option>> suggestion : iterableAsArrayList(suggestResponse.getSuggest())) {
             suggestionNames.add(suggestion.getName());
         }
         String expectFieldInResponseMsg = String.format(Locale.ROOT, "Expected suggestion named %s in response, got %s", name, suggestionNames);
-        assertThat(expectFieldInResponseMsg, searchResponse.getSuggest().getSuggestion(name), is(notNullValue()));
+        assertThat(expectFieldInResponseMsg, suggestResponse.getSuggest().getSuggestion(name), is(notNullValue()));
 
-        Suggest.Suggestion<Suggest.Suggestion.Entry<Suggest.Suggestion.Entry.Option>> suggestion = searchResponse.getSuggest().getSuggestion(name);
+        Suggest.Suggestion<Suggest.Suggestion.Entry<Suggest.Suggestion.Entry.Option>> suggestion = suggestResponse.getSuggest().getSuggestion(name);
 
         List<String> suggestionList = getNames(suggestion.getEntries().get(0));
         List<Suggest.Suggestion.Entry.Option> options = suggestion.getEntries().get(0).getOptions();
@@ -1023,12 +973,6 @@ public class CompletionSuggestSearchIT extends ESIntegTestCase {
     private void createIndexAndMappingAndSettings(Settings settings, CompletionMappingBuilder completionMappingBuilder) throws IOException {
         XContentBuilder mapping = jsonBuilder().startObject()
                 .startObject(TYPE).startObject("properties")
-                .startObject("test_field")
-                    .field("type", "keyword")
-                .endObject()
-                .startObject("title")
-                    .field("type", "keyword")
-                .endObject()
                 .startObject(FIELD)
                 .field("type", "completion")
                 .field("analyzer", completionMappingBuilder.indexAnalyzer)
@@ -1063,7 +1007,7 @@ public class CompletionSuggestSearchIT extends ESIntegTestCase {
                 .endObject();
 
         assertAcked(client().admin().indices().prepareCreate(INDEX)
-                .setSettings(Settings.builder().put(indexSettings()).put(settings))
+                .setSettings(Settings.settingsBuilder().put(indexSettings()).put(settings))
                 .addMapping(TYPE, mapping)
                 .get());
         ensureYellow();
@@ -1075,7 +1019,7 @@ public class CompletionSuggestSearchIT extends ESIntegTestCase {
 
     // see #3555
     public void testPrunedSegments() throws IOException {
-        createIndexAndMappingAndSettings(Settings.builder().put(SETTING_NUMBER_OF_SHARDS, 1).put(SETTING_NUMBER_OF_REPLICAS, 0).build(), completionMappingBuilder);
+        createIndexAndMappingAndSettings(settingsBuilder().put(SETTING_NUMBER_OF_SHARDS, 1).put(SETTING_NUMBER_OF_REPLICAS, 0).build(), completionMappingBuilder);
 
         client().prepareIndex(INDEX, TYPE, "1").setSource(jsonBuilder()
                 .startObject().startObject(FIELD)
@@ -1101,7 +1045,7 @@ public class CompletionSuggestSearchIT extends ESIntegTestCase {
         refresh();
 
         assertSuggestions("b");
-        assertThat(2L, equalTo(client().prepareSearch(INDEX).setSize(0).get().getHits().totalHits()));
+        assertThat(2l, equalTo(client().prepareSearch(INDEX).setSize(0).get().getHits().totalHits()));
         for (IndexShardSegments seg : client().admin().indices().prepareSegments().get().getIndices().get(INDEX)) {
             ShardSegments[] shards = seg.getShards();
             for (ShardSegments shardSegments : shards) {
@@ -1178,7 +1122,7 @@ public class CompletionSuggestSearchIT extends ESIntegTestCase {
             // Exception must be thrown
             assertFalse(true);
         } catch (SearchPhaseExecutionException e) {
-            assertThat(e.toString(), containsString("Fielddata is not supported on field [" + FIELD + "] of type [completion]"));
+            assertTrue(e.toString().contains("found no fielddata type for field [" + FIELD + "]"));
         }
     }
 
@@ -1237,8 +1181,8 @@ public class CompletionSuggestSearchIT extends ESIntegTestCase {
     static class CompletionMappingBuilder {
         String searchAnalyzer = "simple";
         String indexAnalyzer = "simple";
-        Boolean preserveSeparators = random().nextBoolean();
-        Boolean preservePositionIncrements = random().nextBoolean();
+        Boolean preserveSeparators = getRandom().nextBoolean();
+        Boolean preservePositionIncrements = getRandom().nextBoolean();
         LinkedHashMap<String, ContextMapping> contextMappings = null;
 
         public CompletionMappingBuilder searchAnalyzer(String searchAnalyzer) {

@@ -69,10 +69,10 @@ public class CardinalityTests extends ESIntegTestCase {
         prepareCreate("idx").addMapping("type",
                 jsonBuilder().startObject().startObject("type").startObject("properties")
                     .startObject("str_value")
-                        .field("type", "keyword")
+                        .field("type", "string")
                     .endObject()
                     .startObject("str_values")
-                        .field("type", "keyword")
+                        .field("type", "string")
                     .endObject()
                     .startObject("l_value")
                         .field("type", "long")

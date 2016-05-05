@@ -29,9 +29,6 @@ import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.blobstore.BlobPath;
 import org.elasticsearch.common.blobstore.BlobStore;
 import org.elasticsearch.common.inject.Inject;
-import org.elasticsearch.common.settings.Setting;
-import org.elasticsearch.common.settings.Setting.Property;
-import org.elasticsearch.common.settings.SettingsException;
 import org.elasticsearch.common.unit.ByteSizeUnit;
 import org.elasticsearch.common.unit.ByteSizeValue;
 import org.elasticsearch.index.snapshots.IndexShardRepository;
@@ -45,10 +42,10 @@ import java.io.IOException;
 import java.net.URISyntaxException;
 import java.util.List;
 import java.util.Locale;
-import java.util.function.Function;
 
-import static org.elasticsearch.cloud.azure.storage.AzureStorageSettings.getEffectiveSetting;
-import static org.elasticsearch.cloud.azure.storage.AzureStorageSettings.getValue;
+import static org.elasticsearch.cloud.azure.storage.AzureStorageSettings.getRepositorySettings;
+import static org.elasticsearch.cloud.azure.storage.AzureStorageSettings.getRepositorySettingsAsBoolean;
+import static org.elasticsearch.cloud.azure.storage.AzureStorageSettings.getRepositorySettingsAsBytesSize;
 
 /**
  * Azure file system implementation of the BlobStoreRepository
@@ -63,25 +60,31 @@ import static org.elasticsearch.cloud.azure.storage.AzureStorageSettings.getValu
  */
 public class AzureRepository extends BlobStoreRepository {
 
-    private static final ByteSizeValue MAX_CHUNK_SIZE = new ByteSizeValue(64, ByteSizeUnit.MB);
-
     public final static String TYPE = "azure";
 
-    public static final class Repository {
-        public static final Setting<String> ACCOUNT_SETTING = Setting.simpleString("account", Property.NodeScope);
-        public static final Setting<String> CONTAINER_SETTING =
-            new Setting<>("container", "elasticsearch-snapshots", Function.identity(), Property.NodeScope);
-        public static final Setting<String> BASE_PATH_SETTING = Setting.simpleString("base_path", Property.NodeScope);
-        public static final Setting<String> LOCATION_MODE_SETTING = Setting.simpleString("location_mode", Property.NodeScope);
-        public static final Setting<ByteSizeValue> CHUNK_SIZE_SETTING =
-            Setting.byteSizeSetting("chunk_size", MAX_CHUNK_SIZE, Property.NodeScope);
-        public static final Setting<Boolean> COMPRESS_SETTING = Setting.boolSetting("compress", false, Property.NodeScope);
+    static public final class Defaults {
+        public static final String CONTAINER = "elasticsearch-snapshots";
+        public static final ByteSizeValue CHUNK_SIZE = new ByteSizeValue(64, ByteSizeUnit.MB);
+        public static final Boolean COMPRESS = false;
+    }
+
+
+    static public final class Repository {
+        public static final String ACCOUNT = "account";
+        public static final String LOCATION_MODE = "location_mode";
+        public static final String CONTAINER = "container";
+        public static final String CHUNK_SIZE = "chunk_size";
+        public static final String COMPRESS = "compress";
+        public static final String BASE_PATH = "base_path";
     }
 
     private final AzureBlobStore blobStore;
+
     private final BlobPath basePath;
-    private final ByteSizeValue chunkSize;
-    private final boolean compress;
+
+    private ByteSizeValue chunkSize;
+
+    private boolean compress;
     private final boolean readonly;
 
     @Inject
@@ -90,27 +93,30 @@ public class AzureRepository extends BlobStoreRepository {
                            AzureBlobStore azureBlobStore) throws IOException, URISyntaxException, StorageException {
         super(name.getName(), repositorySettings, indexShardRepository);
 
-        String container = getValue(repositorySettings, Repository.CONTAINER_SETTING, Storage.CONTAINER_SETTING);
+        String container = getRepositorySettings(repositorySettings, Repository.CONTAINER, Storage.CONTAINER, Defaults.CONTAINER);
 
         this.blobStore = azureBlobStore;
-        ByteSizeValue configuredChunkSize = getValue(repositorySettings, Repository.CHUNK_SIZE_SETTING, Storage.CHUNK_SIZE_SETTING);
-        if (configuredChunkSize.getMb() > MAX_CHUNK_SIZE.getMb()) {
-            Setting<ByteSizeValue> setting = getEffectiveSetting(repositorySettings, Repository.CHUNK_SIZE_SETTING, Storage.CHUNK_SIZE_SETTING);
-            throw new SettingsException("["  + setting.getKey() + "] must not exceed [" + MAX_CHUNK_SIZE + "] but is set to [" + configuredChunkSize + "].");
-        } else {
-            this.chunkSize = configuredChunkSize;
+        this.chunkSize = getRepositorySettingsAsBytesSize(repositorySettings, Repository.CHUNK_SIZE, Storage.CHUNK_SIZE, Defaults.CHUNK_SIZE);
+
+        if (this.chunkSize.getMb() > 64) {
+            logger.warn("azure repository does not support yet size > 64mb. Fall back to 64mb.");
+            this.chunkSize = new ByteSizeValue(64, ByteSizeUnit.MB);
         }
 
-        this.compress = getValue(repositorySettings, Repository.COMPRESS_SETTING, Storage.COMPRESS_SETTING);
-        String modeStr = getValue(repositorySettings, Repository.LOCATION_MODE_SETTING, Storage.LOCATION_MODE_SETTING);
-        if (Strings.hasLength(modeStr)) {
+        this.compress = getRepositorySettingsAsBoolean(repositorySettings, Repository.COMPRESS, Storage.COMPRESS, Defaults.COMPRESS);
+        String modeStr = getRepositorySettings(repositorySettings, Repository.LOCATION_MODE, Storage.LOCATION_MODE, null);
+        if (modeStr != null) {
             LocationMode locationMode = LocationMode.valueOf(modeStr.toUpperCase(Locale.ROOT));
-            readonly = locationMode == LocationMode.SECONDARY_ONLY;
+            if (locationMode == LocationMode.SECONDARY_ONLY) {
+                readonly = true;
+            } else {
+                readonly = false;
+            }
         } else {
             readonly = false;
         }
 
-        String basePath = getValue(repositorySettings, Repository.BASE_PATH_SETTING, Storage.BASE_PATH_SETTING);
+        String basePath = getRepositorySettings(repositorySettings, Repository.BASE_PATH, Storage.BASE_PATH, null);
 
         if (Strings.hasLength(basePath)) {
             // Remove starting / if any

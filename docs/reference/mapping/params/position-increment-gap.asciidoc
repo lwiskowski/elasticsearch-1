@@ -57,7 +57,7 @@ PUT my_index
     "groups": {
       "properties": {
         "names": {
-          "type": "text",
+          "type": "string",
           "position_increment_gap": 0 <1>
         }
       }

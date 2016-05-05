@@ -24,11 +24,11 @@ package org.elasticsearch.search.aggregations.bucket.significant.heuristics;
 import org.elasticsearch.ElasticsearchParseException;
 import org.elasticsearch.common.ParseField;
 import org.elasticsearch.common.ParseFieldMatcher;
-import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.index.query.QueryShardException;
+import org.elasticsearch.search.internal.SearchContext;
 
 import java.io.IOException;
 
@@ -49,17 +49,9 @@ public abstract class NXYSignificanceHeuristic extends SignificanceHeuristic {
      */
     protected final boolean includeNegatives;
 
-    protected NXYSignificanceHeuristic(boolean includeNegatives, boolean backgroundIsSuperset) {
+    public NXYSignificanceHeuristic(boolean includeNegatives, boolean backgroundIsSuperset) {
         this.includeNegatives = includeNegatives;
         this.backgroundIsSuperset = backgroundIsSuperset;
-    }
-
-    /**
-     * Read from a stream.
-     */
-    protected NXYSignificanceHeuristic(StreamInput in) throws IOException {
-        includeNegatives = in.readBoolean();
-        backgroundIsSuperset = in.readBoolean();
     }
 
     @Override
@@ -144,15 +136,10 @@ public abstract class NXYSignificanceHeuristic extends SignificanceHeuristic {
         }
     }
 
-    protected void build(XContentBuilder builder) throws IOException {
-        builder.field(INCLUDE_NEGATIVES_FIELD.getPreferredName(), includeNegatives).field(BACKGROUND_IS_SUPERSET.getPreferredName(),
-                backgroundIsSuperset);
-    }
-
     public static abstract class NXYParser implements SignificanceHeuristicParser {
 
         @Override
-        public SignificanceHeuristic parse(XContentParser parser, ParseFieldMatcher parseFieldMatcher)
+        public SignificanceHeuristic parse(XContentParser parser, ParseFieldMatcher parseFieldMatcher, SearchContext context)
                 throws IOException, QueryShardException {
             String givenName = parser.currentName();
             boolean includeNegatives = false;

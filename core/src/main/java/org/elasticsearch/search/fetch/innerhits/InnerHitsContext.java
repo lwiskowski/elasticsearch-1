@@ -27,7 +27,6 @@ import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.ConstantScoreScorer;
 import org.apache.lucene.search.ConstantScoreWeight;
 import org.apache.lucene.search.DocIdSetIterator;
-import org.apache.lucene.search.DocValuesTermsQuery;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.Scorer;
@@ -48,16 +47,15 @@ import org.elasticsearch.index.mapper.Uid;
 import org.elasticsearch.index.mapper.internal.ParentFieldMapper;
 import org.elasticsearch.index.mapper.internal.UidFieldMapper;
 import org.elasticsearch.index.mapper.object.ObjectMapper;
+import org.elasticsearch.index.query.ParsedQuery;
 import org.elasticsearch.search.SearchHitField;
 import org.elasticsearch.search.fetch.FetchSubPhase;
+import org.elasticsearch.search.internal.FilteredSearchContext;
 import org.elasticsearch.search.internal.InternalSearchHit;
 import org.elasticsearch.search.internal.SearchContext;
-import org.elasticsearch.search.internal.SubSearchContext;
 
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.Map;
-import java.util.Objects;
 
 /**
  */
@@ -65,51 +63,50 @@ public final class InnerHitsContext {
 
     private final Map<String, BaseInnerHits> innerHits;
 
-    public InnerHitsContext() {
-        this.innerHits = new HashMap<>();
-    }
-
     public InnerHitsContext(Map<String, BaseInnerHits> innerHits) {
-        this.innerHits = Objects.requireNonNull(innerHits);
+        this.innerHits = innerHits;
     }
 
     public Map<String, BaseInnerHits> getInnerHits() {
         return innerHits;
     }
 
-    public void addInnerHitDefinition(BaseInnerHits innerHit) {
-        if (innerHits.containsKey(innerHit.getName())) {
-            throw new IllegalArgumentException("inner_hit definition with the name [" + innerHit.getName() +
-                    "] already exists. Use a different inner_hit name");
-        }
-
-        innerHits.put(innerHit.getName(), innerHit);
+    public void addInnerHitDefinition(String name, BaseInnerHits innerHit) {
+        innerHits.put(name, innerHit);
     }
 
-    public static abstract class BaseInnerHits extends SubSearchContext {
+    public static abstract class BaseInnerHits extends FilteredSearchContext {
 
-        private final String name;
-        private InnerHitsContext childInnerHits;
+        protected final ParsedQuery query;
+        private final InnerHitsContext childInnerHits;
 
-        protected BaseInnerHits(String name, SearchContext context) {
+        protected BaseInnerHits(SearchContext context, ParsedQuery query, Map<String, BaseInnerHits> childInnerHits) {
             super(context);
-            this.name = name;
+            this.query = query;
+            if (childInnerHits != null && !childInnerHits.isEmpty()) {
+                this.childInnerHits = new InnerHitsContext(childInnerHits);
+            } else {
+                this.childInnerHits = null;
+            }
+        }
+
+        @Override
+        public Query query() {
+            return query.query();
+        }
+
+        @Override
+        public ParsedQuery parsedQuery() {
+            return query;
         }
 
         public abstract TopDocs topDocs(SearchContext context, FetchSubPhase.HitContext hitContext) throws IOException;
-
-        public String getName() {
-            return name;
-        }
 
         @Override
         public InnerHitsContext innerHits() {
             return childInnerHits;
         }
 
-        public void setChildInnerHits(Map<String, InnerHitsContext.BaseInnerHits> childInnerHits) {
-            this.childInnerHits = new InnerHitsContext(childInnerHits);
-        }
     }
 
     public static final class NestedInnerHits extends BaseInnerHits {
@@ -117,8 +114,8 @@ public final class InnerHitsContext {
         private final ObjectMapper parentObjectMapper;
         private final ObjectMapper childObjectMapper;
 
-        public NestedInnerHits(String name, SearchContext context, ObjectMapper parentObjectMapper, ObjectMapper childObjectMapper) {
-            super(name != null ? name : childObjectMapper.fullPath(), context);
+        public NestedInnerHits(SearchContext context, ParsedQuery query, Map<String, BaseInnerHits> childInnerHits, ObjectMapper parentObjectMapper, ObjectMapper childObjectMapper) {
+            super(context, query, childInnerHits);
             this.parentObjectMapper = parentObjectMapper;
             this.childObjectMapper = childObjectMapper;
         }
@@ -133,7 +130,7 @@ public final class InnerHitsContext {
             }
             BitSetProducer parentFilter = context.bitsetFilterCache().getBitSetProducer(rawParentFilter);
             Query childFilter = childObjectMapper.nestedTypeFilter();
-            Query q = Queries.filtered(query(), new NestedChildrenQuery(parentFilter, childFilter, hitContext));
+            Query q = Queries.filtered(query.query(), new NestedChildrenQuery(parentFilter, childFilter, hitContext));
 
             if (size() == 0) {
                 return new TopDocs(context.searcher().count(q), Lucene.EMPTY_SCORE_DOCS, 0);
@@ -279,36 +276,38 @@ public final class InnerHitsContext {
         private final MapperService mapperService;
         private final DocumentMapper documentMapper;
 
-        public ParentChildInnerHits(String name, SearchContext context, MapperService mapperService, DocumentMapper documentMapper) {
-            super(name != null ? name : documentMapper.type(), context);
+        public ParentChildInnerHits(SearchContext context, ParsedQuery query, Map<String, BaseInnerHits> childInnerHits, MapperService mapperService, DocumentMapper documentMapper) {
+            super(context, query, childInnerHits);
             this.mapperService = mapperService;
             this.documentMapper = documentMapper;
         }
 
         @Override
         public TopDocs topDocs(SearchContext context, FetchSubPhase.HitContext hitContext) throws IOException {
-            final Query hitQuery;
+            final String field;
+            final String term;
             if (isParentHit(hitContext.hit())) {
-                String field = ParentFieldMapper.joinField(hitContext.hit().type());
-                hitQuery = new DocValuesTermsQuery(field, hitContext.hit().id());
+                field = ParentFieldMapper.NAME;
+                term = Uid.createUid(hitContext.hit().type(), hitContext.hit().id());
             } else if (isChildHit(hitContext.hit())) {
                 DocumentMapper hitDocumentMapper = mapperService.documentMapper(hitContext.hit().type());
                 final String parentType = hitDocumentMapper.parentFieldMapper().type();
+                field = UidFieldMapper.NAME;
                 SearchHitField parentField = hitContext.hit().field(ParentFieldMapper.NAME);
                 if (parentField == null) {
                     throw new IllegalStateException("All children must have a _parent");
                 }
-                hitQuery = new TermQuery(new Term(UidFieldMapper.NAME, Uid.createUid(parentType, parentField.getValue())));
+                term = Uid.createUid(parentType, (String) parentField.getValue());
             } else {
                 return Lucene.EMPTY_TOP_DOCS;
             }
 
             BooleanQuery q = new BooleanQuery.Builder()
-                .add(query(), Occur.MUST)
+                .add(query.query(), Occur.MUST)
                 // Only include docs that have the current hit as parent
-                .add(hitQuery, Occur.FILTER)
+                .add(new TermQuery(new Term(field, term)), Occur.MUST)
                 // Only include docs that have this inner hits type
-                .add(documentMapper.typeFilter(), Occur.FILTER)
+                .add(documentMapper.typeFilter(), Occur.MUST)
                 .build();
             if (size() == 0) {
                 final int count = context.searcher().count(q);

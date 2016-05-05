@@ -19,8 +19,6 @@
 
 package org.elasticsearch.index.query;
 
-import org.apache.lucene.index.memory.MemoryIndex;
-import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.Query;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
@@ -31,7 +29,6 @@ import org.elasticsearch.script.Template;
 import org.junit.BeforeClass;
 
 import java.io.IOException;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -44,7 +41,7 @@ public class TemplateQueryBuilderTests extends AbstractQueryTestCase<TemplateQue
 
     @BeforeClass
     public static void setupClass() {
-        templateBase = RandomQueryBuilder.createQuery(random());
+        templateBase = RandomQueryBuilder.createQuery(getRandom());
     }
 
     @Override
@@ -59,11 +56,16 @@ public class TemplateQueryBuilderTests extends AbstractQueryTestCase<TemplateQue
 
     @Override
     protected void doAssertLuceneQuery(TemplateQueryBuilder queryBuilder, Query query, QueryShardContext context) throws IOException {
-        assertEquals(rewrite(QueryBuilder.rewriteQuery(templateBase, context).toQuery(context)), rewrite(query));
+        assertEquals(templateBase.toQuery(context), query);
     }
 
     public void testIllegalArgument() {
-        expectThrows(IllegalArgumentException.class, () -> new TemplateQueryBuilder((Template) null));
+        try {
+            new TemplateQueryBuilder(null);
+            fail("cannot be null");
+        } catch (IllegalArgumentException e) {
+            // expected
+        }
     }
 
     /**
@@ -115,54 +117,5 @@ public class TemplateQueryBuilderTests extends AbstractQueryTestCase<TemplateQue
         QueryBuilder<?> expectedBuilder = new TemplateQueryBuilder(new Template(expectedTemplateString, ScriptType.INLINE, null,
                 XContentType.JSON, params));
         assertParsedQuery(query, expectedBuilder);
-    }
-
-    @Override
-    public void testMustRewrite() throws IOException {
-        String query = "{ \"match_all\" : {}}";
-        QueryBuilder<?> builder = new TemplateQueryBuilder(new Template(query, ScriptType.INLINE, "mockscript",
-        XContentType.JSON, Collections.emptyMap()));
-        try {
-            builder.toQuery(createShardContext());
-            fail();
-        } catch (UnsupportedOperationException ex) {
-            assertEquals("this query must be rewritten first", ex.getMessage());
-        }
-        assertEquals(new MatchAllQueryBuilder(), builder.rewrite(createShardContext()));
-    }
-
-    public void testRewriteWithInnerName() throws IOException {
-        final String query = "{ \"match_all\" : {\"_name\" : \"foobar\"}}";
-        QueryBuilder<?> builder = new TemplateQueryBuilder(new Template(query, ScriptType.INLINE, "mockscript",
-            XContentType.JSON, Collections.emptyMap()));
-        assertEquals(new MatchAllQueryBuilder().queryName("foobar"), builder.rewrite(createShardContext()));
-
-        builder = new TemplateQueryBuilder(new Template(query, ScriptType.INLINE, "mockscript",
-            XContentType.JSON, Collections.emptyMap())).queryName("outer");
-        assertEquals(new BoolQueryBuilder().must(new MatchAllQueryBuilder().queryName("foobar")).queryName("outer"),
-            builder.rewrite(createShardContext()));
-    }
-
-    public void testRewriteWithInnerBoost() throws IOException {
-        final TermQueryBuilder query = new TermQueryBuilder("foo", "bar").boost(2);
-        QueryBuilder<?> builder = new TemplateQueryBuilder(new Template(query.toString(), ScriptType.INLINE, "mockscript",
-            XContentType.JSON, Collections.emptyMap()));
-        assertEquals(query, builder.rewrite(createShardContext()));
-
-        builder = new TemplateQueryBuilder(new Template(query.toString(), ScriptType.INLINE, "mockscript",
-            XContentType.JSON, Collections.emptyMap())).boost(3);
-        assertEquals(new BoolQueryBuilder().must(query).boost(3), builder.rewrite(createShardContext()));
-    }
-
-    @Override
-    protected Query rewrite(Query query) throws IOException {
-        // TemplateQueryBuilder adds some optimization if the template and query builder have boosts / query names that wraps
-        // the actual QueryBuilder that comes from the template into a BooleanQueryBuilder to give it an outer boost / name
-        // this causes some queries to be not exactly equal but equivalent such that we need to rewrite them before comparing.
-        if (query != null) {
-            MemoryIndex idx = new MemoryIndex();
-            return idx.createSearcher().rewrite(query);
-        }
-        return new MatchAllDocsQuery(); // null == *:*
     }
 }

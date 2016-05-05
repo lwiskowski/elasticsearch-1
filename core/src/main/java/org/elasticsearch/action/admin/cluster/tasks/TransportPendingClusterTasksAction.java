@@ -22,18 +22,15 @@ package org.elasticsearch.action.admin.cluster.tasks;
 import org.elasticsearch.action.ActionListener;
 import org.elasticsearch.action.support.ActionFilters;
 import org.elasticsearch.action.support.master.TransportMasterNodeReadAction;
+import org.elasticsearch.cluster.ClusterService;
 import org.elasticsearch.cluster.ClusterState;
 import org.elasticsearch.cluster.block.ClusterBlockException;
 import org.elasticsearch.cluster.block.ClusterBlockLevel;
 import org.elasticsearch.cluster.metadata.IndexNameExpressionResolver;
-import org.elasticsearch.cluster.service.ClusterService;
-import org.elasticsearch.cluster.service.PendingClusterTask;
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.threadpool.ThreadPool;
 import org.elasticsearch.transport.TransportService;
-
-import java.util.List;
 
 /**
  */
@@ -66,9 +63,6 @@ public class TransportPendingClusterTasksAction extends TransportMasterNodeReadA
 
     @Override
     protected void masterOperation(PendingClusterTasksRequest request, ClusterState state, ActionListener<PendingClusterTasksResponse> listener) {
-        logger.trace("fetching pending tasks from cluster service");
-        final List<PendingClusterTask> pendingTasks = clusterService.pendingTasks();
-        logger.trace("done fetching pending tasks from cluster service");
-        listener.onResponse(new PendingClusterTasksResponse(pendingTasks));
+        listener.onResponse(new PendingClusterTasksResponse(clusterService.pendingTasks()));
     }
 }

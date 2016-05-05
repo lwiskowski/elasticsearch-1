@@ -32,8 +32,8 @@ final class MockInternalEngine extends InternalEngine {
     private final boolean randomizeFlushOnClose;
     private Class<? extends FilterDirectoryReader> wrapperClass;
 
-    MockInternalEngine(EngineConfig config,  Class<? extends FilterDirectoryReader> wrapper) throws EngineException {
-        super(config);
+    MockInternalEngine(EngineConfig config, boolean skipInitialTranslogRecovery, Class<? extends FilterDirectoryReader> wrapper) throws EngineException {
+        super(config, skipInitialTranslogRecovery);
         randomizeFlushOnClose = config.getIndexSettings().isOnSharedFilesystem() == false;
         wrapperClass = wrapper;
 

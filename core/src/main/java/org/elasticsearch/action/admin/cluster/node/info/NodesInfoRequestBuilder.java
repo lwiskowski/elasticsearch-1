@@ -40,7 +40,7 @@ public class NodesInfoRequestBuilder extends NodesOperationRequestBuilder<NodesI
     }
 
     /**
-     * Sets to return all the data.
+     * Sets to reutrn all the data.
      */
     public NodesInfoRequestBuilder all() {
         request.all();
@@ -108,14 +108,6 @@ public class NodesInfoRequestBuilder extends NodesOperationRequestBuilder<NodesI
      */
     public NodesInfoRequestBuilder setPlugins(boolean plugins) {
         request().plugins(plugins);
-        return this;
-    }
-
-    /**
-     * Should the node ingest info be returned.
-     */
-    public NodesInfoRequestBuilder setIngest(boolean ingest) {
-        request().ingest(ingest);
         return this;
     }
 }

@@ -16,7 +16,6 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-
 package org.elasticsearch.search.aggregations;
 
 import org.apache.lucene.index.LeafReaderContext;
@@ -24,7 +23,6 @@ import org.apache.lucene.search.Scorer;
 import org.elasticsearch.common.lease.Releasables;
 import org.elasticsearch.common.util.BigArrays;
 import org.elasticsearch.common.util.ObjectArray;
-import org.elasticsearch.search.aggregations.InternalAggregation.Type;
 import org.elasticsearch.search.aggregations.pipeline.PipelineAggregator;
 import org.elasticsearch.search.aggregations.support.AggregationContext;
 import org.elasticsearch.search.internal.SearchContext.Lifetime;
@@ -33,33 +31,39 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
-public abstract class AggregatorFactory<AF extends AggregatorFactory<AF>> {
+/**
+ * A factory that knows how to create an {@link Aggregator} of a specific type.
+ */
+public abstract class AggregatorFactory {
 
-    protected final String name;
-    protected final Type type;
-    protected final AggregatorFactory<?> parent;
-    protected final AggregatorFactories factories;
-    protected final Map<String, Object> metaData;
-    protected final AggregationContext context;
+    protected String name;
+    protected String type;
+    protected AggregatorFactory parent;
+    protected AggregatorFactories factories = AggregatorFactories.EMPTY;
+    protected Map<String, Object> metaData;
 
     /**
      * Constructs a new aggregator factory.
      *
-     * @param name
-     *            The aggregation name
-     * @param type
-     *            The aggregation type
-     * @throws IOException
-     *             if an error occurs creating the factory
+     * @param name  The aggregation name
+     * @param type  The aggregation type
      */
-    public AggregatorFactory(String name, Type type, AggregationContext context, AggregatorFactory<?> parent,
-            AggregatorFactories.Builder subFactoriesBuilder, Map<String, Object> metaData) throws IOException {
+    public AggregatorFactory(String name, String type) {
         this.name = name;
         this.type = type;
-        this.context = context;
-        this.parent = parent;
-        this.factories = subFactoriesBuilder.build(context, this);
-        this.metaData = metaData;
+    }
+
+    /**
+     * Registers sub-factories with this factory. The sub-factory will be responsible for the creation of sub-aggregators under the
+     * aggregator created by this factory.
+     *
+     * @param subFactories  The sub-factories
+     * @return  this factory (fluent interface)
+     */
+    public AggregatorFactory subFactories(AggregatorFactories subFactories) {
+        this.factories = subFactories;
+        this.factories.setParent(this);
+        return this;
     }
 
     public String name() {
@@ -67,50 +71,52 @@ public abstract class AggregatorFactory<AF extends AggregatorFactory<AF>> {
     }
 
     /**
-     * Validates the state of this factory (makes sure the factory is properly
-     * configured)
+     * Validates the state of this factory (makes sure the factory is properly configured)
      */
     public final void validate() {
         doValidate();
         factories.validate();
     }
 
-    public void doValidate() {
+    /**
+     * @return  The parent factory if one exists (will always return {@code null} for top level aggregator factories).
+     */
+    public AggregatorFactory parent() {
+        return parent;
     }
 
-    protected abstract Aggregator createInternal(Aggregator parent, boolean collectsFromSingleBucket,
+    protected abstract Aggregator createInternal(AggregationContext context, Aggregator parent, boolean collectsFromSingleBucket,
             List<PipelineAggregator> pipelineAggregators, Map<String, Object> metaData) throws IOException;
 
     /**
      * Creates the aggregator
      *
-     * @param parent
-     *            The parent aggregator (if this is a top level factory, the
-     *            parent will be {@code null})
-     * @param collectsFromSingleBucket
-     *            If true then the created aggregator will only be collected
-     *            with <tt>0</tt> as a bucket ordinal. Some factories can take
-     *            advantage of this in order to return more optimized
-     *            implementations.
+     * @param context               The aggregation context
+     * @param parent                The parent aggregator (if this is a top level factory, the parent will be {@code null})
+     * @param collectsFromSingleBucket  If true then the created aggregator will only be collected with <tt>0</tt> as a bucket ordinal.
+     *                              Some factories can take advantage of this in order to return more optimized implementations.
      *
-     * @return The created aggregator
+     * @return                      The created aggregator
      */
-    public final Aggregator create(Aggregator parent, boolean collectsFromSingleBucket) throws IOException {
-        return createInternal(parent, collectsFromSingleBucket, this.factories.createPipelineAggregators(), this.metaData);
+    public final Aggregator create(AggregationContext context, Aggregator parent, boolean collectsFromSingleBucket) throws IOException {
+        return createInternal(context, parent, collectsFromSingleBucket, this.factories.createPipelineAggregators(), this.metaData);
     }
 
-    public String getType() {
-        return type.name();
+    public void doValidate() {
     }
+
+    public void setMetaData(Map<String, Object> metaData) {
+        this.metaData = metaData;
+    }
+
+
 
     /**
-     * Utility method. Given an {@link AggregatorFactory} that creates
-     * {@link Aggregator}s that only know how to collect bucket <tt>0</tt>, this
-     * returns an aggregator that can collect any bucket.
+     * Utility method. Given an {@link AggregatorFactory} that creates {@link Aggregator}s that only know how
+     * to collect bucket <tt>0</tt>, this returns an aggregator that can collect any bucket.
      */
-    protected static Aggregator asMultiBucketAggregator(final AggregatorFactory<?> factory, final AggregationContext context,
-            final Aggregator parent) throws IOException {
-        final Aggregator first = factory.create(parent, true);
+    protected static Aggregator asMultiBucketAggregator(final AggregatorFactory factory, final AggregationContext context, final Aggregator parent) throws IOException {
+        final Aggregator first = factory.create(context, parent, true);
         final BigArrays bigArrays = context.bigArrays();
         return new Aggregator() {
 
@@ -191,7 +197,7 @@ public abstract class AggregatorFactory<AF extends AggregatorFactory<AF>> {
                         if (collector == null) {
                             Aggregator aggregator = aggregators.get(bucket);
                             if (aggregator == null) {
-                                aggregator = factory.create(parent, true);
+                                aggregator = factory.create(context, parent, true);
                                 aggregator.preCollection();
                                 aggregators.set(bucket, aggregator);
                             }

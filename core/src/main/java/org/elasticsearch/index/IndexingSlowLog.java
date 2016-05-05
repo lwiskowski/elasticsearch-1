@@ -24,7 +24,6 @@ import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.logging.ESLogger;
 import org.elasticsearch.common.logging.Loggers;
 import org.elasticsearch.common.settings.Setting;
-import org.elasticsearch.common.settings.Setting.Property;
 import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.xcontent.XContentHelper;
 import org.elasticsearch.index.engine.Engine;
@@ -37,7 +36,6 @@ import java.util.concurrent.TimeUnit;
 /**
  */
 public final class IndexingSlowLog implements IndexingOperationListener {
-    private final Index index;
     private boolean reformat;
     private long indexWarnThreshold;
     private long indexInfoThreshold;
@@ -53,25 +51,15 @@ public final class IndexingSlowLog implements IndexingOperationListener {
     private SlowLogLevel level;
 
     private final ESLogger indexLogger;
+    private final ESLogger deleteLogger;
 
     private static final String INDEX_INDEXING_SLOWLOG_PREFIX = "index.indexing.slowlog";
-    public static final Setting<TimeValue> INDEX_INDEXING_SLOWLOG_THRESHOLD_INDEX_WARN_SETTING =
-        Setting.timeSetting(INDEX_INDEXING_SLOWLOG_PREFIX +".threshold.index.warn", TimeValue.timeValueNanos(-1),
-            TimeValue.timeValueMillis(-1), Property.Dynamic, Property.IndexScope);
-    public static final Setting<TimeValue> INDEX_INDEXING_SLOWLOG_THRESHOLD_INDEX_INFO_SETTING =
-        Setting.timeSetting(INDEX_INDEXING_SLOWLOG_PREFIX +".threshold.index.info", TimeValue.timeValueNanos(-1),
-            TimeValue.timeValueMillis(-1), Property.Dynamic, Property.IndexScope);
-    public static final Setting<TimeValue> INDEX_INDEXING_SLOWLOG_THRESHOLD_INDEX_DEBUG_SETTING =
-        Setting.timeSetting(INDEX_INDEXING_SLOWLOG_PREFIX +".threshold.index.debug", TimeValue.timeValueNanos(-1),
-            TimeValue.timeValueMillis(-1), Property.Dynamic, Property.IndexScope);
-    public static final Setting<TimeValue> INDEX_INDEXING_SLOWLOG_THRESHOLD_INDEX_TRACE_SETTING =
-        Setting.timeSetting(INDEX_INDEXING_SLOWLOG_PREFIX +".threshold.index.trace", TimeValue.timeValueNanos(-1),
-            TimeValue.timeValueMillis(-1), Property.Dynamic, Property.IndexScope);
-    public static final Setting<Boolean> INDEX_INDEXING_SLOWLOG_REFORMAT_SETTING =
-        Setting.boolSetting(INDEX_INDEXING_SLOWLOG_PREFIX +".reformat", true, Property.Dynamic, Property.IndexScope);
-    public static final Setting<SlowLogLevel> INDEX_INDEXING_SLOWLOG_LEVEL_SETTING =
-        new Setting<>(INDEX_INDEXING_SLOWLOG_PREFIX +".level", SlowLogLevel.TRACE.name(), SlowLogLevel::parse, Property.Dynamic,
-            Property.IndexScope);
+    public static final Setting<TimeValue> INDEX_INDEXING_SLOWLOG_THRESHOLD_INDEX_WARN_SETTING = Setting.timeSetting(INDEX_INDEXING_SLOWLOG_PREFIX +".threshold.index.warn", TimeValue.timeValueNanos(-1), TimeValue.timeValueMillis(-1), true, Setting.Scope.INDEX);
+    public static final Setting<TimeValue> INDEX_INDEXING_SLOWLOG_THRESHOLD_INDEX_INFO_SETTING = Setting.timeSetting(INDEX_INDEXING_SLOWLOG_PREFIX +".threshold.index.info", TimeValue.timeValueNanos(-1), TimeValue.timeValueMillis(-1), true, Setting.Scope.INDEX);
+    public static final Setting<TimeValue> INDEX_INDEXING_SLOWLOG_THRESHOLD_INDEX_DEBUG_SETTING = Setting.timeSetting(INDEX_INDEXING_SLOWLOG_PREFIX +".threshold.index.debug", TimeValue.timeValueNanos(-1), TimeValue.timeValueMillis(-1), true, Setting.Scope.INDEX);
+    public static final Setting<TimeValue> INDEX_INDEXING_SLOWLOG_THRESHOLD_INDEX_TRACE_SETTING = Setting.timeSetting(INDEX_INDEXING_SLOWLOG_PREFIX +".threshold.index.trace", TimeValue.timeValueNanos(-1), TimeValue.timeValueMillis(-1), true, Setting.Scope.INDEX);
+    public static final Setting<Boolean> INDEX_INDEXING_SLOWLOG_REFORMAT_SETTING = Setting.boolSetting(INDEX_INDEXING_SLOWLOG_PREFIX +".reformat", true, true, Setting.Scope.INDEX);
+    public static final Setting<SlowLogLevel> INDEX_INDEXING_SLOWLOG_LEVEL_SETTING = new Setting<>(INDEX_INDEXING_SLOWLOG_PREFIX +".level", SlowLogLevel.TRACE.name(), SlowLogLevel::parse, true, Setting.Scope.INDEX);
     /**
      * Reads how much of the source to log. The user can specify any value they
      * like and numbers are interpreted the maximum number of characters to log
@@ -84,11 +72,19 @@ public final class IndexingSlowLog implements IndexingOperationListener {
         } catch (NumberFormatException e) {
             return Booleans.parseBoolean(value, true) ? Integer.MAX_VALUE : 0;
         }
-    }, Property.Dynamic, Property.IndexScope);
+    }, true, Setting.Scope.INDEX);
 
     IndexingSlowLog(IndexSettings indexSettings) {
-        this.indexLogger = Loggers.getLogger(INDEX_INDEXING_SLOWLOG_PREFIX + ".index", indexSettings.getSettings());
-        this.index = indexSettings.getIndex();
+        this(indexSettings, Loggers.getLogger(INDEX_INDEXING_SLOWLOG_PREFIX + ".index"),
+                Loggers.getLogger(INDEX_INDEXING_SLOWLOG_PREFIX + ".delete"));
+    }
+
+    /**
+     * Build with the specified loggers. Only used to testing.
+     */
+    IndexingSlowLog(IndexSettings indexSettings, ESLogger indexLogger, ESLogger deleteLogger) {
+        this.indexLogger = indexLogger;
+        this.deleteLogger = deleteLogger;
 
         indexSettings.getScopedSettings().addSettingsUpdateConsumer(INDEX_INDEXING_SLOWLOG_REFORMAT_SETTING, this::setReformat);
         this.reformat = indexSettings.getValue(INDEX_INDEXING_SLOWLOG_REFORMAT_SETTING);
@@ -113,6 +109,7 @@ public final class IndexingSlowLog implements IndexingOperationListener {
     private void setLevel(SlowLogLevel level) {
         this.level = level;
         this.indexLogger.setLevel(level.name());
+        this.deleteLogger.setLevel(level.name());
     }
 
     private void setWarnThreshold(TimeValue warnThreshold) {
@@ -136,8 +133,7 @@ public final class IndexingSlowLog implements IndexingOperationListener {
     }
 
 
-    @Override
-    public void postIndex(Engine.Index index, boolean created) {
+    public void postIndex(Engine.Index index) {
         final long took = index.endTime() - index.startTime();
         postIndexing(index.parsedDoc(), took);
     }
@@ -145,13 +141,13 @@ public final class IndexingSlowLog implements IndexingOperationListener {
 
     private void postIndexing(ParsedDocument doc, long tookInNanos) {
         if (indexWarnThreshold >= 0 && tookInNanos > indexWarnThreshold) {
-            indexLogger.warn("{}", new SlowLogParsedDocumentPrinter(index, doc, tookInNanos, reformat, maxSourceCharsToLog));
+            indexLogger.warn("{}", new SlowLogParsedDocumentPrinter(doc, tookInNanos, reformat, maxSourceCharsToLog));
         } else if (indexInfoThreshold >= 0 && tookInNanos > indexInfoThreshold) {
-            indexLogger.info("{}", new SlowLogParsedDocumentPrinter(index, doc, tookInNanos, reformat, maxSourceCharsToLog));
+            indexLogger.info("{}", new SlowLogParsedDocumentPrinter(doc, tookInNanos, reformat, maxSourceCharsToLog));
         } else if (indexDebugThreshold >= 0 && tookInNanos > indexDebugThreshold) {
-            indexLogger.debug("{}", new SlowLogParsedDocumentPrinter(index, doc, tookInNanos, reformat, maxSourceCharsToLog));
+            indexLogger.debug("{}", new SlowLogParsedDocumentPrinter(doc, tookInNanos, reformat, maxSourceCharsToLog));
         } else if (indexTraceThreshold >= 0 && tookInNanos > indexTraceThreshold) {
-            indexLogger.trace("{}", new SlowLogParsedDocumentPrinter(index, doc, tookInNanos, reformat, maxSourceCharsToLog));
+            indexLogger.trace("{}", new SlowLogParsedDocumentPrinter(doc, tookInNanos, reformat, maxSourceCharsToLog));
         }
     }
 
@@ -160,11 +156,9 @@ public final class IndexingSlowLog implements IndexingOperationListener {
         private final long tookInNanos;
         private final boolean reformat;
         private final int maxSourceCharsToLog;
-        private final Index index;
 
-        SlowLogParsedDocumentPrinter(Index index, ParsedDocument doc, long tookInNanos, boolean reformat, int maxSourceCharsToLog) {
+        SlowLogParsedDocumentPrinter(ParsedDocument doc, long tookInNanos, boolean reformat, int maxSourceCharsToLog) {
             this.doc = doc;
-            this.index = index;
             this.tookInNanos = tookInNanos;
             this.reformat = reformat;
             this.maxSourceCharsToLog = maxSourceCharsToLog;
@@ -173,7 +167,6 @@ public final class IndexingSlowLog implements IndexingOperationListener {
         @Override
         public String toString() {
             StringBuilder sb = new StringBuilder();
-            sb.append(index).append(" ");
             sb.append("took[").append(TimeValue.timeValueNanos(tookInNanos)).append("], took_millis[").append(TimeUnit.NANOSECONDS.toMillis(tookInNanos)).append("], ");
             sb.append("type[").append(doc.type()).append("], ");
             sb.append("id[").append(doc.id()).append("], ");

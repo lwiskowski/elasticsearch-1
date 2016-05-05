@@ -20,10 +20,7 @@ package org.elasticsearch.search.aggregations;
 
 import org.elasticsearch.common.inject.Inject;
 import org.elasticsearch.common.xcontent.XContentParser;
-import org.elasticsearch.index.query.QueryParseContext;
-import org.elasticsearch.indices.query.IndicesQueriesRegistry;
 import org.elasticsearch.search.SearchParseElement;
-import org.elasticsearch.search.aggregations.support.AggregationContext;
 import org.elasticsearch.search.internal.SearchContext;
 
 /**
@@ -52,21 +49,15 @@ import org.elasticsearch.search.internal.SearchContext;
 public class AggregationParseElement implements SearchParseElement {
 
     private final AggregatorParsers aggregatorParsers;
-    private IndicesQueriesRegistry queriesRegistry;
 
     @Inject
-    public AggregationParseElement(AggregatorParsers aggregatorParsers, IndicesQueriesRegistry queriesRegistry) {
+    public AggregationParseElement(AggregatorParsers aggregatorParsers) {
         this.aggregatorParsers = aggregatorParsers;
-        this.queriesRegistry = queriesRegistry;
     }
 
     @Override
     public void parse(XContentParser parser, SearchContext context) throws Exception {
-        QueryParseContext parseContext = new QueryParseContext(queriesRegistry, parser, context.parseFieldMatcher());
-        AggregatorFactories.Builder builders = aggregatorParsers.parseAggregators(parseContext);
-        AggregationContext aggContext = new AggregationContext(context);
-        AggregatorFactories factories = builders.build(aggContext, null);
-        factories.validate();
+        AggregatorFactories factories = aggregatorParsers.parseAggregators(parser, context);
         context.aggregations(new SearchContextAggregations(factories));
     }
 }

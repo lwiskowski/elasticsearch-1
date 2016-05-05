@@ -18,7 +18,6 @@
  */
 package org.elasticsearch.search.aggregations.bucket;
 
-import org.apache.lucene.search.join.ScoreMode;
 import org.elasticsearch.action.index.IndexRequestBuilder;
 import org.elasticsearch.action.search.SearchResponse;
 import org.elasticsearch.action.update.UpdateResponse;
@@ -67,8 +66,8 @@ public class ChildrenIT extends ESIntegTestCase {
     public void setupSuiteScopeCluster() throws Exception {
         assertAcked(
                 prepareCreate("test")
-                    .addMapping("article", "category", "type=keyword")
-                    .addMapping("comment", "_parent", "type=article", "commenter", "type=keyword")
+                    .addMapping("article")
+                    .addMapping("comment", "_parent", "type=article")
         );
 
         List<IndexRequestBuilder> requests = new ArrayList<>();
@@ -135,8 +134,7 @@ public class ChildrenIT extends ESIntegTestCase {
                 .setQuery(matchQuery("randomized", true))
                 .addAggregation(
                         terms("category").field("category").size(0).subAggregation(
-children("to_comment", "comment")
-                                .subAggregation(
+                                children("to_comment").childType("comment").subAggregation(
                                         terms("commenters").field("commenter").size(0).subAggregation(
                                                 topHits("top_comments")
                                         ))
@@ -177,7 +175,7 @@ children("to_comment", "comment")
                 .setQuery(matchQuery("randomized", false))
                 .addAggregation(
                         terms("category").field("category").size(0).subAggregation(
-                        children("to_comment", "comment").subAggregation(topHits("top_comments").sort("_uid", SortOrder.ASC))
+                                children("to_comment").childType("comment").subAggregation(topHits("top_comments").addSort("_uid", SortOrder.ASC))
                         )
                 ).get();
         assertSearchResponse(searchResponse);
@@ -186,7 +184,7 @@ children("to_comment", "comment")
         assertThat(categoryTerms.getBuckets().size(), equalTo(3));
 
         for (Terms.Bucket bucket : categoryTerms.getBuckets()) {
-            logger.info("bucket={}", bucket.getKey());
+            logger.info("bucket=" + bucket.getKey());
             Children childrenBucket = bucket.getAggregations().get("to_comment");
             TopHits topHits = childrenBucket.getAggregations().get("top_comments");
             logger.info("total_hits={}", topHits.getHits().getTotalHits());
@@ -197,13 +195,13 @@ children("to_comment", "comment")
 
         Terms.Bucket categoryBucket = categoryTerms.getBucketByKey("a");
         assertThat(categoryBucket.getKeyAsString(), equalTo("a"));
-        assertThat(categoryBucket.getDocCount(), equalTo(3L));
+        assertThat(categoryBucket.getDocCount(), equalTo(3l));
 
         Children childrenBucket = categoryBucket.getAggregations().get("to_comment");
         assertThat(childrenBucket.getName(), equalTo("to_comment"));
-        assertThat(childrenBucket.getDocCount(), equalTo(2L));
+        assertThat(childrenBucket.getDocCount(), equalTo(2l));
         TopHits topHits = childrenBucket.getAggregations().get("top_comments");
-        assertThat(topHits.getHits().totalHits(), equalTo(2L));
+        assertThat(topHits.getHits().totalHits(), equalTo(2l));
         assertThat(topHits.getHits().getAt(0).getId(), equalTo("a"));
         assertThat(topHits.getHits().getAt(0).getType(), equalTo("comment"));
         assertThat(topHits.getHits().getAt(1).getId(), equalTo("c"));
@@ -211,25 +209,25 @@ children("to_comment", "comment")
 
         categoryBucket = categoryTerms.getBucketByKey("b");
         assertThat(categoryBucket.getKeyAsString(), equalTo("b"));
-        assertThat(categoryBucket.getDocCount(), equalTo(2L));
+        assertThat(categoryBucket.getDocCount(), equalTo(2l));
 
         childrenBucket = categoryBucket.getAggregations().get("to_comment");
         assertThat(childrenBucket.getName(), equalTo("to_comment"));
-        assertThat(childrenBucket.getDocCount(), equalTo(1L));
+        assertThat(childrenBucket.getDocCount(), equalTo(1l));
         topHits = childrenBucket.getAggregations().get("top_comments");
-        assertThat(topHits.getHits().totalHits(), equalTo(1L));
+        assertThat(topHits.getHits().totalHits(), equalTo(1l));
         assertThat(topHits.getHits().getAt(0).getId(), equalTo("c"));
         assertThat(topHits.getHits().getAt(0).getType(), equalTo("comment"));
 
         categoryBucket = categoryTerms.getBucketByKey("c");
         assertThat(categoryBucket.getKeyAsString(), equalTo("c"));
-        assertThat(categoryBucket.getDocCount(), equalTo(2L));
+        assertThat(categoryBucket.getDocCount(), equalTo(2l));
 
         childrenBucket = categoryBucket.getAggregations().get("to_comment");
         assertThat(childrenBucket.getName(), equalTo("to_comment"));
-        assertThat(childrenBucket.getDocCount(), equalTo(1L));
+        assertThat(childrenBucket.getDocCount(), equalTo(1l));
         topHits = childrenBucket.getAggregations().get("top_comments");
-        assertThat(topHits.getHits().totalHits(), equalTo(1L));
+        assertThat(topHits.getHits().totalHits(), equalTo(1l));
         assertThat(topHits.getHits().getAt(0).getId(), equalTo("c"));
         assertThat(topHits.getHits().getAt(0).getType(), equalTo("comment"));
     }
@@ -252,12 +250,12 @@ children("to_comment", "comment")
 
         for (int i = 0; i < 10; i++) {
             SearchResponse searchResponse = client().prepareSearch(indexName)
-                    .addAggregation(children("children", "child").subAggregation(sum("counts").field("count")))
+                    .addAggregation(children("children").childType("child").subAggregation(sum("counts").field("count")))
                     .get();
 
             assertNoFailures(searchResponse);
             Children children = searchResponse.getAggregations().get("children");
-            assertThat(children.getDocCount(), equalTo(4L));
+            assertThat(children.getDocCount(), equalTo(4l));
 
             Sum count = children.getAggregations().get("counts");
             assertThat(count.getValue(), equalTo(4.));
@@ -273,7 +271,7 @@ children("to_comment", "comment")
                     .setDoc("count", 1)
                     .setDetectNoop(false)
                     .get();
-            assertThat(updateResponse.getVersion(), greaterThan(1L));
+            assertThat(updateResponse.getVersion(), greaterThan(1l));
             refresh();
         }
     }
@@ -281,13 +279,13 @@ children("to_comment", "comment")
     public void testNonExistingChildType() throws Exception {
         SearchResponse searchResponse = client().prepareSearch("test")
                 .addAggregation(
-children("non-existing", "xyz")
+                        children("non-existing").childType("xyz")
                 ).get();
         assertSearchResponse(searchResponse);
 
         Children children = searchResponse.getAggregations().get("non-existing");
         assertThat(children.getName(), equalTo("non-existing"));
-        assertThat(children.getDocCount(), equalTo(0L));
+        assertThat(children.getDocCount(), equalTo(0l));
     }
 
     public void testPostCollection() throws Exception {
@@ -296,8 +294,8 @@ children("non-existing", "xyz")
         String childType = "variantsku";
         assertAcked(
                 prepareCreate(indexName)
-                        .addMapping(masterType, "brand", "type=text", "name", "type=keyword", "material", "type=text")
-                        .addMapping(childType, "_parent", "type=masterprod", "color", "type=keyword", "size", "type=keyword")
+                        .addMapping(masterType, "brand", "type=string", "name", "type=string", "material", "type=string")
+                        .addMapping(childType, "_parent", "type=masterprod", "color", "type=string", "size", "type=string")
         );
 
         List<IndexRequestBuilder> requests = new ArrayList<>();
@@ -320,8 +318,9 @@ children("non-existing", "xyz")
         indexRandom(true, requests);
 
         SearchResponse response = client().prepareSearch(indexName).setTypes(masterType)
-                .setQuery(hasChildQuery(childType, termQuery("color", "orange"), ScoreMode.None))
-.addAggregation(children("my-refinements", childType)
+                .setQuery(hasChildQuery(childType, termQuery("color", "orange")))
+                .addAggregation(children("my-refinements")
+                                .childType(childType)
                                 .subAggregation(terms("my-colors").field("color"))
                                 .subAggregation(terms("my-sizes").field("size"))
                 ).get();
@@ -329,23 +328,23 @@ children("non-existing", "xyz")
         assertHitCount(response, 1);
 
         Children childrenAgg = response.getAggregations().get("my-refinements");
-        assertThat(childrenAgg.getDocCount(), equalTo(7L));
+        assertThat(childrenAgg.getDocCount(), equalTo(7l));
 
         Terms termsAgg = childrenAgg.getAggregations().get("my-colors");
         assertThat(termsAgg.getBuckets().size(), equalTo(4));
-        assertThat(termsAgg.getBucketByKey("black").getDocCount(), equalTo(3L));
-        assertThat(termsAgg.getBucketByKey("blue").getDocCount(), equalTo(2L));
-        assertThat(termsAgg.getBucketByKey("green").getDocCount(), equalTo(1L));
-        assertThat(termsAgg.getBucketByKey("orange").getDocCount(), equalTo(1L));
+        assertThat(termsAgg.getBucketByKey("black").getDocCount(), equalTo(3l));
+        assertThat(termsAgg.getBucketByKey("blue").getDocCount(), equalTo(2l));
+        assertThat(termsAgg.getBucketByKey("green").getDocCount(), equalTo(1l));
+        assertThat(termsAgg.getBucketByKey("orange").getDocCount(), equalTo(1l));
 
         termsAgg = childrenAgg.getAggregations().get("my-sizes");
         assertThat(termsAgg.getBuckets().size(), equalTo(6));
-        assertThat(termsAgg.getBucketByKey("36").getDocCount(), equalTo(2L));
-        assertThat(termsAgg.getBucketByKey("32").getDocCount(), equalTo(1L));
-        assertThat(termsAgg.getBucketByKey("34").getDocCount(), equalTo(1L));
-        assertThat(termsAgg.getBucketByKey("38").getDocCount(), equalTo(1L));
-        assertThat(termsAgg.getBucketByKey("40").getDocCount(), equalTo(1L));
-        assertThat(termsAgg.getBucketByKey("44").getDocCount(), equalTo(1L));
+        assertThat(termsAgg.getBucketByKey("36").getDocCount(), equalTo(2l));
+        assertThat(termsAgg.getBucketByKey("32").getDocCount(), equalTo(1l));
+        assertThat(termsAgg.getBucketByKey("34").getDocCount(), equalTo(1l));
+        assertThat(termsAgg.getBucketByKey("38").getDocCount(), equalTo(1l));
+        assertThat(termsAgg.getBucketByKey("40").getDocCount(), equalTo(1l));
+        assertThat(termsAgg.getBucketByKey("44").getDocCount(), equalTo(1l));
     }
 
     public void testHierarchicalChildrenAggs() {
@@ -359,7 +358,7 @@ children("non-existing", "xyz")
                                 .put(IndexMetaData.SETTING_NUMBER_OF_SHARDS, 1)
                                 .put(IndexMetaData.SETTING_NUMBER_OF_REPLICAS, 0)
                         )
-                        .addMapping(grandParentType, "name", "type=keyword")
+                        .addMapping(grandParentType)
                         .addMapping(parentType, "_parent", "type=" + grandParentType)
                         .addMapping(childType, "_parent", "type=" + parentType)
         );
@@ -372,7 +371,8 @@ children("non-existing", "xyz")
         SearchResponse response = client().prepareSearch(indexName)
                 .setQuery(matchQuery("name", "europe"))
                 .addAggregation(
-                children(parentType, parentType).subAggregation(children(childType, childType).subAggregation(
+                        children(parentType).childType(parentType).subAggregation(
+                                children(childType).childType(childType).subAggregation(
                                         terms("name").field("name")
                                 )
                         )
@@ -383,14 +383,14 @@ children("non-existing", "xyz")
 
         Children children = response.getAggregations().get(parentType);
         assertThat(children.getName(), equalTo(parentType));
-        assertThat(children.getDocCount(), equalTo(1L));
+        assertThat(children.getDocCount(), equalTo(1l));
         children = children.getAggregations().get(childType);
         assertThat(children.getName(), equalTo(childType));
-        assertThat(children.getDocCount(), equalTo(1L));
+        assertThat(children.getDocCount(), equalTo(1l));
         Terms terms = children.getAggregations().get("name");
         assertThat(terms.getBuckets().size(), equalTo(1));
         assertThat(terms.getBuckets().get(0).getKey().toString(), equalTo("brussels"));
-        assertThat(terms.getBuckets().get(0).getDocCount(), equalTo(1L));
+        assertThat(terms.getBuckets().get(0).getDocCount(), equalTo(1l));
     }
 
     public void testPostCollectAllLeafReaders() throws Exception {
@@ -402,8 +402,8 @@ children("non-existing", "xyz")
 
         assertAcked(
             prepareCreate("index")
-                .addMapping("parentType", "name", "type=keyword", "town", "type=keyword")
-                .addMapping("childType", "_parent", "type=parentType", "name", "type=keyword", "age", "type=integer")
+                .addMapping("parentType", "name", "type=string,index=not_analyzed", "town", "type=string,index=not_analyzed")
+                .addMapping("childType", "_parent", "type=parentType", "name", "type=string,index=not_analyzed", "age", "type=integer")
         );
         List<IndexRequestBuilder> requests = new ArrayList<>();
         requests.add(client().prepareIndex("index", "parentType", "1").setSource("name", "Bob", "town", "Memphis"));
@@ -420,7 +420,7 @@ children("non-existing", "xyz")
             .setSize(0)
             .addAggregation(AggregationBuilders.terms("towns").field("town")
                 .subAggregation(AggregationBuilders.terms("parent_names").field("name")
-.subAggregation(AggregationBuilders.children("child_docs", "childType"))
+                    .subAggregation(AggregationBuilders.children("child_docs").childType("childType"))
                 )
             )
             .get();

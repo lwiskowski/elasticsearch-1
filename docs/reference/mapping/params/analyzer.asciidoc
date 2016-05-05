@@ -47,10 +47,10 @@ PUT my_index
     "my_type": {
       "properties": {
         "text": { <1>
-          "type": "text",
+          "type": "string",
           "fields": {
             "english": { <2>
-              "type":     "text",
+              "type":     "string",
               "analyzer": "english"
             }
           }
@@ -124,7 +124,7 @@ PUT /my_index
       "my_type":{
          "properties":{
             "title": {
-               "type":"text",
+               "type":"string",
                "analyzer":"my_analyzer", <3>
                "search_analyzer":"my_stop_analyzer", <4>
                "search_quote_analyzer":"my_analyzer" <5>

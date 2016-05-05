@@ -42,7 +42,7 @@ public abstract class FilterClient extends AbstractClient {
      * @see #in()
      */
     public FilterClient(Client in) {
-        super(in.settings(), in.threadPool());
+        super(in.settings(), in.threadPool(), in.headers());
         this.in = in;
     }
 

@@ -77,6 +77,33 @@ public class SearchRequest extends ActionRequest<SearchRequest> implements Indic
     }
 
     /**
+     * Copy constructor that creates a new search request that is a copy of the one provided as an argument.
+     * The new request will inherit though headers and context from the original request that caused it.
+     */
+    public SearchRequest(SearchRequest searchRequest, ActionRequest originalRequest) {
+        super(originalRequest);
+        this.searchType = searchRequest.searchType;
+        this.indices = searchRequest.indices;
+        this.routing = searchRequest.routing;
+        this.preference = searchRequest.preference;
+        this.template = searchRequest.template;
+        this.source = searchRequest.source;
+        this.requestCache = searchRequest.requestCache;
+        this.scroll = searchRequest.scroll;
+        this.types = searchRequest.types;
+        this.indicesOptions = searchRequest.indicesOptions;
+    }
+
+    /**
+     * Constructs a new search request starting from the provided request, meaning that it will
+     * inherit its headers and context
+     */
+    public SearchRequest(ActionRequest request) {
+        super(request);
+        this.source = new SearchSourceBuilder();
+    }
+
+    /**
      * Constructs a new search request against the indices. No indices provided here means that search
      * will run against all indices.
      */
@@ -295,13 +322,6 @@ public class SearchRequest extends ActionRequest<SearchRequest> implements Indic
         return this.requestCache;
     }
 
-    /**
-     * @return true if the request only has suggest
-     */
-    public boolean isSuggestOnly() {
-        return source != null && source.isSuggestOnly();
-    }
-
     @Override
     public void readFrom(StreamInput in) throws IOException {
         super.readFrom(in);
@@ -319,14 +339,14 @@ public class SearchRequest extends ActionRequest<SearchRequest> implements Indic
             scroll = readScroll(in);
         }
         if (in.readBoolean()) {
-            source = new SearchSourceBuilder(in);
+            source = SearchSourceBuilder.readSearchSourceFrom(in);
         }
 
         types = in.readStringArray();
         indicesOptions = IndicesOptions.readIndicesOptions(in);
 
         requestCache = in.readOptionalBoolean();
-        template = in.readOptionalWriteable(Template::new);
+        template = in.readOptionalStreamable(Template::new);
     }
 
     @Override
@@ -357,6 +377,6 @@ public class SearchRequest extends ActionRequest<SearchRequest> implements Indic
         out.writeStringArray(types);
         indicesOptions.writeIndicesOptions(out);
         out.writeOptionalBoolean(requestCache);
-        out.writeOptionalWriteable(template);
+        out.writeOptionalStreamable(template);
     }
 }

@@ -43,7 +43,7 @@ public class RestClusterHealthAction extends BaseRestHandler {
 
     @Inject
     public RestClusterHealthAction(Settings settings, RestController controller, Client client) {
-        super(settings, client);
+        super(settings, controller, client);
 
         controller.registerHandler(RestRequest.Method.GET, "/_cluster/health", this);
         controller.registerHandler(RestRequest.Method.GET, "/_cluster/health/{index}", this);
